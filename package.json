@@ -1,0 +1,79 @@
+{
+  "name": "photo-album-viewer",
+  "version": "1.0.0",
+  "description": "照片相簿浏览器 - 穿透多层文件夹查看底层相簿",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
+    "start:renderer": "webpack serve --mode development",
+    "build": "webpack --mode production && electron-builder",
+    "build:webpack": "webpack --mode production",
+    "build:electron": "electron-builder"
+  },
+  "build": {
+    "appId": "com.photoalbum.viewer",
+    "productName": "Photo Album Viewer",
+    "files": [
+      "build/**/*",
+      "src/main/**/*",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.photography"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "keywords": [
+    "photo",
+    "album",
+    "viewer",
+    "electron",
+    "react"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.19",
+    "@mui/material": "^5.14.19",
+    "electron-is-dev": "^2.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-lazyload": "^3.2.1",
+    "react-masonry-css": "^1.0.16",
+    "react-router-dom": "^6.20.1",
+    "react-virtualized": "^9.22.6",
+    "react-window": "^1.8.11",
+    "sharp": "^0.34.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.5",
+    "@babel/preset-env": "^7.23.5",
+    "@babel/preset-react": "^7.23.3",
+    "babel-loader": "^9.1.3",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "css-loader": "^6.8.1",
+    "electron": "^27.1.3",
+    "electron-builder": "^24.6.4",
+    "electron-devtools-installer": "^3.2.0",
+    "electron-reload": "^1.5.0",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.5.3",
+    "style-loader": "^3.3.3",
+    "wait-on": "^7.2.0",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+}

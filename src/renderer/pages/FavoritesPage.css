@@ -1,0 +1,124 @@
+/* 瀑布流布局样式 */
+.masonry-grid {
+  display: flex;
+  width: auto; /* 改为auto以适应不同的断点 */
+  margin-left: -16px; /* 负边距与列间距相匹配 */
+}
+
+.masonry-grid_column {
+  padding-left: 16px; /* 列间距 */
+  background-clip: padding-box;
+}
+
+/* 瀑布流项目样式 */
+.masonry-item {
+  margin-bottom: 16px;
+  break-inside: avoid;
+  box-sizing: border-box;
+  width: 100%; /* 使用100%宽度填充列 */
+}
+
+/* 紧凑模式下的样式调整 */
+.compact-view .masonry-grid {
+  margin-left: -16px;
+}
+
+.compact-view .masonry-grid_column {
+  padding-left: 16px;
+}
+
+.compact-view .masonry-item {
+  margin-bottom: 16px;
+}
+
+/* 标准模式下的样式调整 */
+.standard-view .masonry-grid {
+  margin-left: -24px;
+}
+
+.standard-view .masonry-grid_column {
+  padding-left: 24px;
+}
+
+.standard-view .masonry-item {
+  margin-bottom: 24px;
+}
+
+/* 图片淡入效果 */
+.masonry-item img {
+  transition: opacity 0.3s ease-in-out;
+  opacity: 0;
+  width: 100%;
+  height: auto; /* 允许高度自适应，保持宽高比 */
+  display: block;
+}
+
+.masonry-item img.loaded {
+  opacity: 1;
+}
+
+/* 响应式调整 */
+@media (max-width: 600px) {
+  .masonry-grid {
+    margin-left: -8px;
+  }
+  
+  .masonry-grid_column {
+    padding-left: 8px;
+  }
+  
+  .masonry-item {
+    margin-bottom: 8px;
+  }
+  
+  /* 小屏幕下确保列宽度合适 */
+  .compact-view .masonry-grid_column {
+    width: 220px;
+  }
+  
+  .standard-view .masonry-grid_column {
+    width: 280px;
+  }
+}
+
+/* 中等屏幕 */
+@media (min-width: 601px) and (max-width: 960px) {
+  .compact-view .masonry-grid_column {
+    width: 220px;
+  }
+  
+  .standard-view .masonry-grid_column {
+    width: 280px;
+  }
+}
+
+/* 大屏幕 */
+@media (min-width: 961px) {
+  .compact-view .masonry-grid_column {
+    width: 220px;
+  }
+  
+  .standard-view .masonry-grid_column {
+    width: 280px;
+  }
+}
+
+/* 添加动画效果，使图片加载更平滑 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.masonry-item {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* 确保图片容器不会被强制设置高度 */
+.masonry-item > div {
+  height: auto !important;
+}
+
+/* 确保Paper组件适应内容高度 */
+.masonry-item .MuiPaper-root {
+  height: auto !important;
+} 
