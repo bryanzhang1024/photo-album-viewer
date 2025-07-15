@@ -81,31 +81,11 @@ if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
   );
 }
 
-// 卡片尺寸配置
-const getCardConfig = (settings) => ({
-  compact: {
-    width: settings?.cardWidth || 280,
-    height: Math.round((settings?.cardWidth * 0.8) * 0.7) || 160,
-    spacing: 16
-    // spacing: window.innerWidth < 600 ? 16 : window.innerWidth < 1200 ? 16 : 24
-  },
-  standard: {
-    width: settings?.cardWidth || 280,
-    height: Math.round(settings?.cardWidth * 0.9) || 260,
-    spacing: 24
-    // spacing: window.innerWidth < 600 ? 16 : window.innerWidth < 1200 ? 16 : 24
-    // spacing: 8
-  }
-});
-
-// 默认优化设置
-const DEFAULT_PERFORMANCE_SETTINGS = {
-  concurrentTasks: 10,
-  preloadDistance: 5,
-  cacheTimeout: 60, // 分钟
-  cacheEnabled: true,
-  thumbnailResolution: 450, // 缩略图分辨率（宽度，高度会按比例调整）
-  cardWidth: 280 // 卡片基础宽度
+// 简化的布局配置 - 使用统一系统
+const DENSITY_CONFIG = {
+  compact: { baseWidth: 200, spacing: 16 },
+  standard: { baseWidth: 250, spacing: 24 },
+  comfortable: { baseWidth: 300, spacing: 32 }
 };
 
 function HomePage({ colorMode }) {
@@ -118,30 +98,20 @@ function HomePage({ colorMode }) {
   const [error, setError] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortDirection, setSortDirection] = useState('asc');
-  const [compactView, setCompactView] = useState(true);
+  const [userDensity, setUserDensity] = useState(() => localStorage.getItem('userDensity') || 'standard');
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [visibleAlbums, setVisibleAlbums] = useState(new Set());
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const listRef = useRef(null);
   const visibleRowsRef = useRef(new Set());
   const scrollContainerRef = useRef(null);
-  const [forceUpdate, setForceUpdate] = useState(0); // 添加强制更新计数器
+  const [forceUpdate, setForceUpdate] = useState(0);
   
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
   
   // 获取收藏上下文
   const { favorites } = useFavorites();
-  
-  // 性能设置
-  const [performanceSettings, setPerformanceSettings] = useState(() => {
-    const savedSettings = localStorage.getItem('performance_settings');
-    return savedSettings ? JSON.parse(savedSettings) : DEFAULT_PERFORMANCE_SETTINGS;
-  });
-  
-  // 设置对话框
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [tempSettings, setTempSettings] = useState({...performanceSettings});
   
   // 同步性能设置到主进程
   useEffect(() => {
@@ -473,72 +443,31 @@ function HomePage({ colorMode }) {
     return relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
   };
   
-  // 重新设计的响应式布局系统 - 基于设备类型和用户体验优化
+  // 简化的响应式布局 - 流体计算无最大限制
   const getColumnsPerRow = useCallback(() => {
-    const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
-    
-    // 设备类型检测和用户体验优化
+    const config = DENSITY_CONFIG[userDensity];
     const containerPadding = isSmallScreen ? 16 : 32;
     const scrollbarWidth = 8;
     const availableWidth = Math.max(0, windowWidth - containerPadding - scrollbarWidth);
     
-    // 基于设备类型的最佳实践列数配置
-    const deviceConfig = {
-      // 手机：优先考虑触控体验
-      phone: { maxCols: { compact: 2, standard: 1 }, minCardWidth: 140 },
-      // 平板：平衡信息密度和可读性
-      tablet: { maxCols: { compact: 3, standard: 2 }, minCardWidth: 160 },
-      // 笔记本：适合桌面浏览
-      laptop: { maxCols: { compact: 4, standard: 3 }, minCardWidth: 180 },
-      // 桌面：专业工作环境
-      desktop: { maxCols: { compact: 5, standard: 4 }, minCardWidth: 200 },
-      // 超宽屏：多任务处理
-      ultrawide: { maxCols: { compact: 8, standard: 6 }, minCardWidth: 220 }
-    };
-    
-    // 检测设备类型
-    let deviceType = 'phone';
-    if (windowWidth >= 1920) deviceType = 'ultrawide';
-    else if (windowWidth >= 1200) deviceType = 'desktop';
-    else if (windowWidth >= 768) deviceType = 'laptop';
-    else if (windowWidth >= 481) deviceType = 'tablet';
-    
-    const device = deviceConfig[deviceType];
-    const maxColumns = device.maxCols[compactView ? 'compact' : 'standard'];
-    const minCardWidth = device.minCardWidth;
-    
-    // 计算最适合的列数，确保不会太小
-    const idealCardWidth = config.width;
-    const spacing = config.spacing;
-    
-    // 基于可用宽度的智能计算
-    let columns = Math.floor((availableWidth + spacing) / (Math.max(minCardWidth, idealCardWidth * 0.8) + spacing));
-    
-    // 确保在合理范围内
-    columns = Math.max(1, Math.min(columns, maxColumns));
-    
-    // 特殊处理：小屏幕确保卡片不会太小
-    if (windowWidth < 400) {
-      columns = Math.min(columns, compactView ? 2 : 1);
-    }
+    // 流体计算，无最大列数限制，充分利用空间
+    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / (config.baseWidth + config.spacing)));
     
     return columns;
-  }, [windowWidth, compactView, isSmallScreen, performanceSettings]);
+  }, [windowWidth, userDensity, isSmallScreen]);
   
   // 计算行高
   const getRowHeight = useCallback(() => {
     try {
-      const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
-      // 行高 = 卡片高度 + 上下间距，确保有足够的空间
-      const rowHeight = config.height + config.spacing * 3;
-      // const rowHeight = config.height + 60; // 增加垂直间距
-      return rowHeight;
+      const config = DENSITY_CONFIG[userDensity];
+      // 行高 = 卡片高度 + 间距
+      const cardHeight = Math.round(config.baseWidth * 0.8); // 保持4:3比例
+      return cardHeight + config.spacing * 2;
     } catch (err) {
       console.error('计算行高时出错:', err);
-      // 返回默认行高
       return 280;
     }
-  }, [compactView, performanceSettings]);
+  }, [userDensity]);
   
   // 生成唯一ID
   const getAlbumId = (album, index) => {
@@ -558,7 +487,7 @@ function HomePage({ colorMode }) {
     try {
       const sorted = sortedAlbums();
       const columnsPerRow = getColumnsPerRow();
-      const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
+      const config = DENSITY_CONFIG[userDensity];
       
       // 创建一个包含此行所有相簿的数组
       const rowItems = [];
@@ -578,20 +507,21 @@ function HomePage({ colorMode }) {
             display: 'flex',
             flexDirection: 'row',
             marginBottom: `${config.spacing}px`,
-            width: '100%' // 确保行占满整个宽度
+            width: '100%'
           }}
         >
           {rowItems.map((album, i) => {
             const albumId = getAlbumId(album, index * columnsPerRow + i);
             const isAlbumVisible = visibleRowsRef.current.has(index);
+            const cardWidth = Math.floor((windowWidth - 64 - (columnsPerRow - 1) * config.spacing) / columnsPerRow);
             
             return (
               <div 
                 key={`${album.path}-${i}`} 
                 style={{
-                  width: `${config.width}px`,
+                  width: `${cardWidth}px`,
                   marginRight: i < columnsPerRow - 1 ? `${config.spacing}px` : 0,
-                  height: `${config.height}px`
+                  height: `${Math.round(cardWidth * 0.75)}px`
                 }}
                 data-album-id={albumId}
                 ref={node => {
@@ -604,7 +534,7 @@ function HomePage({ colorMode }) {
                   album={album}
                   displayPath={getAlbumDisplayPath(album)}
                   onClick={() => handleAlbumClick(album.path)}
-                  isCompactMode={compactView}
+                  isCompactMode={userDensity === 'compact'}
                   isVisible={isAlbumVisible}
                 />
               </div>
@@ -805,6 +735,30 @@ function HomePage({ colorMode }) {
               </IconButton>
             </Tooltip>
             
+            {/* 密度选择 */}
+            <FormControl variant="outlined" size="small" sx={{ 
+              minWidth: { xs: 80, sm: 100 },
+              mr: 1,
+              bgcolor: 'rgba(255,255,255,0.1)', 
+              borderRadius: 1 
+            }}>
+              <InputLabel id="density-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>密度</InputLabel>
+              <Select
+                labelId="density-select-label"
+                value={userDensity}
+                onChange={(e) => {
+                  setUserDensity(e.target.value);
+                  localStorage.setItem('userDensity', e.target.value);
+                }}
+                label="密度"
+                sx={{ color: 'white', fontSize: '0.8rem' }}
+              >
+                <MenuItem value="compact">紧凑</MenuItem>
+                <MenuItem value="standard">标准</MenuItem>
+                <MenuItem value="comfortable">宽松</MenuItem>
+              </Select>
+            </FormControl>
+            
             {/* 深色模式切换按钮 */}
             <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
               <IconButton 
@@ -814,17 +768,6 @@ function HomePage({ colorMode }) {
                 sx={{ mx: 0.5 }}
               >
                 {colorMode.mode === 'dark' ? <Brightness7Icon sx={{ fontSize: '1.2rem' }} /> : <Brightness4Icon sx={{ fontSize: '1.2rem' }} />}
-              </IconButton>
-            </Tooltip>
-            
-            <Tooltip title="性能优化设置">
-              <IconButton 
-                color="inherit"
-                onClick={handleOpenSettings}
-                size="small"
-                sx={{ mx: 0.5 }}
-              >
-                <TuneIcon sx={{ fontSize: '1.2rem' }} />
               </IconButton>
             </Tooltip>
             
@@ -942,171 +885,6 @@ function HomePage({ colorMode }) {
         </Alert>
       </Snackbar>
       
-      <Dialog open={settingsDialogOpen} onClose={handleCloseSettings}>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <SpeedIcon sx={{ mr: 1 }} />
-            性能优化设置
-          </Box>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Box sx={{ mb: 3 }}>
-            <Typography gutterBottom>并发任务数量</Typography>
-            <Typography variant="caption" color="text.secondary">
-              同时处理的缩略图生成任务数量。增加可提高速度，但可能导致系统负担过重。
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Slider
-                value={tempSettings.concurrentTasks}
-                min={1}
-                max={20}
-                step={1}
-                marks={[
-                  { value: 1, label: '1' },
-                  { value: 10, label: '10' },
-                  { value: 20, label: '20' }
-                ]}
-                valueLabelDisplay="auto"
-                onChange={(_, value) => handleSettingChange('concurrentTasks', value)}
-              />
-            </Box>
-          </Box>
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <Box sx={{ mb: 3 }}>
-            <Typography gutterBottom>预加载距离</Typography>
-            <Typography variant="caption" color="text.secondary">
-              可视区域外预加载的行数。增加可减少滚动时的空白，但会增加初始加载时间。
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Slider
-                value={tempSettings.preloadDistance}
-                min={1}
-                max={10}
-                step={1}
-                marks={[
-                  { value: 1, label: '1' },
-                  { value: 5, label: '5' },
-                  { value: 10, label: '10' }
-                ]}
-                valueLabelDisplay="auto"
-                onChange={(_, value) => handleSettingChange('preloadDistance', value)}
-              />
-            </Box>
-          </Box>
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <Box sx={{ mb: 3 }}>
-            <Typography gutterBottom>缩略图分辨率</Typography>
-            <Typography variant="caption" color="text.secondary">
-              缩略图的宽度像素值。较低的分辨率可提高加载速度和节省存储空间，但图像细节会减少。
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Slider
-                value={tempSettings.thumbnailResolution}
-                min={150}
-                max={600}
-                step={50}
-                marks={[
-                  { value: 150, label: '小' },
-                  { value: 300, label: '中' },
-                  { value: 450, label: '大' },
-                  { value: 600, label: '超大' }
-                ]}
-                valueLabelDisplay="auto"
-                valueLabelFormat={value => `${value}px`}
-                onChange={(_, value) => handleSettingChange('thumbnailResolution', value)}
-              />
-            </Box>
-          </Box>
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <Box sx={{ mb: 3 }}>
-            <Typography gutterBottom>卡片宽度</Typography>
-            <Typography variant="caption" color="text.secondary">
-              调整相簿卡片的宽度。较大的宽度显示更多细节，较小的宽度可在同一屏幕显示更多相簿。
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Slider
-                value={tempSettings.cardWidth}
-                min={180}
-                max={400}
-                step={20}
-                marks={[
-                  { value: 180, label: '窄' },
-                  { value: 280, label: '标准' },
-                  { value: 340, label: '宽' },
-                  { value: 400, label: '超宽' }
-                ]}
-                valueLabelDisplay="auto"
-                valueLabelFormat={value => `${value}px`}
-                onChange={(_, value) => handleSettingChange('cardWidth', value)}
-              />
-            </Box>
-          </Box>
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <Box sx={{ mb: 3 }}>
-            <Typography gutterBottom>缓存设置</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={tempSettings.cacheEnabled}
-                    onChange={(e) => handleSettingChange('cacheEnabled', e.target.checked)}
-                  />
-                }
-                label="启用缓存"
-              />
-              
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                <TextField
-                  label="缓存超时(分钟)"
-                  type="number"
-                  size="small"
-                  disabled={!tempSettings.cacheEnabled}
-                  value={tempSettings.cacheTimeout}
-                  onChange={(e) => handleSettingChange('cacheTimeout', parseInt(e.target.value, 10) || 60)}
-                  inputProps={{ min: 5, max: 1440 }}
-                  sx={{ width: 180 }}
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
-                  缓存有效时间，超过后将重新加载
-                </Typography>
-              </Box>
-              
-              <Box sx={{ mt: 2 }}>
-                <Button 
-                  variant="outlined" 
-                  color="error" 
-                  onClick={clearAllCache} 
-                  size="small"
-                >
-                  清空所有缓存
-                </Button>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                  清除所有缓存的相册、图片和缩略图数据
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleResetSettings} color="inherit">
-            恢复默认
-          </Button>
-          <Button onClick={handleCloseSettings}>
-            取消
-          </Button>
-          <Button onClick={handleSaveSettings} variant="contained">
-            保存
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

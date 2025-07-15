@@ -20,25 +20,13 @@ import {
   InputLabel,
   useMediaQuery,
   useTheme,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Slider,
-  Switch,
-  FormControlLabel,
-  TextField,
-  Divider,
   Badge
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import ViewModuleIcon from '@mui/icons-material/ViewModule';
-import ViewCompactIcon from '@mui/icons-material/ViewCompact';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import TuneIcon from '@mui/icons-material/Tune';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
@@ -52,37 +40,11 @@ import { useFavorites } from '../contexts/FavoritesContext';
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
-// 默认性能设置
-const DEFAULT_PERFORMANCE_SETTINGS = {
-  concurrentTasks: 10,
-  preloadDistance: 5,
-  cacheTimeout: 60, // 分钟
-  cacheEnabled: true,
-  thumbnailResolution: 450, // 缩略图分辨率
-  cardWidth: 280 // 卡片基础宽度
-};
-
-// 卡片尺寸配置 - 与HomePage.js中保持一致
-const getCardConfig = (settings) => ({
-  compact: {
-    minWidth: 160, // 紧凑模式下卡片最小宽度
-    idealWidth: Math.round(settings?.cardWidth * 0.8) || 220, // 紧凑模式下理想宽度（与HomePage中的width保持一致）
-    spacing: 16 // 紧凑模式下卡片间距
-  },
-  standard: {
-    minWidth: 200, // 标准模式下卡片最小宽度
-    idealWidth: settings?.cardWidth || 280, // 标准模式下理想宽度（与HomePage中的width保持一致）
-    spacing: 24 // 标准模式下卡片间距
-  }
-});
-
-// 预设的断点配置，根据屏幕宽度确定最佳列数
-const BREAKPOINTS = {
-  xs: 600,   // 超小屏幕
-  sm: 960,   // 小屏幕
-  md: 1280,  // 中等屏幕
-  lg: 1920,  // 大屏幕
-  xl: 2560   // 超大屏幕
+// 简化的布局配置 - 与HomePage保持一致
+const DENSITY_CONFIG = {
+  compact: { baseWidth: 200, spacing: 16 },
+  standard: { baseWidth: 250, spacing: 24 },
+  comfortable: { baseWidth: 300, spacing: 32 }
 };
 
 function AlbumPage({ colorMode }) {
@@ -97,22 +59,13 @@ function AlbumPage({ colorMode }) {
   const [sortDirection, setSortDirection] = useState('asc');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [compactView, setCompactView] = useState(true);
+  const [userDensity, setUserDensity] = useState('standard'); // 'standard' | 'comfortable'
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [imageHeights, setImageHeights] = useState({}); // 存储图片高度信息
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
 
-  // 性能设置
-  const [performanceSettings, setPerformanceSettings] = useState(() => {
-    const savedSettings = localStorage.getItem('performance_settings');
-    return savedSettings ? JSON.parse(savedSettings) : DEFAULT_PERFORMANCE_SETTINGS;
-  });
-
-  // 设置对话框
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [tempSettings, setTempSettings] = useState({...performanceSettings});
 
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
@@ -149,58 +102,49 @@ function AlbumPage({ colorMode }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 从localStorage中读取视图设置
+  // 从localStorage中读取密度设置
   useEffect(() => {
-    const savedViewMode = localStorage.getItem('compactView');
-
-    if (savedViewMode !== null) {
-      setCompactView(savedViewMode === 'true');
+    const savedDensity = localStorage.getItem('userDensity');
+    if (savedDensity) {
+      setUserDensity(savedDensity);
     }
   }, []);
 
-  // 当性能设置变化时，强制重新计算布局
+  // 当密度设置变化时，强制重新计算布局
   useEffect(() => {
-    // 只有在初始加载后才执行
     if (images.length > 0) {
-      // 应用新的卡片宽度设置
+      // 基于密度重新计算布局
+      const config = DENSITY_CONFIG[userDensity];
       const style = document.createElement('style');
-      const config = getCardConfig(performanceSettings);
 
       style.textContent = `
-        .compact-view .masonry-grid_column {
-          width: ${Math.round(config.compact.idealWidth)}px !important;
-        }
-
-        .standard-view .masonry-grid_column {
-          width: ${config.standard.idealWidth}px !important;
+        .masonry-grid_column {
+          width: ${config.baseWidth}px !important;
         }
       `;
 
-      // 添加到文档头部
       document.head.appendChild(style);
-
-      // 清理函数
       return () => {
         document.head.removeChild(style);
       };
     }
-  }, [performanceSettings, images.length]);
+  }, [userDensity, images.length]);
 
   // 添加ESC键监听，按ESC返回上一页
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // 如果按下ESC键且没有打开查看器或设置对话框
-      if (event.key === 'Escape' && !viewerOpen && !settingsDialogOpen) {
+      // 如果按下ESC键且没有打开查看器
+      if (event.key === 'Escape' && !viewerOpen) {
         handleBack();
       }
 
       // 按下 r 键触发随机选择相簿
       if (event.key === 'r' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // 确保不在输入框中，且没有打开查看器或设置对话框
+        // 确保不在输入框中，且没有打开查看器
         if (document.activeElement.tagName !== 'INPUT' &&
             document.activeElement.tagName !== 'TEXTAREA' &&
             !document.activeElement.isContentEditable &&
-            !viewerOpen && !settingsDialogOpen) {
+            !viewerOpen) {
           handleRandomAlbum();
         }
       }
@@ -294,11 +238,14 @@ function AlbumPage({ colorMode }) {
     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
   };
 
-  // 切换视图模式
-  const toggleViewMode = () => {
-    const newMode = !compactView;
-    setCompactView(newMode);
-    localStorage.setItem('compactView', newMode.toString());
+  // 切换密度设置（循环：紧凑->标准->宽松）
+  const cycleDensity = () => {
+    const densities = ['compact', 'standard', 'comfortable'];
+    const currentIndex = densities.indexOf(userDensity);
+    const nextIndex = (currentIndex + 1) % densities.length;
+    const newDensity = densities[nextIndex];
+    setUserDensity(newDensity);
+    localStorage.setItem('userDensity', newDensity);
   };
 
   // 排序图片
@@ -331,56 +278,18 @@ function AlbumPage({ colorMode }) {
     setViewerOpen(false);
   };
 
-  // 重新设计的瀑布流断点系统 - 基于设备类型优化
+  // 现代化的响应式瀑布流布局 - 流体设计，无最大限制
   const getMasonryBreakpoints = useCallback(() => {
-    const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
-    
-    // 设备类型检测和瀑布流优化
+    const config = DENSITY_CONFIG[userDensity];
     const containerPadding = isSmallScreen ? 16 : 32;
     const scrollbarWidth = 8;
-    const availableWidth = Math.max(0, windowWidth - containerPadding - scrollbarWidth);
+    const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
     
-    // 基于设备类型的瀑布流配置
-    const deviceConfig = {
-      // 手机：单列或双列瀑布流
-      phone: { maxCols: { compact: 2, standard: 1 }, minCardWidth: 140 },
-      // 平板：双列或三列瀑布流
-      tablet: { maxCols: { compact: 3, standard: 2 }, minCardWidth: 160 },
-      // 笔记本：三列或四列瀑布流
-      laptop: { maxCols: { compact: 4, standard: 3 }, minCardWidth: 180 },
-      // 桌面：四列或五列瀑布流
-      desktop: { maxCols: { compact: 5, standard: 4 }, minCardWidth: 200 },
-      // 超宽屏：六列或八列瀑布流
-      ultrawide: { maxCols: { compact: 8, standard: 6 }, minCardWidth: 220 }
-    };
-    
-    // 检测设备类型
-    let deviceType = 'phone';
-    if (windowWidth >= 1920) deviceType = 'ultrawide';
-    else if (windowWidth >= 1200) deviceType = 'desktop';
-    else if (windowWidth >= 768) deviceType = 'laptop';
-    else if (windowWidth >= 481) deviceType = 'tablet';
-    
-    const device = deviceConfig[deviceType];
-    const maxColumns = device.maxCols[compactView ? 'compact' : 'standard'];
-    const minCardWidth = device.minCardWidth;
-    
-    // 基于可用宽度的智能计算
-    const idealCardWidth = config.idealWidth;
-    const spacing = config.spacing;
-    
-    let columns = Math.floor((availableWidth + spacing) / (Math.max(minCardWidth, idealCardWidth * 0.8) + spacing));
-    
-    // 确保在设备限制范围内
-    columns = Math.max(1, Math.min(columns, maxColumns));
-    
-    // 特殊处理极端小屏幕
-    if (windowWidth < 400) {
-      columns = Math.min(columns, compactView ? 2 : 1);
-    }
+    // 流体计算，无最大列数限制，充分利用空间
+    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / (config.baseWidth + config.spacing)));
     
     return columns;
-  }, [windowWidth, compactView, isSmallScreen, performanceSettings]);
+  }, [windowWidth, isSmallScreen, userDensity]);
 
   // 获取相簿名称
   const getAlbumName = () => {
@@ -397,49 +306,6 @@ function AlbumPage({ colorMode }) {
     }));
   };
 
-  // 处理打开设置对话框
-  const handleOpenSettings = () => {
-    setTempSettings({...performanceSettings});
-    setSettingsDialogOpen(true);
-  };
-
-  // 处理关闭设置对话框
-  const handleCloseSettings = () => {
-    setSettingsDialogOpen(false);
-  };
-
-  // 处理保存设置
-  const handleSaveSettings = () => {
-    setPerformanceSettings(tempSettings);
-    localStorage.setItem('performance_settings', JSON.stringify(tempSettings));
-    setSettingsDialogOpen(false);
-
-    // 通知用户需要刷新以应用某些设置
-    setError('设置已保存，正在应用新的卡片宽度...');
-
-    // 强制重新计算瀑布流布局 - 自动刷新
-    setTimeout(() => {
-      // 触发窗口大小变化，强制重新计算列数
-      setWindowWidth(prev => prev + 1);
-      setTimeout(() => {
-        setWindowWidth(window.innerWidth);
-        setError('');
-      }, 50);
-    }, 100);
-  };
-
-  // 处理设置变化
-  const handleSettingChange = (key, value) => {
-    setTempSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  };
-
-  // 重置为默认设置
-  const handleResetSettings = () => {
-    setTempSettings({...DEFAULT_PERFORMANCE_SETTINGS});
-  };
 
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
@@ -552,15 +418,28 @@ function AlbumPage({ colorMode }) {
               }} />
             </IconButton>
 
-            <IconButton
-              color="inherit"
-              onClick={toggleViewMode}
-              size="small"
-              sx={{ mx: 0.5 }}
-              title={compactView ? "切换到标准视图" : "切换到紧凑视图"}
-            >
-              {compactView ? <ViewCompactIcon sx={{ fontSize: '1.2rem' }} /> : <ViewModuleIcon sx={{ fontSize: '1.2rem' }} />}
-            </IconButton>
+            <FormControl variant="outlined" size="small" sx={{
+              minWidth: { xs: 80, sm: 100 },
+              mr: 1,
+              bgcolor: 'rgba(255,255,255,0.1)',
+              borderRadius: 1
+            }}>
+              <InputLabel id="density-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>密度</InputLabel>
+              <Select
+                labelId="density-select-label"
+                value={userDensity}
+                onChange={(e) => {
+                  setUserDensity(e.target.value);
+                  localStorage.setItem('userDensity', e.target.value);
+                }}
+                label="密度"
+                sx={{ color: 'white', fontSize: '0.8rem' }}
+              >
+                <MenuItem value="compact">紧凑</MenuItem>
+                <MenuItem value="standard">标准</MenuItem>
+                <MenuItem value="comfortable">宽松</MenuItem>
+              </Select>
+            </FormControl>
 
             {/* 添加随机选择相簿按钮 */}
             <Tooltip title="随机选择相簿 (R)">
@@ -649,7 +528,7 @@ function AlbumPage({ colorMode }) {
                 相簿路径: {decodedAlbumPath}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                共 {images.length} 张照片 | {compactView ? "紧凑视图" : "标准视图"}
+                共 {images.length} 张照片 | {userDensity === 'compact' ? '紧凑密度' : userDensity === 'standard' ? '标准密度' : '宽松密度'}
               </Typography>
             </Box>
 
@@ -657,7 +536,7 @@ function AlbumPage({ colorMode }) {
               <Box sx={{ minHeight: 'calc(100vh - 120px)' }}>
                 <Masonry
                   breakpointCols={getMasonryBreakpoints()}
-                  className={`masonry-grid ${compactView ? 'compact-view' : 'standard-view'}`}
+                  className="masonry-grid"
                   columnClassName="masonry-grid_column"
                 >
                   {sortedImages().map((image, index) => (
@@ -668,7 +547,7 @@ function AlbumPage({ colorMode }) {
                       <ImageCard
                         image={image}
                         onClick={() => handleImageClick(index)}
-                        isCompactMode={compactView}
+                        density={userDensity}
                         onLoad={handleImageLoad}
                       />
                     </div>
@@ -705,57 +584,12 @@ function AlbumPage({ colorMode }) {
         </Alert>
       </Snackbar>
 
-      {/* 设置对话框 */}
-      <Dialog open={settingsDialogOpen} onClose={handleCloseSettings}>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <TuneIcon sx={{ mr: 1 }} />
-            卡片宽度设置
-          </Box>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Box sx={{ mb: 3 }}>
-            <Typography gutterBottom>卡片宽度</Typography>
-            <Typography variant="caption" color="text.secondary">
-              调整相簿卡片的宽度。较大的宽度显示更多细节，较小的宽度可在同一屏幕显示更多图片。
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Slider
-                value={tempSettings.cardWidth}
-                min={180}
-                max={400}
-                step={20}
-                marks={[
-                  { value: 180, label: '窄' },
-                  { value: 280, label: '标准' },
-                  { value: 340, label: '宽' },
-                  { value: 400, label: '超宽' }
-                ]}
-                valueLabelDisplay="auto"
-                valueLabelFormat={value => `${value}px`}
-                onChange={(_, value) => handleSettingChange('cardWidth', value)}
-              />
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleResetSettings} color="inherit">
-            恢复默认
-          </Button>
-          <Button onClick={handleCloseSettings}>
-            取消
-          </Button>
-          <Button onClick={handleSaveSettings} variant="contained">
-            保存
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }
 
 // 图片卡片组件
-function ImageCard({ image, onClick, isCompactMode, onLoad }) {
+function ImageCard({ image, onClick, density, onLoad }) {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [aspectRatio, setAspectRatio] = useState(1); // 默认为1:1
@@ -827,7 +661,7 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
     };
 
     loadImage();
-  }, [image, isCompactMode, retryCount]);
+  }, [image, density, retryCount]);
 
   // 格式化文件大小
   const formatFileSize = (bytes) => {
@@ -950,7 +784,7 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
                 width: '100%',
                 display: 'block',
                 height: 'auto', // 允许高度自适应
-                borderRadius: isCompactMode ? '4px' : '4px 4px 0 0'
+                borderRadius: density === 'compact' ? '2px' : density === 'standard' ? '4px' : '6px'
               }}
               loading="lazy"
               onLoad={handleImageLoaded}
@@ -960,7 +794,7 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
         )}
       </Box>
 
-      {!isCompactMode && (
+      {density !== 'compact' && (
         <Box sx={{ p: 1, flexGrow: 0, bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
