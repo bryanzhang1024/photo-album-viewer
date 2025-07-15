@@ -19,26 +19,12 @@ import {
   Paper,
   useMediaQuery,
   useTheme,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Slider,
-  Switch,
-  FormControlLabel,
-  TextField,
-  Divider,
   Tooltip,
   Badge
 } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import ViewModuleIcon from '@mui/icons-material/ViewModule';
-import ViewCompactIcon from '@mui/icons-material/ViewCompact';
-import SettingsIcon from '@mui/icons-material/Settings';
-import TuneIcon from '@mui/icons-material/Tune';
-import SpeedIcon from '@mui/icons-material/Speed';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
@@ -113,13 +99,6 @@ function HomePage({ colorMode }) {
   // 获取收藏上下文
   const { favorites } = useFavorites();
   
-  // 同步性能设置到主进程
-  useEffect(() => {
-    if (ipcRenderer) {
-      ipcRenderer.invoke('update-performance-settings', performanceSettings)
-        .catch(err => console.error('更新性能设置失败:', err));
-    }
-  }, [performanceSettings]);
   
   // 监听窗口大小变化
   useEffect(() => {
@@ -159,14 +138,9 @@ function HomePage({ colorMode }) {
     };
   }, []);
   
-  // 从localStorage中读取上次的路径和视图设置
+  // 从localStorage中读取上次的路径
   useEffect(() => {
     const savedPath = localStorage.getItem('lastRootPath');
-    const savedViewMode = localStorage.getItem('compactView');
-    
-    if (savedViewMode !== null) {
-      setCompactView(savedViewMode === 'true');
-    }
     
     if (savedPath) {
       setRootPath(savedPath);
@@ -174,7 +148,7 @@ function HomePage({ colorMode }) {
     }
   }, []);
   
-  // 当视图模式、窗口宽度或强制更新计数器变化时，重新计算虚拟列表
+  // 当密度、窗口宽度或强制更新计数器变化时，重新计算虚拟列表
   useEffect(() => {
     if (listRef.current) {
       // 延迟执行以确保DOM已更新
@@ -191,7 +165,7 @@ function HomePage({ colorMode }) {
         }
       }, 100);
     }
-  }, [compactView, windowWidth, performanceSettings, forceUpdate]);
+  }, [userDensity, windowWidth, forceUpdate]);
   
   // 在组件挂载后恢复滚动位置
   useEffect(() => {
@@ -383,25 +357,6 @@ function HomePage({ colorMode }) {
     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
   };
   
-  // 切换视图模式
-  const toggleViewMode = () => {
-    const newMode = !compactView;
-    setCompactView(newMode);
-    localStorage.setItem('compactView', newMode.toString());
-    
-    // 延迟一下强制更新列表，确保DOM已更新
-    setTimeout(() => {
-      if (listRef.current) {
-        try {
-          console.log('视图模式切换，重新计算虚拟列表...');
-          listRef.current.recomputeRowHeights();
-          listRef.current.forceUpdateGrid();
-        } catch (err) {
-          console.error('视图模式切换时重新计算虚拟列表出错:', err);
-        }
-      }
-    }, 100);
-  };
   
   // 排序相簿
   const sortedAlbums = () => {
@@ -687,15 +642,6 @@ function HomePage({ colorMode }) {
               }} />
             </IconButton>
             
-            <IconButton 
-              color="inherit" 
-              onClick={toggleViewMode} 
-              size="small"
-              sx={{ mx: 0.5 }}
-              title={compactView ? "切换到标准视图" : "切换到紧凑视图"}
-            >
-              {compactView ? <ViewCompactIcon sx={{ fontSize: '1.2rem' }} /> : <ViewModuleIcon sx={{ fontSize: '1.2rem' }} />}
-            </IconButton>
             
             {/* 添加随机选择相簿按钮 */}
             <Tooltip title="随机选择相簿 (R)">
@@ -839,7 +785,7 @@ function HomePage({ colorMode }) {
                       console.log(`虚拟列表参数 - 宽度: ${width}, 高度: ${height}, 列数: ${columnsPerRow}, 行数: ${rowCount}, 行高: ${rowHeight}, 滚动位置: ${scrollTop}`);
                       
                       // 添加key属性，在列数变化时强制重新创建List组件
-                      const listKey = `list-${columnsPerRow}-${compactView}-${forceUpdate}`;
+                      const listKey = `list-${columnsPerRow}-${userDensity}-${forceUpdate}`;
                       
                       return (
                         <List
@@ -854,7 +800,7 @@ function HomePage({ colorMode }) {
                           rowRenderer={renderRow}
                           scrollTop={scrollTop}
                           width={width}
-                          overscanRowCount={performanceSettings.preloadDistance || 10}
+                          overscanRowCount={5}
                           onRowsRendered={onRowsRendered}
                         />
                       );

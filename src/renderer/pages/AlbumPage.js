@@ -30,6 +30,7 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
+import TuneIcon from '@mui/icons-material/Tune';
 import ImageViewer from '../components/ImageViewer';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
@@ -154,7 +155,7 @@ function AlbumPage({ colorMode }) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [viewerOpen, settingsDialogOpen]);
+  }, [viewerOpen]);
 
   // 加载相簿图片
   const loadAlbumImages = async () => {
@@ -489,16 +490,6 @@ function AlbumPage({ colorMode }) {
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="调整卡片宽度">
-              <IconButton
-                color="inherit"
-                onClick={handleOpenSettings}
-                size="small"
-                sx={{ mx: 0.5 }}
-              >
-                <TuneIcon sx={{ fontSize: '1.2rem' }} />
-              </IconButton>
-            </Tooltip>
 
             <IconButton
               color="inherit"
@@ -603,6 +594,10 @@ function ImageCard({ image, onClick, density, onLoad }) {
   const { albumPath } = useParams();
   const decodedAlbumPath = decodeURIComponent(albumPath);
   const isFavorited = image ? isImageFavorited(image.path) : false;
+
+  // 安全地获取electron对象
+  const electron = window.require ? window.require('electron') : null;
+  const ipcRenderer = electron ? electron.ipcRenderer : null;
 
   useEffect(() => {
     const loadImage = async () => {
