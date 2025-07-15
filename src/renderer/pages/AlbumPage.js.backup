@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import {
-  Box,
-  AppBar,
-  Toolbar,
-  Typography,
-  IconButton,
+import { 
+  Box, 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  IconButton, 
   Button,
   Grid,
   Container,
@@ -103,26 +103,26 @@ function AlbumPage({ colorMode }) {
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
-
+  
   // 性能设置
   const [performanceSettings, setPerformanceSettings] = useState(() => {
     const savedSettings = localStorage.getItem('performance_settings');
     return savedSettings ? JSON.parse(savedSettings) : DEFAULT_PERFORMANCE_SETTINGS;
   });
-
+  
   // 设置对话框
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [tempSettings, setTempSettings] = useState({...performanceSettings});
-
+  
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
-
+  
   // 解码路径
   const decodedAlbumPath = decodeURIComponent(albumPath);
-
+  
   // 获取收藏上下文
   const { favorites } = useFavorites();
-
+  
   // 从URL参数中获取初始图片路径
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -133,31 +133,31 @@ function AlbumPage({ colorMode }) {
       initialImagePath.current = null;
     }
   }, [location.search]);
-
+  
   // 加载相簿图片
   useEffect(() => {
     loadAlbumImages();
   }, [decodedAlbumPath]);
-
+  
   // 监听窗口大小变化
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
     };
-
+    
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
+  
   // 从localStorage中读取视图设置
   useEffect(() => {
     const savedViewMode = localStorage.getItem('compactView');
-
+    
     if (savedViewMode !== null) {
       setCompactView(savedViewMode === 'true');
     }
   }, []);
-
+  
   // 当性能设置变化时，强制重新计算布局
   useEffect(() => {
     // 只有在初始加载后才执行
@@ -165,27 +165,27 @@ function AlbumPage({ colorMode }) {
       // 应用新的卡片宽度设置
       const style = document.createElement('style');
       const config = getCardConfig(performanceSettings);
-
+      
       style.textContent = `
         .compact-view .masonry-grid_column {
           width: ${Math.round(config.compact.idealWidth)}px !important;
         }
-
+        
         .standard-view .masonry-grid_column {
           width: ${config.standard.idealWidth}px !important;
         }
       `;
-
+      
       // 添加到文档头部
       document.head.appendChild(style);
-
+      
       // 清理函数
       return () => {
         document.head.removeChild(style);
       };
     }
   }, [performanceSettings, images.length]);
-
+  
   // 添加ESC键监听，按ESC返回上一页
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -193,11 +193,11 @@ function AlbumPage({ colorMode }) {
       if (event.key === 'Escape' && !viewerOpen && !settingsDialogOpen) {
         handleBack();
       }
-
+      
       // 按下 r 键触发随机选择相簿
       if (event.key === 'r' && !event.ctrlKey && !event.altKey && !event.metaKey) {
         // 确保不在输入框中，且没有打开查看器或设置对话框
-        if (document.activeElement.tagName !== 'INPUT' &&
+        if (document.activeElement.tagName !== 'INPUT' && 
             document.activeElement.tagName !== 'TEXTAREA' &&
             !document.activeElement.isContentEditable &&
             !viewerOpen && !settingsDialogOpen) {
@@ -205,13 +205,13 @@ function AlbumPage({ colorMode }) {
         }
       }
     };
-
+    
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [viewerOpen, settingsDialogOpen]);
-
+  
   // 加载相簿图片
   const loadAlbumImages = async () => {
     try {
@@ -219,31 +219,31 @@ function AlbumPage({ colorMode }) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
         return;
       }
-
+      
       setLoading(true);
       setError('');
-
+      
       // 检查是否有缓存
       const cacheKey = `album_images_${decodedAlbumPath}`;
       const cachedData = sessionStorage.getItem(cacheKey);
-
+      
       if (cachedData) {
         setImages(JSON.parse(cachedData));
         setLoading(false);
         return;
       }
-
+      
       const result = await ipcRenderer.invoke('get-album-images', decodedAlbumPath);
-
+      
       // 缓存结果到sessionStorage（会话级别）
       try {
         sessionStorage.setItem(cacheKey, JSON.stringify(result));
       } catch (e) {
         console.warn('缓存存储失败', e);
       }
-
+      
       setImages(result);
-
+      
       // 如果有初始图片路径，找到对应的索引并打开查看器
       if (initialImagePath.current) {
         const imageIndex = result.findIndex(img => img.path === initialImagePath.current);
@@ -257,57 +257,57 @@ function AlbumPage({ colorMode }) {
           }, 100);
         }
       }
-
+      
       setLoading(false);
     } catch (err) {
       setError('加载相簿图片时出错: ' + err.message);
       setLoading(false);
     }
   };
-
+  
   // 处理返回
   const handleBack = () => {
     // 保存当前路径到上下文
     if (scrollContainerRef.current) {
       scrollContext.savePosition('/album/' + albumPath, scrollContainerRef.current.scrollTop);
     }
-
+    
     navigate(-1);
   };
-
+  
   // 处理刷新
   const handleRefresh = () => {
     // 清除缓存
     const cacheKey = `album_images_${decodedAlbumPath}`;
     sessionStorage.removeItem(cacheKey);
-
+    
     loadAlbumImages();
   };
-
+  
   // 处理排序方式变化
   const handleSortChange = (event) => {
     setSortBy(event.target.value);
   };
-
+  
   // 处理排序方向变化
   const handleDirectionChange = () => {
     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
   };
-
+  
   // 切换视图模式
   const toggleViewMode = () => {
     const newMode = !compactView;
     setCompactView(newMode);
     localStorage.setItem('compactView', newMode.toString());
   };
-
+  
   // 排序图片
   const sortedImages = () => {
     if (!images.length) return [];
-
+    
     return [...images].sort((a, b) => {
       let comparison = 0;
-
+      
       if (sortBy === 'name') {
         comparison = a.name.localeCompare(b.name);
       } else if (sortBy === 'size') {
@@ -315,33 +315,33 @@ function AlbumPage({ colorMode }) {
       } else if (sortBy === 'lastModified') {
         comparison = new Date(a.lastModified) - new Date(b.lastModified);
       }
-
+      
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   };
-
+  
   // 处理图片点击
   const handleImageClick = (index) => {
     setSelectedImageIndex(index);
     setViewerOpen(true);
   };
-
+  
   // 关闭查看器
   const handleCloseViewer = () => {
     setViewerOpen(false);
   };
-
+  
   // 计算瀑布流的断点
   const getMasonryBreakpoints = useCallback(() => {
     const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
     const containerPadding = isSmallScreen ? 16 : 32; // 响应式内边距
     const scrollbarWidth = 8; // 现代浏览器滚动条更窄
     const availableWidth = Math.max(0, windowWidth - containerPadding - scrollbarWidth);
-
+    
     // 使用更智能的列数计算
     const cardWidth = config.idealWidth;
     const cardSpacing = config.spacing;
-
+    
     // 超宽屏幕优化
     if (windowWidth > 1920) {
       return compactView ? 8 : 6;
@@ -359,15 +359,14 @@ function AlbumPage({ colorMode }) {
       return compactView ? 3 : 2;
     }
     return compactView ? 2 : 1;
-  }, [windowWidth, compactView, isSmallScreen, performanceSettings]);
-
+  
   // 获取相簿名称
   const getAlbumName = () => {
     if (!decodedAlbumPath) return '';
     const parts = decodedAlbumPath.split('/');
     return parts[parts.length - 1];
   };
-
+  
   // 记录图片加载完成后的高度
   const handleImageLoad = (imagePath, height) => {
     setImageHeights(prev => ({
@@ -375,27 +374,27 @@ function AlbumPage({ colorMode }) {
       [imagePath]: height
     }));
   };
-
+  
   // 处理打开设置对话框
   const handleOpenSettings = () => {
     setTempSettings({...performanceSettings});
     setSettingsDialogOpen(true);
   };
-
+  
   // 处理关闭设置对话框
   const handleCloseSettings = () => {
     setSettingsDialogOpen(false);
   };
-
+  
   // 处理保存设置
   const handleSaveSettings = () => {
     setPerformanceSettings(tempSettings);
     localStorage.setItem('performance_settings', JSON.stringify(tempSettings));
     setSettingsDialogOpen(false);
-
+    
     // 通知用户需要刷新以应用某些设置
     setError('设置已保存，正在应用新的卡片宽度...');
-
+    
     // 强制重新计算瀑布流布局 - 自动刷新
     setTimeout(() => {
       // 触发窗口大小变化，强制重新计算列数
@@ -406,7 +405,7 @@ function AlbumPage({ colorMode }) {
       }, 50);
     }, 100);
   };
-
+  
   // 处理设置变化
   const handleSettingChange = (key, value) => {
     setTempSettings(prev => ({
@@ -414,22 +413,22 @@ function AlbumPage({ colorMode }) {
       [key]: value
     }));
   };
-
+  
   // 重置为默认设置
   const handleResetSettings = () => {
     setTempSettings({...DEFAULT_PERFORMANCE_SETTINGS});
   };
-
+  
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
     // 保存当前滚动位置
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-
+    
     navigate('/favorites');
   };
-
+  
   // 处理随机选择相簿
   const handleRandomAlbum = async () => {
     try {
@@ -437,18 +436,18 @@ function AlbumPage({ colorMode }) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
         return;
       }
-
+      
       // 获取根路径
       const rootPath = localStorage.getItem('lastRootPath');
       if (!rootPath) {
         setError('没有设置根路径，无法随机选择相簿');
         return;
       }
-
+      
       // 检查是否有缓存的相簿列表
       const cacheKey = `albums_cache_${rootPath}`;
       let albums = [];
-
+      
       const cachedData = localStorage.getItem(cacheKey);
       if (cachedData) {
         albums = JSON.parse(cachedData);
@@ -456,25 +455,25 @@ function AlbumPage({ colorMode }) {
         // 如果没有缓存，重新扫描目录
         albums = await ipcRenderer.invoke('scan-directory', rootPath);
       }
-
+      
       if (albums.length > 0) {
         // 随机选择一个相簿，但避免选到当前相簿
         let randomAlbum;
         let randomIndex;
         let attempts = 0;
         const maxAttempts = 10; // 防止无限循环
-
+        
         do {
           randomIndex = Math.floor(Math.random() * albums.length);
           randomAlbum = albums[randomIndex];
           attempts++;
         } while (randomAlbum.path === decodedAlbumPath && albums.length > 1 && attempts < maxAttempts);
-
+        
         // 保存当前滚动位置
         if (scrollContainerRef.current) {
           scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
         }
-
+        
         // 导航到随机选择的相簿
         navigate(`/album/${encodeURIComponent(randomAlbum.path)}`);
       } else {
@@ -484,7 +483,7 @@ function AlbumPage({ colorMode }) {
       setError('随机选择相簿时出错: ' + err.message);
     }
   };
-
+  
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" color="primary" elevation={0}>
@@ -501,13 +500,13 @@ function AlbumPage({ colorMode }) {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontSize: { xs: '0.9rem', sm: '1.25rem' }, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
             {getAlbumName()}
           </Typography>
-
+          
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <FormControl variant="outlined" size="small" sx={{
+            <FormControl variant="outlined" size="small" sx={{ 
               minWidth: { xs: 80, sm: 120 },
               mr: 1,
-              bgcolor: 'rgba(255,255,255,0.1)',
-              borderRadius: 1
+              bgcolor: 'rgba(255,255,255,0.1)', 
+              borderRadius: 1 
             }}>
               <InputLabel id="sort-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>排序</InputLabel>
               <Select
@@ -522,28 +521,28 @@ function AlbumPage({ colorMode }) {
                 <MenuItem value="lastModified">修改时间</MenuItem>
               </Select>
             </FormControl>
-
+            
             <IconButton color="inherit" onClick={handleDirectionChange} size="small">
-              <SortIcon sx={{
+              <SortIcon sx={{ 
                 transform: sortDirection === 'desc' ? 'rotate(180deg)' : 'none',
                 transition: 'transform 0.3s',
                 fontSize: '1.2rem'
               }} />
             </IconButton>
-
-            <IconButton
-              color="inherit"
-              onClick={toggleViewMode}
+            
+            <IconButton 
+              color="inherit" 
+              onClick={toggleViewMode} 
               size="small"
               sx={{ mx: 0.5 }}
               title={compactView ? "切换到标准视图" : "切换到紧凑视图"}
             >
               {compactView ? <ViewCompactIcon sx={{ fontSize: '1.2rem' }} /> : <ViewModuleIcon sx={{ fontSize: '1.2rem' }} />}
             </IconButton>
-
+            
             {/* 添加随机选择相簿按钮 */}
             <Tooltip title="随机选择相簿 (R)">
-              <IconButton
+              <IconButton 
                 color="inherit"
                 onClick={handleRandomAlbum}
                 size="small"
@@ -552,17 +551,17 @@ function AlbumPage({ colorMode }) {
                 <CasinoIcon sx={{ fontSize: '1.2rem' }} />
               </IconButton>
             </Tooltip>
-
+            
             {/* 收藏按钮 */}
             <Tooltip title="我的收藏">
-              <IconButton
+              <IconButton 
                 color="inherit"
                 onClick={handleNavigateToFavorites}
                 size="small"
                 sx={{ mx: 0.5 }}
               >
-                <Badge
-                  badgeContent={favorites.albums.length + favorites.images.length}
+                <Badge 
+                  badgeContent={favorites.albums.length + favorites.images.length} 
                   color="secondary"
                   max={99}
                   sx={{
@@ -577,9 +576,9 @@ function AlbumPage({ colorMode }) {
                 </Badge>
               </IconButton>
             </Tooltip>
-
+            
             <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
-              <IconButton
+              <IconButton 
                 color="inherit"
                 onClick={colorMode.toggleColorMode}
                 size="small"
@@ -588,9 +587,9 @@ function AlbumPage({ colorMode }) {
                 {colorMode.mode === 'dark' ? <Brightness7Icon sx={{ fontSize: '1.2rem' }} /> : <Brightness4Icon sx={{ fontSize: '1.2rem' }} />}
               </IconButton>
             </Tooltip>
-
+            
             <Tooltip title="调整卡片宽度">
-              <IconButton
+              <IconButton 
                 color="inherit"
                 onClick={handleOpenSettings}
                 size="small"
@@ -599,10 +598,10 @@ function AlbumPage({ colorMode }) {
                 <TuneIcon sx={{ fontSize: '1.2rem' }} />
               </IconButton>
             </Tooltip>
-
-            <IconButton
-              color="inherit"
-              onClick={handleRefresh}
+            
+            <IconButton 
+              color="inherit" 
+              onClick={handleRefresh} 
               disabled={loading}
               size="small"
             >
@@ -611,8 +610,8 @@ function AlbumPage({ colorMode }) {
           </Box>
         </Toolbar>
       </AppBar>
-
-      <Box
+      
+      <Box 
         ref={scrollContainerRef}
         sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
       >
@@ -630,7 +629,7 @@ function AlbumPage({ colorMode }) {
                 共 {images.length} 张照片 | {compactView ? "紧凑视图" : "标准视图"}
               </Typography>
             </Box>
-
+            
             {images.length > 0 ? (
               <Box sx={{ height: 'calc(100vh - 120px)', overflow: 'auto' }}>
                 <Masonry
@@ -639,12 +638,12 @@ function AlbumPage({ colorMode }) {
                   columnClassName="masonry-grid_column"
                 >
                   {sortedImages().map((image, index) => (
-                    <div
-                      key={`${image.path}-${index}`}
+                    <div 
+                      key={`${image.path}-${index}`} 
                       className="masonry-item"
                     >
-                      <ImageCard
-                        image={image}
+                      <ImageCard 
+                        image={image} 
                         onClick={() => handleImageClick(index)}
                         isCompactMode={compactView}
                         onLoad={handleImageLoad}
@@ -666,7 +665,7 @@ function AlbumPage({ colorMode }) {
           </>
         )}
       </Box>
-
+      
       {/* 图片查看器 */}
       {viewerOpen && (
         <ImageViewer
@@ -676,13 +675,13 @@ function AlbumPage({ colorMode }) {
           onIndexChange={setSelectedImageIndex}
         />
       )}
-
+      
       <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>
         <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
           {error}
         </Alert>
       </Snackbar>
-
+      
       {/* 设置对话框 */}
       <Dialog open={settingsDialogOpen} onClose={handleCloseSettings}>
         <DialogTitle>
@@ -741,60 +740,60 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 2; // 最大重试次数
-
+  
   // 使用收藏上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const { albumPath } = useParams();
   const decodedAlbumPath = decodeURIComponent(albumPath);
   const isFavorited = image ? isImageFavorited(image.path) : false;
-
+  
   useEffect(() => {
     const loadImage = async () => {
       if (!image || !ipcRenderer) return;
-
+      
       try {
         setLoading(true);
         setImageLoaded(false);
         setImageError(false);
-
+        
         // 检查会话缓存中是否有图片URL
         const cacheKey = `image_thumbnail_${image.path}`;
         const cachedUrl = sessionStorage.getItem(cacheKey);
-
+        
         if (cachedUrl) {
           setImageUrl(cachedUrl);
           setLoading(false);
           return;
         }
-
+        
         // 设置优先级 - 根据文件名排序，常见的首图文件名排在前面
         const filename = image.name.toLowerCase();
-        const isPriority =
-          filename.includes('cover') ||
-          filename.includes('folder') ||
+        const isPriority = 
+          filename.includes('cover') || 
+          filename.includes('folder') || 
           filename.startsWith('0') ||
           filename.startsWith('1') ||
           filename.startsWith('a') ||
           filename.startsWith('front') ||
           filename.startsWith('main');
-
+        
         // 获取缩略图 - 使用主进程中配置的分辨率
         const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, isPriority ? 0 : 1);
-
+        
         if (!url) {
           console.error(`无法获取缩略图: ${image.path}`);
           setImageError(true);
           setLoading(false);
           return;
         }
-
+        
         // 缓存到会话存储
         try {
           sessionStorage.setItem(cacheKey, url);
         } catch (e) {
           console.warn('缓存缩略图失败', e);
         }
-
+        
         setImageUrl(url);
       } catch (err) {
         console.error('加载图片出错:', err);
@@ -803,33 +802,33 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
         setLoading(false);
       }
     };
-
+    
     loadImage();
   }, [image, isCompactMode, retryCount]);
-
+  
   // 格式化文件大小
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B';
     else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
-
+  
   // 处理图片加载完成
   const handleImageLoaded = (e) => {
     const { naturalWidth, naturalHeight } = e.target;
     const ratio = naturalHeight / naturalWidth;
     setAspectRatio(ratio);
     setImageLoaded(true);
-
+    
     if (onLoad) {
       onLoad(image.path, e.target.height);
     }
   };
-
+  
   // 处理图片加载错误
   const handleImageError = (e) => {
     console.error(`图片加载失败: ${image.path}`);
-
+    
     // 尝试重试加载
     if (retryCount < maxRetries) {
       console.log(`重试加载图片(${retryCount + 1}/${maxRetries}): ${image.path}`);
@@ -846,13 +845,13 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
       e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
     }
   };
-
+  
   // 点击处理
   const handleClick = (e) => {
     // 即使缩略图加载失败，也允许点击查看原图
     onClick(e);
   };
-
+  
   // 处理收藏点击
   const handleFavoriteClick = (e) => {
     e.stopPropagation(); // 阻止事件冒泡，避免触发卡片点击
@@ -862,10 +861,10 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
       toggleImageFavorite(image, decodedAlbumPath, albumName);
     }
   };
-
+  
   return (
-    <Paper
-      sx={{
+    <Paper 
+      sx={{ 
         width: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -884,32 +883,32 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
     >
       <Box sx={{ position: 'relative', width: '100%' }}>
         {loading ? (
-          <Box sx={{
+          <Box sx={{ 
             paddingTop: aspectRatio > 1.5 ? '133%' : aspectRatio > 0.8 ? '100%' : '75%', // 根据比例调整
-            bgcolor: 'rgba(0,0,0,0.05)',
-            display: 'flex',
-            alignItems: 'center',
+            bgcolor: 'rgba(0,0,0,0.05)', 
+            display: 'flex', 
+            alignItems: 'center', 
             justifyContent: 'center',
             position: 'relative',
             width: '100%'
           }}>
-            <CircularProgress
-              size={24}
-              sx={{
+            <CircularProgress 
+              size={24} 
+              sx={{ 
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
                 marginTop: '-12px',
                 marginLeft: '-12px'
-              }}
+              }} 
             />
           </Box>
         ) : imageError ? (
-          <Box sx={{
+          <Box sx={{ 
             paddingTop: '75%',
-            bgcolor: 'rgba(0,0,0,0.05)',
-            display: 'flex',
-            alignItems: 'center',
+            bgcolor: 'rgba(0,0,0,0.05)', 
+            display: 'flex', 
+            alignItems: 'center', 
             justifyContent: 'center',
             position: 'relative',
             width: '100%'
@@ -920,16 +919,16 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
           </Box>
         ) : (
           <div style={{ width: '100%', overflow: 'hidden' }}>
-            <img
-              src={imageUrl}
-              alt={image.name}
+            <img 
+              src={imageUrl} 
+              alt={image.name} 
               className={imageLoaded ? 'loaded' : ''}
-              style={{
+              style={{ 
                 width: '100%',
                 display: 'block',
                 height: 'auto', // 允许高度自适应
                 borderRadius: isCompactMode ? '4px' : '4px 4px 0 0'
-              }}
+              }} 
               loading="lazy"
               onLoad={handleImageLoaded}
               onError={handleImageError}
@@ -937,34 +936,34 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
           </div>
         )}
       </Box>
-
+      
       {!isCompactMode && (
         <Box sx={{ p: 1, flexGrow: 0, bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-              <Typography
-                variant="subtitle2"
-                component="div"
-                noWrap
+              <Typography 
+                variant="subtitle2" 
+                component="div" 
+                noWrap 
                 title={image.name}
                 sx={{ fontSize: '0.8rem' }}
               >
                 {image.name}
               </Typography>
-
-              <Typography
-                variant="caption"
-                color="text.secondary"
+              
+              <Typography 
+                variant="caption" 
+                color="text.secondary" 
                 sx={{ display: 'block', fontSize: '0.7rem' }}
               >
                 {formatFileSize(image.size)}
               </Typography>
             </Box>
-
-            <IconButton
-              size="small"
-              sx={{
-                ml: 0.5,
+            
+            <IconButton 
+              size="small" 
+              sx={{ 
+                ml: 0.5, 
                 p: 0.5,
                 color: isFavorited ? 'error.main' : 'primary.main',
                 '&:hover': {
@@ -983,4 +982,4 @@ function ImageCard({ image, onClick, isCompactMode, onLoad }) {
   );
 }
 
-export default AlbumPage;
+export default AlbumPage; 

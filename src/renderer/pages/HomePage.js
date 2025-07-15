@@ -89,7 +89,8 @@ const getCardConfig = (settings) => ({
       window.innerWidth < 600 ? window.innerWidth - 32 : 280
     ),
     height: Math.round((settings?.cardWidth * 0.8) * 0.7) || 160,
-    spacing: Math.max(8, Math.min(16, window.innerWidth / 100))
+    spacing: Math.max(12, Math.min(16, window.innerWidth / 100))
+    // spacing: window.innerWidth < 600 ? 16 : window.innerWidth < 1200 ? 16 : 24
   },
   standard: {
     width: Math.min(
@@ -98,6 +99,8 @@ const getCardConfig = (settings) => ({
     ),
     height: Math.round(settings?.cardWidth * 0.9) || 260,
     spacing: Math.max(12, Math.min(24, window.innerWidth / 50))
+    // spacing: window.innerWidth < 600 ? 16 : window.innerWidth < 1200 ? 16 : 24
+    // spacing: 8
   }
 });
 
@@ -517,7 +520,8 @@ function HomePage({ colorMode }) {
     try {
       const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
       // 行高 = 卡片高度 + 上下间距，确保有足够的空间
-      const rowHeight = config.height + config.spacing;
+      const rowHeight = config.height + config.spacing * 3;
+      // const rowHeight = config.height + 60; // 增加垂直间距
       return rowHeight;
     } catch (err) {
       console.error('计算行高时出错:', err);
@@ -626,18 +630,23 @@ function HomePage({ colorMode }) {
     localStorage.setItem('performance_settings', JSON.stringify(tempSettings));
     setSettingsDialogOpen(false);
     
-    // 通知用户需要刷新以应用某些设置
-    setError('设置已保存。某些设置可能需要重新加载相簿才能生效。');
+    // 自动刷新应用设置
+    setError('设置已保存，正在自动应用...');
     
-    // 强制重新计算虚拟列表
-    if (listRef.current) {
-      setTimeout(() => {
-        if (listRef.current) {
-          listRef.current.recomputeRowHeights();
-          listRef.current.forceUpdateGrid();
-        }
-      }, 100);
-    }
+    // 强制重新计算布局
+    setTimeout(() => {
+      // 强制重新计算列数和网格
+      setWindowWidth(prev => prev + 1); // 触发useCallback重新计算
+      setTimeout(() => setWindowWidth(window.innerWidth), 50);
+      
+      // 强制重新计算虚拟列表
+      if (listRef.current) {
+        listRef.current.recomputeRowHeights();
+        listRef.current.forceUpdateGrid();
+      }
+      
+      setError('');
+    }, 100);
   };
   
   // 处理设置变化

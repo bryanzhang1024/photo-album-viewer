@@ -54,13 +54,19 @@ const BREAKPOINTS = {
 const CARD_CONFIG = {
   compact: {
     minWidth: 160, // 紧凑模式下卡片最小宽度
-    idealWidth: 220, // 紧凑模式下理想宽度
-    spacing: 16 // 紧凑模式下卡片间距
+    idealWidth: Math.min(
+      220,
+      window.innerWidth < 600 ? window.innerWidth - 32 : 220
+    ), // 紧凑模式下理想宽度
+    spacing: Math.max(8, Math.min(16, window.innerWidth / 100)) // 紧凑模式下卡片间距
   },
   standard: {
     minWidth: 200, // 标准模式下卡片最小宽度
-    idealWidth: 280, // 标准模式下理想宽度
-    spacing: 24 // 标准模式下卡片间距
+    idealWidth: Math.min(
+      280,
+      window.innerWidth < 600 ? window.innerWidth - 32 : 280
+    ), // 标准模式下理想宽度
+    spacing: Math.max(12, Math.min(24, window.innerWidth / 50)) // 标准模式下卡片间距
   }
 };
 
@@ -228,7 +234,7 @@ function FavoritesPage({ colorMode }) {
   // 计算瀑布流的断点
   const getMasonryBreakpoints = useCallback(() => {
     const config = compactView ? CARD_CONFIG.compact : CARD_CONFIG.standard;
-    const containerPadding = 48; // 左右各24px
+    const containerPadding = isSmallScreen ? 16 : 32; // 响应式内边距
     const availableWidth = windowWidth - containerPadding;
     
     // 使用固定宽度计算每行可容纳的列数

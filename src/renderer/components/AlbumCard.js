@@ -338,7 +338,8 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     <Card 
       ref={cardRef}
       sx={{ 
-        height: '100%',
+        height: 'auto',
+        minHeight: isCompactMode ? 'unset' : 320,
         display: 'flex',
         flexDirection: 'column',
         cursor: 'pointer',
@@ -353,14 +354,21 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
       onClick={onClick}
       elevation={1}
     >
-      <Box sx={{ height: isCompactMode ? '100%' : 0, paddingTop: isCompactMode ? 0 : '70%', position: 'relative' }}>
+      <Box sx={{ 
+        height: isCompactMode ? 'auto' : 'auto',
+        // aspectRatio: isCompactMode ? '4/3' : '16/10',
+        aspectRatio: isCompactMode ? '16/13' : '6/5',
+        position: 'relative',
+        // minHeight: isCompactMode ? 120 : 180
+        minHeight: isCompactMode ? 160 : 220
+      }}>
         <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
           {renderPreview()}
         </Box>
       </Box>
       
       {!isCompactMode && (
-        <CardContent sx={{ flexGrow: 0, p: 1.5, pb: '8px !important', bgcolor: 'background.paper' }}>
+        <CardContent sx={{ flexGrow: 1, p: 1.5, pb: '8px !important', bgcolor: 'background.paper', minHeight: isCompactMode ? 0 : 60 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
               <Typography 
