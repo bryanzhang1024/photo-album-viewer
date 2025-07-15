@@ -70,8 +70,8 @@ if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
 // 简化的布局配置 - 使用统一系统
 const DENSITY_CONFIG = {
   compact: { baseWidth: 200, spacing: 16 },
-  standard: { baseWidth: 250, spacing: 24 },
-  comfortable: { baseWidth: 300, spacing: 32 }
+  standard: { baseWidth: 250, spacing: 16 },
+  comfortable: { baseWidth: 300, spacing: 16 }
 };
 
 function HomePage({ colorMode }) {
@@ -411,17 +411,24 @@ function HomePage({ colorMode }) {
     return columns;
   }, [windowWidth, userDensity, isSmallScreen]);
   
-  // 计算行高
+// 精确的行高计算 - 基于AlbumCard实际渲染高度
   const getRowHeight = useCallback(() => {
-    try {
-      const config = DENSITY_CONFIG[userDensity];
-      // 行高 = 卡片高度 + 间距
-      const cardHeight = Math.round(config.baseWidth * 0.8); // 保持4:3比例
-      return cardHeight + config.spacing * 2;
-    } catch (err) {
-      console.error('计算行高时出错:', err);
-      return 280;
+    const config = DENSITY_CONFIG[userDensity];
+    
+    // 根据AlbumCard的实际结构计算
+    // 图片区域：使用AlbumCard中的固定比例
+    const imageHeight = Math.round(config.baseWidth * (userDensity === 'compact' ? 1 : 6/5));
+    
+    // 标题区域：根据密度模式
+    let titleHeight;
+    if (userDensity === 'compact') {
+      titleHeight = 0; // 紧凑模式不显示标题
+    } else {
+      titleHeight = 30; // CardContent高度 + 宽松内边距
     }
+    
+    // 总高度 = 图片 + 标题 + 额外间距
+    return imageHeight + titleHeight + 8;
   }, [userDensity]);
   
   // 生成唯一ID

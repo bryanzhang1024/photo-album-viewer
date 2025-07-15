@@ -41,11 +41,11 @@ import { useFavorites } from '../contexts/FavoritesContext';
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
-// 简化的布局配置 - 与HomePage保持一致
+// 优化的布局配置 - 根据密度调整基础宽度和间距
 const DENSITY_CONFIG = {
-  compact: { baseWidth: 200, spacing: 16 },
-  standard: { baseWidth: 250, spacing: 24 },
-  comfortable: { baseWidth: 300, spacing: 32 }
+  compact: { baseWidth: 180, spacing: 8 },   // 紧凑模式更小间距
+  standard: { baseWidth: 220, spacing: 10 }, // 标准模式适中间距
+  comfortable: { baseWidth: 280, spacing: 12 } // 宽松模式较大间距
 };
 
 function AlbumPage({ colorMode }) {
@@ -114,22 +114,11 @@ function AlbumPage({ colorMode }) {
   // 当密度设置变化时，强制重新计算布局
   useEffect(() => {
     if (images.length > 0) {
-      // 基于密度重新计算布局
-      const config = DENSITY_CONFIG[userDensity];
-      const style = document.createElement('style');
-
-      style.textContent = `
-        .masonry-grid_column {
-          width: ${config.baseWidth}px !important;
-        }
-      `;
-
-      document.head.appendChild(style);
-      return () => {
-        document.head.removeChild(style);
-      };
+      // 强制触发重新渲染
+      const event = new Event('resize');
+      window.dispatchEvent(event);
     }
-  }, [userDensity, images.length]);
+  }, [userDensity, images.length, windowWidth]);
 
   // 添加ESC键监听，按ESC返回上一页
   useEffect(() => {
@@ -279,15 +268,16 @@ function AlbumPage({ colorMode }) {
     setViewerOpen(false);
   };
 
-  // 现代化的响应式瀑布流布局 - 流体设计，无最大限制
+  // 优化的响应式瀑布流布局 - 更精确的空间计算
   const getMasonryBreakpoints = useCallback(() => {
     const config = DENSITY_CONFIG[userDensity];
-    const containerPadding = isSmallScreen ? 16 : 32;
-    const scrollbarWidth = 8;
+    const containerPadding = isSmallScreen ? 8 : 12; // 进一步减少内边距
+    const scrollbarWidth = 2; // 最小化滚动条估算
     const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
     
-    // 流体计算，无最大列数限制，充分利用空间
-    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / (config.baseWidth + config.spacing)));
+    // 更精确的空间计算，确保充分利用可用宽度
+    const columnWidth = config.baseWidth + config.spacing;
+    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
     
     return columns;
   }, [windowWidth, isSmallScreen, userDensity]);
@@ -526,6 +516,7 @@ function AlbumPage({ colorMode }) {
             {images.length > 0 ? (
               <Box sx={{ minHeight: 'calc(100vh - 120px)' }}>
                 <Masonry
+                  key={`masonry-${userDensity}-${windowWidth}`} // 强制重新渲染
                   breakpointCols={getMasonryBreakpoints()}
                   className="masonry-grid"
                   columnClassName="masonry-grid_column"
@@ -534,6 +525,7 @@ function AlbumPage({ colorMode }) {
                     <div
                       key={`${image.path}-${index}`}
                       className="masonry-item"
+                      style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}
                     >
                       <ImageCard
                         image={image}

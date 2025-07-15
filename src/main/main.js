@@ -26,7 +26,7 @@ const DEFAULT_PERFORMANCE_SETTINGS = {
   preloadDistance: 5,
   cacheTimeout: 60, // 分钟
   cacheEnabled: true,
-  thumbnailResolution: 450 // 缩略图分辨率（宽度，高度会按比例调整）
+  thumbnailResolution: 600 // 缩略图分辨率（宽度，高度会按比例调整）
 };
 
 // 当前性能设置
