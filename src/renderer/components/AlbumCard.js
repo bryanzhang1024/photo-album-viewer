@@ -356,11 +356,12 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     >
       <Box sx={{ 
         height: isCompactMode ? 'auto' : 'auto',
-        // aspectRatio: isCompactMode ? '4/3' : '16/10',
         aspectRatio: isCompactMode ? '16/13' : '6/5',
         position: 'relative',
-        // minHeight: isCompactMode ? 120 : 180
-        minHeight: isCompactMode ? 160 : 220
+        minHeight: isCompactMode ? 160 : 220,
+        width: '100%',
+        // 保持固定比例，确保图片不会变形
+        overflow: 'hidden'
       }}>
         <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
           {renderPreview()}

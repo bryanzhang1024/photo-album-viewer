@@ -331,34 +331,55 @@ function AlbumPage({ colorMode }) {
     setViewerOpen(false);
   };
 
-  // 计算瀑布流的断点
+  // 重新设计的瀑布流断点系统 - 基于设备类型优化
   const getMasonryBreakpoints = useCallback(() => {
     const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
-    const containerPadding = isSmallScreen ? 16 : 32; // 响应式内边距
-    const scrollbarWidth = 8; // 现代浏览器滚动条更窄
+    
+    // 设备类型检测和瀑布流优化
+    const containerPadding = isSmallScreen ? 16 : 32;
+    const scrollbarWidth = 8;
     const availableWidth = Math.max(0, windowWidth - containerPadding - scrollbarWidth);
-
-    // 使用更智能的列数计算
-    const cardWidth = config.idealWidth;
-    const cardSpacing = config.spacing;
-
-    // 超宽屏幕优化
-    if (windowWidth > 1920) {
-      return compactView ? 8 : 6;
+    
+    // 基于设备类型的瀑布流配置
+    const deviceConfig = {
+      // 手机：单列或双列瀑布流
+      phone: { maxCols: { compact: 2, standard: 1 }, minCardWidth: 140 },
+      // 平板：双列或三列瀑布流
+      tablet: { maxCols: { compact: 3, standard: 2 }, minCardWidth: 160 },
+      // 笔记本：三列或四列瀑布流
+      laptop: { maxCols: { compact: 4, standard: 3 }, minCardWidth: 180 },
+      // 桌面：四列或五列瀑布流
+      desktop: { maxCols: { compact: 5, standard: 4 }, minCardWidth: 200 },
+      // 超宽屏：六列或八列瀑布流
+      ultrawide: { maxCols: { compact: 8, standard: 6 }, minCardWidth: 220 }
+    };
+    
+    // 检测设备类型
+    let deviceType = 'phone';
+    if (windowWidth >= 1920) deviceType = 'ultrawide';
+    else if (windowWidth >= 1200) deviceType = 'desktop';
+    else if (windowWidth >= 768) deviceType = 'laptop';
+    else if (windowWidth >= 481) deviceType = 'tablet';
+    
+    const device = deviceConfig[deviceType];
+    const maxColumns = device.maxCols[compactView ? 'compact' : 'standard'];
+    const minCardWidth = device.minCardWidth;
+    
+    // 基于可用宽度的智能计算
+    const idealCardWidth = config.idealWidth;
+    const spacing = config.spacing;
+    
+    let columns = Math.floor((availableWidth + spacing) / (Math.max(minCardWidth, idealCardWidth * 0.8) + spacing));
+    
+    // 确保在设备限制范围内
+    columns = Math.max(1, Math.min(columns, maxColumns));
+    
+    // 特殊处理极端小屏幕
+    if (windowWidth < 400) {
+      columns = Math.min(columns, compactView ? 2 : 1);
     }
-    if (windowWidth > 1200) {
-      return compactView ? 6 : 5;
-    }
-    if (windowWidth > 900) {
-      return compactView ? 5 : 4;
-    }
-    if (windowWidth > 600) {
-      return compactView ? 4 : 3;
-    }
-    if (windowWidth > 400) {
-      return compactView ? 3 : 2;
-    }
-    return compactView ? 2 : 1;
+    
+    return columns;
   }, [windowWidth, compactView, isSmallScreen, performanceSettings]);
 
   // 获取相簿名称
@@ -615,6 +636,7 @@ function AlbumPage({ colorMode }) {
       <Box
         ref={scrollContainerRef}
         sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
+        className="scroll-container"
       >
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -632,7 +654,7 @@ function AlbumPage({ colorMode }) {
             </Box>
 
             {images.length > 0 ? (
-              <Box sx={{ height: 'calc(100vh - 120px)', overflow: 'auto' }}>
+              <Box sx={{ minHeight: 'calc(100vh - 120px)' }}>
                 <Masonry
                   breakpointCols={getMasonryBreakpoints()}
                   className={`masonry-grid ${compactView ? 'compact-view' : 'standard-view'}`}

@@ -121,4 +121,51 @@
 /* 确保Paper组件适应内容高度 */
 .masonry-item .MuiPaper-root {
   height: auto !important;
+}
+
+/* 响应式卡片布局优化 */
+.masonry-item {
+  transition: all 0.2s ease-in-out;
+}
+
+/* 确保图片在不同卡片宽度下正确显示 */
+.masonry-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* 统一滚动条样式 - 与HomePage保持一致 */
+.scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+.scroll-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-container::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* 深色模式下的滚动条样式 */
+[data-theme="dark"] .scroll-container::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="dark"] .scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.5);
 } 

@@ -84,21 +84,15 @@ if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
 // 卡片尺寸配置
 const getCardConfig = (settings) => ({
   compact: {
-    width: Math.min(
-      Math.round(settings?.cardWidth * 0.8) || 220,
-      window.innerWidth < 600 ? window.innerWidth - 32 : 280
-    ),
+    width: settings?.cardWidth || 280,
     height: Math.round((settings?.cardWidth * 0.8) * 0.7) || 160,
-    spacing: Math.max(12, Math.min(16, window.innerWidth / 100))
+    spacing: 16
     // spacing: window.innerWidth < 600 ? 16 : window.innerWidth < 1200 ? 16 : 24
   },
   standard: {
-    width: Math.min(
-      settings?.cardWidth || 280,
-      window.innerWidth < 600 ? window.innerWidth - 32 : 350
-    ),
+    width: settings?.cardWidth || 280,
     height: Math.round(settings?.cardWidth * 0.9) || 260,
-    spacing: Math.max(12, Math.min(24, window.innerWidth / 50))
+    spacing: 24
     // spacing: window.innerWidth < 600 ? 16 : window.innerWidth < 1200 ? 16 : 24
     // spacing: 8
   }
@@ -479,40 +473,56 @@ function HomePage({ colorMode }) {
     return relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
   };
   
-  // 根据窗口宽度和卡片配置计算每行显示的相簿数量
+  // 重新设计的响应式布局系统 - 基于设备类型和用户体验优化
   const getColumnsPerRow = useCallback(() => {
     const config = compactView ? getCardConfig(performanceSettings).compact : getCardConfig(performanceSettings).standard;
     
-    // 更精确的内边距计算 - 响应式
-    const containerPadding = isSmallScreen ? 16 : 32; // 总内边距
-    const scrollbarWidth = 8; // 现代浏览器滚动条更窄
+    // 设备类型检测和用户体验优化
+    const containerPadding = isSmallScreen ? 16 : 32;
+    const scrollbarWidth = 8;
     const availableWidth = Math.max(0, windowWidth - containerPadding - scrollbarWidth);
     
-    // 更智能的列数计算，允许卡片更宽
-    const minCardWidth = config.width * 0.9; // 允许卡片比配置宽度稍小
-    const columnsCount = Math.max(1, Math.floor((availableWidth + config.spacing) / (minCardWidth + config.spacing)));
+    // 基于设备类型的最佳实践列数配置
+    const deviceConfig = {
+      // 手机：优先考虑触控体验
+      phone: { maxCols: { compact: 2, standard: 1 }, minCardWidth: 140 },
+      // 平板：平衡信息密度和可读性
+      tablet: { maxCols: { compact: 3, standard: 2 }, minCardWidth: 160 },
+      // 笔记本：适合桌面浏览
+      laptop: { maxCols: { compact: 4, standard: 3 }, minCardWidth: 180 },
+      // 桌面：专业工作环境
+      desktop: { maxCols: { compact: 5, standard: 4 }, minCardWidth: 200 },
+      // 超宽屏：多任务处理
+      ultrawide: { maxCols: { compact: 8, standard: 6 }, minCardWidth: 220 }
+    };
     
-    // 超宽屏幕优化
-    if (windowWidth > 1920) {
-      return Math.min(columnsCount, compactView ? 8 : 6);
+    // 检测设备类型
+    let deviceType = 'phone';
+    if (windowWidth >= 1920) deviceType = 'ultrawide';
+    else if (windowWidth >= 1200) deviceType = 'desktop';
+    else if (windowWidth >= 768) deviceType = 'laptop';
+    else if (windowWidth >= 481) deviceType = 'tablet';
+    
+    const device = deviceConfig[deviceType];
+    const maxColumns = device.maxCols[compactView ? 'compact' : 'standard'];
+    const minCardWidth = device.minCardWidth;
+    
+    // 计算最适合的列数，确保不会太小
+    const idealCardWidth = config.width;
+    const spacing = config.spacing;
+    
+    // 基于可用宽度的智能计算
+    let columns = Math.floor((availableWidth + spacing) / (Math.max(minCardWidth, idealCardWidth * 0.8) + spacing));
+    
+    // 确保在合理范围内
+    columns = Math.max(1, Math.min(columns, maxColumns));
+    
+    // 特殊处理：小屏幕确保卡片不会太小
+    if (windowWidth < 400) {
+      columns = Math.min(columns, compactView ? 2 : 1);
     }
     
-    // 大屏幕优化
-    if (windowWidth > 1200) {
-      return Math.min(columnsCount, compactView ? 6 : 5);
-    }
-    
-    // 中等屏幕
-    if (windowWidth > 768) {
-      return Math.min(columnsCount, compactView ? 4 : 3);
-    }
-    
-    // 小屏幕时限制列数
-    if (isSmallScreen) {
-      return Math.min(columnsCount, compactView ? 2 : 1);
-    }
-    
-    return columnsCount;
+    return columns;
   }, [windowWidth, compactView, isSmallScreen, performanceSettings]);
   
   // 计算行高
@@ -832,6 +842,7 @@ function HomePage({ colorMode }) {
       
       <Box 
         ref={scrollContainerRef}
+        className="scroll-container"
         sx={{ 
           flexGrow: 1, 
           overflow: 'auto', 
