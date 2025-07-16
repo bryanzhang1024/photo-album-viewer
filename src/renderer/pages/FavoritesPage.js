@@ -79,7 +79,6 @@ function FavoritesPage({ colorMode }) {
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
-      setForceUpdate(prev => prev + 1);
     };
     
     window.addEventListener('resize', handleResize);
