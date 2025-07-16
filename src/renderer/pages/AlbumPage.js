@@ -23,6 +23,7 @@ import {
   Badge
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import HomeIcon from '@mui/icons-material/Home';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
@@ -138,6 +139,17 @@ function AlbumPage({ colorMode }) {
           handleRandomAlbum();
         }
       }
+
+      // 按下 h 键返回首页
+      if (event.key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        // 确保不在输入框中，且没有打开查看器
+        if (document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA' &&
+            !document.activeElement.isContentEditable &&
+            !viewerOpen) {
+          handleHome();
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -207,6 +219,16 @@ function AlbumPage({ colorMode }) {
     }
 
     navigate(-1);
+  };
+
+  // 处理返回首页
+  const handleHome = () => {
+    // 保存当前路径到上下文
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition('/album/' + albumPath, scrollContainerRef.current.scrollTop);
+    }
+
+    navigate('/');
   };
 
   // 处理刷新
@@ -383,10 +405,18 @@ function AlbumPage({ colorMode }) {
             edge="start"
             color="inherit"
             onClick={handleBack}
-            sx={{ mr: 2 }}
+            sx={{ mr: 1 }}
             size="small"
           >
             <ArrowBackIcon />
+          </IconButton>
+          <IconButton
+            color="inherit"
+            onClick={handleHome}
+            sx={{ mr: 2 }}
+            size="small"
+          >
+            <HomeIcon />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontSize: { xs: '0.9rem', sm: '1.25rem' }, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
             {getAlbumName()}
