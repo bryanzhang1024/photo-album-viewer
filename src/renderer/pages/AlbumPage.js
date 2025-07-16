@@ -75,7 +75,7 @@ function AlbumPage({ colorMode }) {
   const decodedAlbumPath = decodeURIComponent(albumPath);
 
   // 获取收藏上下文
-  const { favorites } = useFavorites();
+  const { favorites, isAlbumFavorited, toggleAlbumFavorite } = useFavorites();
 
   // 从URL参数中获取初始图片路径
   useEffect(() => {
@@ -308,6 +308,18 @@ function AlbumPage({ colorMode }) {
     navigate('/favorites');
   };
 
+  // 处理相簿收藏切换
+  const handleToggleAlbumFavorite = async () => {
+    const album = {
+      name: getAlbumName(),
+      path: decodedAlbumPath,
+      imageCount: images.length,
+      previewImages: images.slice(0, 4) // 取前4张图片作为预览
+    };
+    
+    await toggleAlbumFavorite(album);
+  };
+
   // 处理随机选择相簿
   const handleRandomAlbum = async () => {
     try {
@@ -441,6 +453,21 @@ function AlbumPage({ colorMode }) {
                 sx={{ mx: 0.5 }}
               >
                 <CasinoIcon sx={{ fontSize: '1.2rem' }} />
+              </IconButton>
+            </Tooltip>
+
+            {/* 相簿收藏按钮 */}
+            <Tooltip title={isAlbumFavorited(decodedAlbumPath) ? "取消收藏相簿" : "收藏相簿"}>
+              <IconButton
+                color="inherit"
+                onClick={handleToggleAlbumFavorite}
+                size="small"
+                sx={{ mx: 0.5 }}
+              >
+                {isAlbumFavorited(decodedAlbumPath) ? 
+                  <FavoriteIcon sx={{ fontSize: '1.2rem', color: '#ff5252' }} /> : 
+                  <FavoriteBorderIcon sx={{ fontSize: '1.2rem' }} />
+                }
               </IconButton>
             </Tooltip>
 
