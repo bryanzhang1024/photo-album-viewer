@@ -17,6 +17,9 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import { useFavorites } from '../contexts/FavoritesContext';
 const { ipcRenderer } = window.require('electron');
 
 function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
@@ -34,6 +37,9 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const mouseInactivityTimer = useRef(null);
   
   const currentImage = images[currentIndex];
+  
+  // 使用收藏上下文
+  const { isImageFavorited, toggleImageFavorite } = useFavorites();
   
   // 添加键盘导航支持
   useEffect(() => {
@@ -62,6 +68,9 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           break;
         case 'o':
           handleShowInFolder();
+          break;
+        case 'c':
+          handleToggleFavorite();
           break;
         default:
           break;
@@ -291,6 +300,22 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
         .catch(error => console.error('在文件管理器中显示失败:', error));
     }
   };
+
+  // 处理图片收藏切换
+  const handleToggleFavorite = () => {
+    if (currentImage) {
+      // 获取当前相簿路径和名称
+      const currentPath = currentImage.path;
+      const pathParts = currentPath.split('/');
+      const albumPath = pathParts.slice(0, -1).join('/');
+      const albumName = pathParts[pathParts.length - 2] || '未知相簿';
+      
+      toggleImageFavorite(currentImage, albumPath, albumName);
+    }
+  };
+
+  // 检查当前图片是否已收藏
+  const isCurrentImageFavorited = currentImage ? isImageFavorited(currentImage.path) : false;
   
   return (
     <Dialog
@@ -334,6 +359,16 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           <Typography variant="subtitle1" sx={{ ml: 2, flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {currentImage?.name} ({currentIndex + 1} / {images.length})
           </Typography>
+          <Tooltip title={isCurrentImageFavorited ? "取消收藏" : "收藏图片"}>
+            <IconButton 
+              color="inherit" 
+              onClick={handleToggleFavorite} 
+              size="small"
+              sx={{ mr: 1 }}
+            >
+              {isCurrentImageFavorited ? <FavoriteIcon sx={{ color: '#ff5252' }} /> : <FavoriteBorderIcon />}
+            </IconButton>
+          </Tooltip>
           <Tooltip title="在文件管理器中显示 (O)">
             <IconButton 
               color="inherit" 
