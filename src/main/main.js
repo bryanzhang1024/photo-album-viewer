@@ -504,8 +504,8 @@ async function scanDirectories(rootPath) {
         }
       }
       
-      // 如果有图片但没有子目录，则当前目录是一个相簿
-      if (hasImages && !hasSubDirs) {
+      // 如果有图片，则当前目录是一个相簿（无论是否有子目录）
+      if (hasImages) {
         // 只获取前4张图片作为预览
         const previewImages = imageFiles.slice(0, 4);
         
@@ -516,9 +516,10 @@ async function scanDirectories(rootPath) {
           previewImages,
           imageCount: imageFiles.length
         });
-      } 
-      // 如果有子目录，则递归处理
-      else if (hasSubDirs) {
+      }
+      
+      // 如果有子目录，则递归处理子目录
+      if (hasSubDirs) {
         // 并行处理子目录以提高性能
         const subdirPromises = [];
         
