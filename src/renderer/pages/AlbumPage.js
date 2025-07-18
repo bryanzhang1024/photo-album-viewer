@@ -33,6 +33,8 @@ import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
 import TuneIcon from '@mui/icons-material/Tune';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ImageViewer from '../components/ImageViewer';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
@@ -65,6 +67,12 @@ function AlbumPage({ colorMode }) {
   const [userDensity, setUserDensity] = useState('standard'); // 'standard' | 'comfortable'
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [imageHeights, setImageHeights] = useState({}); // 存储图片高度信息
+  const [neighboringAlbums, setNeighboringAlbums] = useState({
+    prev: null,
+    next: null,
+    currentIndex: -1,
+    total: 0
+  });
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
@@ -90,9 +98,10 @@ function AlbumPage({ colorMode }) {
     }
   }, [location.search]);
 
-  // 加载相簿图片
+  // 加载相簿图片和相邻相簿信息
   useEffect(() => {
     loadAlbumImages();
+    loadNeighboringAlbums();
   }, [decodedAlbumPath]);
 
   // 监听窗口大小变化
@@ -122,7 +131,7 @@ function AlbumPage({ colorMode }) {
     }
   }, [userDensity, images.length, windowWidth]);
 
-  // 添加ESC键监听，按ESC返回上一页
+  // 添加键盘事件监听
   useEffect(() => {
     const handleKeyDown = (event) => {
       // 如果按下ESC键且没有打开查看器
@@ -151,13 +160,41 @@ function AlbumPage({ colorMode }) {
           handleHome();
         }
       }
+
+      // 左箭头键 - 上一个相簿
+      if (event.key === 'ArrowLeft' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.prev) {
+          handleNavigateToAdjacentAlbum('prev');
+        }
+      }
+
+      // 右箭头键 - 下一个相簿
+      if (event.key === 'ArrowRight' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.next) {
+          handleNavigateToAdjacentAlbum('next');
+        }
+      }
+
+      // Ctrl+左箭头键 - 跳转到第一个相簿
+      if (event.key === 'ArrowLeft' && event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.currentIndex > 0) {
+          handleNavigateToAdjacentAlbum('prev');
+        }
+      }
+
+      // Ctrl+右箭头键 - 跳转到最后一个相簿
+      if (event.key === 'ArrowRight' && event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.currentIndex < neighboringAlbums.total - 1) {
+          handleNavigateToAdjacentAlbum('next');
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [viewerOpen]);
+  }, [viewerOpen, neighboringAlbums]);
 
   // 加载相簿图片
   const loadAlbumImages = async () => {
@@ -209,6 +246,87 @@ function AlbumPage({ colorMode }) {
     } catch (err) {
       setError('加载相簿图片时出错: ' + err.message);
       setLoading(false);
+    }
+  };
+
+  // 加载相邻相簿信息
+  const loadNeighboringAlbums = async () => {
+    try {
+      if (!ipcRenderer) return;
+
+      // 获取根路径 - 使用与随机选择相簿相同的逻辑
+      const getWindowStorageKey = () => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const initialPath = searchParams.get('initialPath');
+        if (initialPath) {
+          try {
+            const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
+            return `lastRootPath_${pathHash}`;
+          } catch (e) {
+            let hash = 0;
+            const str = decodeURIComponent(initialPath);
+            for (let i = 0; i < str.length; i++) {
+              const char = str.charCodeAt(i);
+              hash = ((hash << 5) - hash) + char;
+              hash = hash & hash;
+            }
+            return `lastRootPath_${Math.abs(hash)}`;
+          }
+        } else {
+          return 'lastRootPath_default';
+        }
+      };
+      
+      const windowStorageKey = getWindowStorageKey();
+      const rootPath = localStorage.getItem(windowStorageKey);
+      if (!rootPath) return;
+
+      // 获取相簿列表
+      let albums = [];
+      const cacheKey = `albums_cache_${rootPath}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (cachedData) {
+        albums = JSON.parse(cachedData);
+      } else {
+        albums = await ipcRenderer.invoke('scan-directory', rootPath);
+      }
+
+      if (albums.length === 0) return;
+
+      // 使用与HomePage相同的排序逻辑
+      const sortedAlbums = [...albums].sort((a, b) => {
+        let comparison = 0;
+        // 获取当前排序设置
+        const savedSortBy = localStorage.getItem('sortBy') || 'name';
+        const savedSortDirection = localStorage.getItem('sortDirection') || 'asc';
+        
+        if (savedSortBy === 'name') {
+          comparison = a.name.localeCompare(b.name);
+        } else if (savedSortBy === 'imageCount') {
+          comparison = a.imageCount - b.imageCount;
+        } else if (savedSortBy === 'lastModified') {
+          const aDate = a.previewImages[0]?.lastModified || 0;
+          const bDate = b.previewImages[0]?.lastModified || 0;
+          comparison = new Date(aDate) - new Date(bDate);
+        }
+        
+        return savedSortDirection === 'asc' ? comparison : -comparison;
+      });
+
+      // 找到当前相簿索引
+      const currentIndex = sortedAlbums.findIndex(album => album.path === decodedAlbumPath);
+      
+      if (currentIndex !== -1) {
+        setNeighboringAlbums({
+          prev: currentIndex > 0 ? sortedAlbums[currentIndex - 1] : null,
+          next: currentIndex < sortedAlbums.length - 1 ? sortedAlbums[currentIndex + 1] : null,
+          currentIndex,
+          total: sortedAlbums.length
+        });
+      }
+    } catch (err) {
+      console.error('加载相邻相簿信息失败:', err);
     }
   };
 
@@ -343,6 +461,20 @@ function AlbumPage({ colorMode }) {
     await toggleAlbumFavorite(album);
   };
 
+
+  // 处理导航到相邻相簿
+  const handleNavigateToAdjacentAlbum = (direction) => {
+    const targetAlbum = direction === 'prev' ? neighboringAlbums.prev : neighboringAlbums.next;
+    if (targetAlbum) {
+      // 保存当前滚动位置
+      if (scrollContainerRef.current) {
+        scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+      }
+      
+      // 导航到相邻相簿
+      navigate(`/album/${encodeURIComponent(targetAlbum.path)}`);
+    }
+  };
 
   // 处理随机选择相簿
   const handleRandomAlbum = async () => {
@@ -498,6 +630,41 @@ function AlbumPage({ colorMode }) {
                 <MenuItem value="comfortable">宽松</MenuItem>
               </Select>
             </FormControl>
+
+            {/* 相邻相簿导航按钮 */}
+            <Tooltip title={neighboringAlbums.prev ? `上一个相簿: ${neighboringAlbums.prev.name}` : "已是第一个相簿"}>
+              <span>
+                <IconButton
+                  color="inherit"
+                  onClick={() => handleNavigateToAdjacentAlbum('prev')}
+                  disabled={!neighboringAlbums.prev}
+                  size="small"
+                  sx={{ mx: 0.5 }}
+                >
+                  <ChevronLeftIcon sx={{ fontSize: '1.2rem' }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            {neighboringAlbums.total > 0 && (
+              <Typography variant="caption" sx={{ mx: 0.5, color: 'white', fontSize: '0.75rem' }}>
+                {neighboringAlbums.currentIndex + 1}/{neighboringAlbums.total}
+              </Typography>
+            )}
+
+            <Tooltip title={neighboringAlbums.next ? `下一个相簿: ${neighboringAlbums.next.name}` : "已是最后一个相簿"}>
+              <span>
+                <IconButton
+                  color="inherit"
+                  onClick={() => handleNavigateToAdjacentAlbum('next')}
+                  disabled={!neighboringAlbums.next}
+                  size="small"
+                  sx={{ mx: 0.5 }}
+                >
+                  <ChevronRightIcon sx={{ fontSize: '1.2rem' }} />
+                </IconButton>
+              </span>
+            </Tooltip>
 
             {/* 添加随机选择相簿按钮 */}
             <Tooltip title="随机选择相簿 (R)">
