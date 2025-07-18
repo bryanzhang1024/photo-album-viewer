@@ -51,6 +51,23 @@ export const FavoritesProvider = ({ children }) => {
     };
 
     loadFavorites();
+
+    // 监听来自主进程的收藏数据更新
+    const handleFavoritesUpdated = (event, data) => {
+      console.log('收到收藏数据更新:', data);
+      setFavorites(data);
+    };
+
+    if (ipcRenderer) {
+      ipcRenderer.on('favorites-updated', handleFavoritesUpdated);
+    }
+
+    // 清理监听器
+    return () => {
+      if (ipcRenderer) {
+        ipcRenderer.removeListener('favorites-updated', handleFavoritesUpdated);
+      }
+    };
   }, []);
 
   // 保存收藏数据
@@ -61,8 +78,16 @@ export const FavoritesProvider = ({ children }) => {
     }
 
     try {
-      await ipcRenderer.invoke('save-favorites', data);
-      return true;
+      const result = await ipcRenderer.invoke('save-favorites', data, data.version);
+      if (!result.success) {
+        console.warn('保存失败:', result.error);
+        // 版本冲突时重新加载数据
+        if (result.error.includes('版本冲突')) {
+          const newData = await ipcRenderer.invoke('load-favorites');
+          setFavorites(newData);
+        }
+      }
+      return result.success;
     } catch (error) {
       console.error('保存收藏数据失败:', error);
       return false;
