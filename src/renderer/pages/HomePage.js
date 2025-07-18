@@ -29,6 +29,7 @@ import FavoriteIcon from '@mui/icons-material/Favorite';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import CasinoIcon from '@mui/icons-material/Casino';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import AlbumCard from '../components/AlbumCard';
 import { AutoSizer, List, WindowScroller } from 'react-virtualized';
 import 'react-virtualized/styles.css';
@@ -92,6 +93,35 @@ function HomePage({ colorMode }) {
   const visibleRowsRef = useRef(new Set());
   const scrollContainerRef = useRef(null);
   const [forceUpdate, setForceUpdate] = useState(0);
+  const [urlPathProcessed, setUrlPathProcessed] = useState(false);
+  
+  // 为当前窗口生成唯一的存储键
+  const getWindowStorageKey = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const initialPath = searchParams.get('initialPath');
+    if (initialPath) {
+      // 如果有URL参数，使用该路径的哈希值作为标识
+      try {
+        const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
+        return `lastRootPath_${pathHash}`;
+      } catch (e) {
+        // 如果btoa失败（如中文字符），使用简单哈希
+        let hash = 0;
+        const str = decodeURIComponent(initialPath);
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash; // 转换为32位整数
+        }
+        return `lastRootPath_${Math.abs(hash)}`;
+      }
+    } else {
+      // 否则使用默认键
+      return 'lastRootPath_default';
+    }
+  };
+
+  const [windowStorageKey] = useState(getWindowStorageKey());
   
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
@@ -138,15 +168,39 @@ function HomePage({ colorMode }) {
     };
   }, []);
   
-  // 从localStorage中读取上次的路径
+  // 从localStorage中读取上次的路径，并处理URL参数
   useEffect(() => {
-    const savedPath = localStorage.getItem('lastRootPath');
-    
-    if (savedPath) {
-      setRootPath(savedPath);
-      scanDirectory(savedPath);
+    if (urlPathProcessed) {
+      console.log('URL参数已处理，跳过重复处理');
+      return;
     }
-  }, []);
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const initialPath = searchParams.get('initialPath');
+    
+    console.log('URL参数检查:', { search: location.search, initialPath, urlPathProcessed, fullUrl: window.location.href });
+    
+    if (initialPath) {
+      // 如果有URL参数，使用指定路径 - 优先处理
+      const decodedPath = decodeURIComponent(initialPath);
+      console.log('使用URL参数路径:', decodedPath);
+      console.log('窗口存储键:', windowStorageKey);
+      setRootPath(decodedPath);
+      localStorage.setItem(windowStorageKey, decodedPath);
+      scanDirectory(decodedPath);
+      setUrlPathProcessed(true);
+    } else if (!urlPathProcessed) {
+      // 否则使用localStorage中的路径（仅当URL参数未处理时）
+      const savedPath = localStorage.getItem(windowStorageKey);
+      if (savedPath) {
+        console.log('使用localStorage路径:', savedPath);
+        console.log('窗口存储键:', windowStorageKey);
+        setRootPath(savedPath);
+        scanDirectory(savedPath);
+      }
+      setUrlPathProcessed(true);
+    }
+  }, [location.search, urlPathProcessed]);
   
   // 当密度、窗口宽度或强制更新计数器变化时，重新计算虚拟列表
   useEffect(() => {
@@ -211,11 +265,34 @@ function HomePage({ colorMode }) {
       if (selectedDir) {
         setRootPath(selectedDir);
         // 保存到localStorage
-        localStorage.setItem('lastRootPath', selectedDir);
+        localStorage.setItem(windowStorageKey, selectedDir);
         await scanDirectory(selectedDir);
       }
     } catch (err) {
       setError('选择文件夹时出错: ' + err.message);
+    }
+  };
+
+  // 处理新实例选择文件夹（启动新的应用实例）
+  const handleOpenNewInstance = async () => {
+    try {
+      if (!ipcRenderer) {
+        setError('无法访问ipcRenderer, Electron可能没有正确加载');
+        return;
+      }
+      
+      const selectedDir = await ipcRenderer.invoke('select-directory');
+      if (selectedDir) {
+        // 启动新的应用实例来加载这个文件夹
+        const result = await ipcRenderer.invoke('create-new-instance', selectedDir);
+        if (result.success) {
+          console.log('新实例已启动');
+        } else {
+          setError('启动新实例失败: ' + result.error);
+        }
+      }
+    } catch (err) {
+      setError('启动新实例时出错: ' + err.message);
     }
   };
   
@@ -618,6 +695,16 @@ function HomePage({ colorMode }) {
             sx={{ mr: 1 }}
           >
             选择文件夹
+          </Button>
+          
+          <Button 
+            color="inherit" 
+            startIcon={<OpenInNewIcon />}
+            onClick={handleOpenNewInstance}
+            size="small"
+            sx={{ mr: 1 }}
+          >
+            新实例选择文件夹
           </Button>
           
           <Box sx={{ display: 'flex', alignItems: 'center' }}>

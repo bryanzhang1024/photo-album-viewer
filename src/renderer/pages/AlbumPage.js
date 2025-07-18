@@ -32,6 +32,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
 import TuneIcon from '@mui/icons-material/Tune';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ImageViewer from '../components/ImageViewer';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
@@ -342,6 +343,7 @@ function AlbumPage({ colorMode }) {
     await toggleAlbumFavorite(album);
   };
 
+
   // 处理随机选择相簿
   const handleRandomAlbum = async () => {
     try {
@@ -350,8 +352,31 @@ function AlbumPage({ colorMode }) {
         return;
       }
 
-      // 获取根路径
-      const rootPath = localStorage.getItem('lastRootPath');
+      // 获取根路径 - 使用与HomePage相同的逻辑
+      const getWindowStorageKey = () => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const initialPath = searchParams.get('initialPath');
+        if (initialPath) {
+          try {
+            const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
+            return `lastRootPath_${pathHash}`;
+          } catch (e) {
+            let hash = 0;
+            const str = decodeURIComponent(initialPath);
+            for (let i = 0; i < str.length; i++) {
+              const char = str.charCodeAt(i);
+              hash = ((hash << 5) - hash) + char;
+              hash = hash & hash;
+            }
+            return `lastRootPath_${Math.abs(hash)}`;
+          }
+        } else {
+          return 'lastRootPath_default';
+        }
+      };
+      
+      const windowStorageKey = getWindowStorageKey();
+      const rootPath = localStorage.getItem(windowStorageKey);
       if (!rootPath) {
         setError('没有设置根路径，无法随机选择相簿');
         return;
@@ -500,6 +525,7 @@ function AlbumPage({ colorMode }) {
                 }
               </IconButton>
             </Tooltip>
+
 
             {/* 收藏按钮 */}
             <Tooltip title="我的收藏">
