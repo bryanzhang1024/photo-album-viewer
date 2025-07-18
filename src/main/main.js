@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const isDev = require('electron-is-dev');
@@ -101,6 +101,7 @@ function enqueueThumbnailTask(imagePath, width, height, priority = 0) {
 }
 
 let mainWindow;
+const windows = new Set(); // 存储所有窗口
 
 // 确保缓存目录存在
 async function ensureCacheDir() {
@@ -401,26 +402,56 @@ const waitForServer = (url, callback) => {
   check();
 };
 
-function createWindow() {
+function createWindow(albumPath = null) {
   // 创建一个新的BrowserWindow实例
-  mainWindow = new BrowserWindow({
+  const newWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: true, // 允许在渲染进程中使用Node.js API
-      contextIsolation: false, // 关闭上下文隔离
-      enableRemoteModule: true, // 启用remote模块
-      webSecurity: !isDev, // 在开发模式下禁用web安全性，以便加载本地文件
-      devTools: isDev // 仅在开发模式下启用开发者工具
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: true,
+      webSecurity: !isDev,
+      devTools: isDev,
+      nodeIntegrationInWorker: true
     },
-    show: false // 先创建窗口，但不显示
+    show: false
   });
 
-  // 窗口完成加载后再显示，以避免闪烁
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+  // 存储窗口引用
+  windows.add(newWindow);
+
+  // 窗口完成加载后再显示
+  newWindow.once('ready-to-show', () => {
+    newWindow.show();
+    newWindow.focus();
+    
+    // 确保窗口在最前 - 跨平台处理
+    if (process.platform === 'darwin') {
+      app.dock.show();
+      app.dock.bounce('informational');
+      // macOS 强制激活应用
+      setTimeout(() => {
+        app.focus({ steal: true });
+        newWindow.focus();
+        newWindow.moveTop();
+      }, 100);
+    } else if (process.platform === 'win32') {
+      // Windows 特定处理
+      newWindow.setAlwaysOnTop(true);
+      newWindow.focus();
+      setTimeout(() => {
+        newWindow.setAlwaysOnTop(false);
+      }, 1000);
+    } else if (process.platform === 'linux') {
+      // Linux 特定处理
+      newWindow.maximize();
+      newWindow.restore();
+      newWindow.focus();
+    }
+    
     if (isDev) {
-      mainWindow.webContents.openDevTools({ mode: 'detach' });
+      newWindow.webContents.openDevTools({ mode: 'detach' });
     }
   });
 
@@ -428,6 +459,16 @@ function createWindow() {
     ? 'http://localhost:3000'
     : `file://${path.join(__dirname, '../build/index.html')}`;
   
+  // 如果有指定的相簿路径，添加到URL参数
+  let finalUrl = startUrl;
+  if (albumPath) {
+    const encodedPath = encodeURIComponent(albumPath);
+    finalUrl = isDev 
+      ? `http://localhost:3000/?initialPath=${encodedPath}`
+      : `file://${path.join(__dirname, '../build/index.html')}?initialPath=${encodedPath}`;
+    console.log('创建窗口的URL:', finalUrl);
+  }
+
   if (isDev) {
     console.log('开发模式: 等待开发服务器启动...');
     waitForServer(startUrl, (err) => {
@@ -435,37 +476,117 @@ function createWindow() {
         console.error('等待开发服务器超时:', err);
       } else {
         console.log('开发服务器准备就绪，加载应用...');
-        mainWindow.loadURL(startUrl);
+        newWindow.loadURL(finalUrl);
       }
     });
   } else {
-    mainWindow.loadURL(startUrl);
+    newWindow.loadURL(finalUrl);
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  // 窗口关闭时从集合中移除
+  newWindow.on('closed', () => {
+    windows.delete(newWindow);
+    if (newWindow === mainWindow) {
+      mainWindow = null;
+    }
+    // 如果这是最后一个窗口，退出应用
+    if (windows.size === 0) {
+      app.quit();
+    }
   });
+
+  // 如果是第一个窗口，设为mainWindow
+  if (!mainWindow) {
+    mainWindow = newWindow;
+  }
+
+  return newWindow;
 }
 
-// 单实例锁定
+// 单实例锁定 - 允许多窗口
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
+  // 如果没有获得锁，说明已经有实例在运行
+  // 在这种情况下，我们让第二个实例退出，但主实例会处理新窗口创建
   app.quit();
 } else {
+  // 主实例获得锁，监听第二个实例启动
   app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // 当第二个实例启动时，激活现有窗口
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    console.log('检测到第二个实例启动，命令行:', commandLine);
+    
+    // 解析命令行参数中的文件夹路径
+    let albumPath = null;
+    for (const arg of commandLine) {
+      if (arg.startsWith('--folder=')) {
+        albumPath = decodeURIComponent(arg.substring(9));
+        break;
+      } else if (arg === '--folder' && commandLine.indexOf(arg) + 1 < commandLine.length) {
+        albumPath = commandLine[commandLine.indexOf(arg) + 1];
+        break;
+      }
+    }
+    
+    console.log('解析到的文件夹路径:', albumPath);
+    
+    // 创建新窗口
+    const newWindow = createWindow(albumPath);
+    
+    // 激活新窗口
+    if (newWindow.isMinimized()) newWindow.restore();
+    newWindow.focus();
+    
+    // 确保窗口在最前 - 跨平台处理
+    if (process.platform === 'darwin') {
+      app.dock.show();
+      app.dock.bounce('informational');
+    } else if (process.platform === 'win32') {
+      newWindow.setAlwaysOnTop(true);
+      setTimeout(() => {
+        newWindow.setAlwaysOnTop(false);
+      }, 1000);
+    } else if (process.platform === 'linux') {
+      newWindow.maximize();
+      newWindow.restore();
     }
   });
 }
 
+// 处理命令行参数
+const handleCommandLine = () => {
+  const commandLine = process.argv;
+  console.log('命令行参数:', commandLine);
+  
+  let albumPath = null;
+  
+  // 查找 --folder 参数
+  for (let i = 0; i < commandLine.length; i++) {
+    const arg = commandLine[i];
+    if (arg === '--folder') {
+      // 下一个参数是路径
+      if (i + 1 < commandLine.length) {
+        albumPath = commandLine[i + 1];
+        break;
+      }
+    } else if (arg.startsWith('--folder=')) {
+      albumPath = decodeURIComponent(arg.substring(9));
+      break;
+    }
+  }
+  
+  console.log('解析到的文件夹路径:', albumPath);
+  return albumPath;
+};
+
 app.whenReady().then(async () => {
   await ensureCacheDir(); // 确保缓存目录存在
   await startThumbnailServer(); // 启动缩略图服务器
-  createWindow();
+  
+  // 处理命令行参数，使用指定的文件夹路径
+  const initialPath = handleCommandLine();
+  console.log('启动时的初始路径:', initialPath);
+  
+  createWindow(initialPath);
   
   // 启动收藏数据文件监听
   startFavoritesWatcher();
@@ -912,6 +1033,188 @@ ipcMain.handle('show-in-folder', async (event, filePath) => {
     return { success: true };
   } catch (error) {
     console.error('在文件管理器中显示文件失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 显示右键菜单
+ipcMain.handle('show-context-menu', async (event, menuItems) => {
+  try {
+    console.log('=== 显示右键菜单开始 ===');
+    
+    // 获取当前窗口
+    const window = BrowserWindow.fromWebContents(event.sender);
+    
+    if (!window) {
+      console.error('无法获取当前窗口');
+      return { success: false, error: '无法获取窗口' };
+    }
+    
+    console.log('当前窗口ID:', window.id);
+    
+    // 获取鼠标位置
+    const { screen } = require('electron');
+    const cursorPos = screen.getCursorScreenPoint();
+    
+    console.log('鼠标位置:', cursorPos.x, cursorPos.y);
+    
+    // 创建菜单模板
+    const menuTemplate = [
+      {
+        label: '在新实例中查看此文件夹',
+        click: () => {
+          // 直接调用创建新实例的逻辑
+          console.log('右键菜单：创建新实例');
+          event.sender.send('menu-action', 'create-new-instance');
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '收藏相簿',
+        click: () => {
+          event.sender.send('menu-action', 'toggle-favorite');
+        }
+      },
+      {
+        label: '在文件管理器中打开',
+        click: () => {
+          event.sender.send('menu-action', 'show-in-folder');
+        }
+      }
+    ];
+    
+    const menu = Menu.buildFromTemplate(menuTemplate);
+    
+    // 显示菜单
+    menu.popup({
+      window: window,
+      x: cursorPos.x,
+      y: cursorPos.y
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('显示右键菜单失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 创建新窗口查看文件夹
+ipcMain.handle('create-new-window', async (event, albumPath) => {
+  try {
+    console.log('创建新窗口查看文件夹:', albumPath);
+    const newWindow = createWindow(albumPath);
+    return { success: true, windowId: newWindow.id };
+  } catch (error) {
+    console.error('创建新窗口失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 创建新实例并选择文件夹
+ipcMain.handle('create-new-instance', async (event, folderPath) => {
+  try {
+    console.log('=== 创建新实例开始 ===');
+    console.log('文件夹路径:', folderPath);
+    
+    // 作为替代方案，直接使用现有的createWindow函数创建新窗口
+    // 这会在同一个进程中创建新窗口，而不是新进程
+    console.log('使用现有进程创建新窗口作为替代方案');
+    const newWindow = createWindow(folderPath);
+    
+    // 确保窗口在最前
+    if (newWindow) {
+      newWindow.show();
+      newWindow.focus();
+      
+      if (process.platform === 'darwin') {
+        app.dock.show();
+        app.dock.bounce('informational');
+      }
+      
+      console.log('新窗口创建成功，窗口ID:', newWindow.id);
+      return { success: true, message: '已创建新窗口', windowId: newWindow.id };
+    }
+    
+    // 如果需要真正的独立进程，使用下面的代码
+    /*
+    const { spawn } = require('child_process');
+    
+    // 获取应用路径和参数
+    const appPath = process.execPath;
+    const isDevMode = process.env.NODE_ENV === 'development' || isDev;
+    
+    console.log('当前环境:', isDevMode ? '开发' : '生产');
+    console.log('应用路径:', appPath);
+    console.log('平台:', process.platform);
+    
+    let command, args;
+    
+    // 正确处理路径中的空格和特殊字符
+    const safePath = folderPath;
+    
+    // 开发模式下的特殊处理
+    if (isDevMode) {
+      // 开发模式下使用Electron CLI
+      if (process.platform === 'darwin' || process.platform === 'linux') {
+        command = 'npx';
+        args = ['electron', '.', '--folder', safePath];
+      } else if (process.platform === 'win32') {
+        command = 'npx.cmd';
+        args = ['electron', '.', '--folder', safePath];
+      }
+    } else {
+      // 生产模式
+      if (process.platform === 'darwin') {
+        // macOS - 使用open命令启动新实例
+        command = 'open';
+        args = ['-n', '-a', appPath, '--args', '--folder', safePath];
+      } else if (process.platform === 'win32') {
+        // Windows - 使用cmd启动新实例
+        command = 'cmd';
+        args = ['/c', 'start', '', appPath, '--folder', safePath];
+      } else {
+        // Linux - 直接启动可执行文件
+        command = appPath;
+        args = ['--folder', safePath];
+      }
+    }
+    
+    console.log(`执行命令: ${command} ${args.join(' ')}`);
+    
+    // 使用spawn以获得更好的跨平台兼容性和路径处理
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      shell: process.platform === 'win32' // Windows需要shell来处理路径
+    });
+    
+    child.on('error', (err) => {
+      console.error('进程启动错误:', err);
+    });
+    
+    child.unref();
+    
+    console.log('新实例启动成功');
+    */
+    
+  } catch (error) {
+    console.error('创建新实例失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取所有窗口信息
+ipcMain.handle('get-windows-info', async () => {
+  try {
+    const windowsInfo = Array.from(windows).map(window => ({
+      id: window.id,
+      title: window.getTitle()
+    }));
+    return { success: true, windows: windowsInfo };
+  } catch (error) {
+    console.error('获取窗口信息失败:', error);
     return { success: false, error: error.message };
   }
 }); 
