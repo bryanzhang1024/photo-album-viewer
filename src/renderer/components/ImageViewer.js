@@ -19,6 +19,7 @@ import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import ShuffleIcon from '@mui/icons-material/Shuffle';
 import { useFavorites } from '../contexts/FavoritesContext';
 const { ipcRenderer } = window.require('electron');
 
@@ -71,6 +72,9 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           break;
         case 'c':
           handleToggleFavorite();
+          break;
+        case 'r':
+          handleRandomImage();
           break;
         default:
           break;
@@ -176,6 +180,21 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
     onIndexChange(newIndex);
+  };
+
+  // 随机选择一张图片
+  const handleRandomImage = () => {
+    if (images.length <= 1) return;
+    
+    let randomIndex;
+    do {
+      randomIndex = Math.floor(Math.random() * images.length);
+    } while (randomIndex === currentIndex);
+    
+    // 重置缩放和拖动状态
+    setZoomLevel(1);
+    setDragOffset({ x: 0, y: 0 });
+    onIndexChange(randomIndex);
   };
   
   // 处理鼠标拖动开始
@@ -388,6 +407,16 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           <Typography variant="subtitle1" sx={{ ml: 2, flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {currentImage?.name} ({currentIndex + 1} / {images.length})
           </Typography>
+          <Tooltip title="随机图片 (R)">
+            <IconButton 
+              color="inherit" 
+              onClick={handleRandomImage} 
+              size="small"
+              sx={{ mr: 1 }}
+            >
+              <ShuffleIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title={isCurrentImageFavorited ? "取消收藏" : "收藏图片"}>
             <IconButton 
               color="inherit" 
