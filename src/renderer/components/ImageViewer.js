@@ -285,12 +285,41 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     }
   };
   
-  // 处理鼠标滚轮缩放
+  // 用于滚轮防抖的引用
+  const lastWheelTimeRef = useRef(0);
+  const accumulatedDeltaRef = useRef(0);
+  const wheelThreshold = 500; // 滚轮阈值，防止顺滑滚动软件的跳跃
+  const wheelCooldown = 150; // 冷却时间（毫秒）
+
+  // 处理鼠标滚轮：正常模式切换图片，放大模式垂直滚动
   const handleWheel = (e) => {
     e.preventDefault();
-    const delta = e.deltaY * -0.01;
-    const factor = delta > 0 ? 1.1 : 0.9;
-    handleZoom(factor);
+    
+    const now = Date.now();
+    const timeDiff = now - lastWheelTimeRef.current;
+    
+    if (zoomLevel === 1) {
+      // 正常模式：滚轮切换图片（带防抖）
+      accumulatedDeltaRef.current += e.deltaY;
+      
+      // 检查是否超过阈值或时间冷却
+      if (Math.abs(accumulatedDeltaRef.current) >= wheelThreshold || timeDiff > wheelCooldown) {
+        const direction = accumulatedDeltaRef.current > 0 ? 'next' : 'prev';
+        handleNavigate(direction);
+        
+        // 重置计数器
+        accumulatedDeltaRef.current = 0;
+        lastWheelTimeRef.current = now;
+      }
+    } else {
+      // 放大模式：滚轮垂直滚动图片（方向已反转）
+      const scrollSpeed = 2;
+      const deltaY = e.deltaY * scrollSpeed;
+      setDragOffset(prev => ({
+        ...prev,
+        y: prev.y - deltaY  // 反转方向：向上滚动=图片上移，向下滚动=图片下移
+      }));
+    }
   };
   
   // 在文件管理器中显示图片
@@ -461,35 +490,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           />
         )}
         
-        <IconButton
-          sx={{
-            position: 'absolute',
-            left: 16,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            color: 'white',
-            '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
-          }}
-          onClick={() => handleNavigate('prev')}
-        >
-          <ArrowBackIosNewIcon />
-        </IconButton>
-        
-        <IconButton
-          sx={{
-            position: 'absolute',
-            right: 16,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            color: 'white',
-            '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
-          }}
-          onClick={() => handleNavigate('next')}
-        >
-          <ArrowForwardIosIcon />
-        </IconButton>
       </Box>
     </Dialog>
   );
