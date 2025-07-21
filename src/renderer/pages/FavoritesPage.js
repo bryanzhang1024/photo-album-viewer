@@ -156,6 +156,14 @@ function FavoritesPage({ colorMode }) {
     setViewerOpen(true);
   };
 
+  // 处理导航到相册
+  const handleNavigateToAlbum = (albumPath) => {
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+    navigate(`/album/${encodeURIComponent(albumPath)}`);
+  };
+
   // 关闭查看器
   const handleCloseViewer = () => {
     setViewerOpen(false);
@@ -279,7 +287,9 @@ function FavoritesPage({ colorMode }) {
             <ImageCard
               image={image}
               onClick={() => handleImageClick(image, index)}
+              onAlbumClick={() => handleNavigateToAlbum(image.albumPath)}
               density={userDensity}
+              showAlbumLink={true}
             />
           </div>
         ))}

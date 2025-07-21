@@ -16,7 +16,7 @@ const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
 // 图片卡片组件
-function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = false, albumPath }) {
+function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = false, albumPath, onAlbumClick, showAlbumLink = false }) {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [aspectRatio, setAspectRatio] = useState(1); // 默认为1:1
@@ -133,7 +133,15 @@ function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = fa
     // 即使缩略图加载失败，也允许点击查看原图
     onClick(e);
   };
-  
+
+  // 处理相册点击
+  const handleAlbumClick = (e) => {
+    e.stopPropagation(); // 阻止事件冒泡，避免触发卡片点击
+    if (onAlbumClick && image) {
+      onAlbumClick();
+    }
+  };
+
   // 处理收藏点击
   const handleFavoriteClick = (e) => {
     e.stopPropagation(); // 阻止事件冒泡，避免触发卡片点击
@@ -236,7 +244,14 @@ function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = fa
               <Typography 
                 variant="caption" 
                 color="text.secondary" 
-                sx={{ display: 'block', fontSize: '0.7rem' }}
+                sx={{ 
+                  display: 'block', 
+                  fontSize: '0.7rem',
+                  cursor: showAlbumLink ? 'pointer' : 'default',
+                  '&:hover': showAlbumLink ? { color: 'primary.main' } : {}
+                }}
+                onClick={showAlbumLink ? handleAlbumClick : undefined}
+                title={showAlbumLink ? `点击跳转到相册: ${image.albumName || '未知相册'}` : ''}
               >
                 {image.albumName || (image.size ? formatFileSize(image.size) : '')}
               </Typography>
