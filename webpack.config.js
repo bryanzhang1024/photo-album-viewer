@@ -8,7 +8,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, 'build'),
     filename: 'bundle.js',
-    publicPath: './'
+    publicPath: '/'  // 修改为绝对路径
   },
   resolve: {
     extensions: ['.js', '.jsx'],

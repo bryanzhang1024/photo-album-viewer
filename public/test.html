@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>测试页面</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+    }
+    .test-container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .status {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .success { background-color: #d4edda; color: #155724; }
+    .error { background-color: #f8d7da; color: #721c24; }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 4px;
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover { background-color: #0056b3; }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>照片相簿浏览器 - 测试页面</h1>
+    
+    <div class="status success" id="page-status">
+      测试页面已加载
+    </div>
+    
+    <div class="status" id="bundle-status">
+      正在检查bundle.js...
+    </div>
+    
+    <div class="status" id="react-status">
+      正在检查React...
+    </div>
+    
+    <div class="status" id="electron-status">
+      正在检查Electron...
+    </div>
+    
+    <button onclick="checkBundle()">检查Bundle</button>
+    <button onclick="checkElectron()">检查Electron</button>
+    <button onclick="checkReact()">检查React</button>
+    <button onclick="loadRealApp()">加载真实应用</button>
+  </div>
+
+  <script>
+    function checkBundle() {
+      const status = document.getElementById('bundle-status');
+      fetch('/bundle.js')
+        .then(response => {
+          if (response.ok) {
+            status.className = 'status success';
+            status.textContent = 'bundle.js 加载成功 (' + response.headers.get('content-length') + ' bytes)';
+          } else {
+            status.className = 'status error';
+            status.textContent = 'bundle.js 加载失败: ' + response.status;
+          }
+        })
+        .catch(err => {
+          status.className = 'status error';
+          status.textContent = 'bundle.js 加载错误: ' + err.message;
+        });
+    }
+
+    function checkElectron() {
+      const status = document.getElementById('electron-status');
+      if (window.require) {
+        try {
+          const electron = window.require('electron');
+          status.className = 'status success';
+          status.textContent = 'Electron API 可用';
+        } catch (err) {
+          status.className = 'status error';
+          status.textContent = 'Electron API 错误: ' + err.message;
+        }
+      } else {
+        status.className = 'status error';
+        status.textContent = 'Electron API 不可用';
+      }
+    }
+
+    function checkReact() {
+      const status = document.getElementById('react-status');
+      if (window.React) {
+        status.className = 'status success';
+        status.textContent = 'React 已加载: ' + window.React.version;
+      } else {
+        status.className = 'status error';
+        status.textContent = 'React 未加载';
+      }
+    }
+
+    function loadRealApp() {
+      window.location.href = '/';
+    }
+
+    // 自动检查
+    setTimeout(checkBundle, 1000);
+    setTimeout(checkElectron, 1500);
+    setTimeout(checkReact, 2000);
+  </script>
+</body>
+</html>

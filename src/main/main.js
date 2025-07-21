@@ -411,7 +411,7 @@ function createWindow(albumPath = null) {
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true,
-      webSecurity: !isDev,
+      webSecurity: false, // 暂时禁用webSecurity进行测试
       devTools: isDev,
       nodeIntegrationInWorker: true
     },
@@ -423,8 +423,10 @@ function createWindow(albumPath = null) {
 
   // 窗口完成加载后再显示
   newWindow.once('ready-to-show', () => {
+    console.log('窗口ready-to-show事件触发');
     newWindow.show();
     newWindow.focus();
+    console.log('窗口已显示并聚焦');
     
     // 确保窗口在最前 - 跨平台处理
     if (process.platform === 'darwin') {
@@ -457,7 +459,7 @@ function createWindow(albumPath = null) {
 
   const startUrl = isDev
     ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../build/index.html')}`;
+    : `file://${path.join(__dirname, '../../build/index.html')}`;
   
   // 如果有指定的相簿路径，添加到URL参数
   let finalUrl = startUrl;
@@ -465,7 +467,7 @@ function createWindow(albumPath = null) {
     const encodedPath = encodeURIComponent(albumPath);
     finalUrl = isDev 
       ? `http://localhost:3000/?initialPath=${encodedPath}`
-      : `file://${path.join(__dirname, '../build/index.html')}?initialPath=${encodedPath}`;
+      : `file://${path.join(__dirname, '../../build/index.html')}?initialPath=${encodedPath}`;
     console.log('创建窗口的URL:', finalUrl);
   }
 
@@ -474,6 +476,15 @@ function createWindow(albumPath = null) {
     waitForServer(startUrl, (err) => {
       if (err) {
         console.error('等待开发服务器超时:', err);
+        // 如果开发服务器超时，显示错误页面
+        newWindow.loadURL(`data:text/html,
+          <html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
+            <h1>开发服务器连接失败</h1>
+            <p>请检查webpack开发服务器是否正常运行</p>
+            <p>错误: ${err.message}</p>
+            <button onclick="location.href='http://localhost:3000/test.html'" style="padding: 10px 20px; margin: 10px;">测试页面</button>
+            <button onclick="location.reload()" style="padding: 10px 20px; margin: 10px;">重试</button>
+          </body></html>`);
       } else {
         console.log('开发服务器准备就绪，加载应用...');
         newWindow.loadURL(finalUrl);
@@ -483,7 +494,31 @@ function createWindow(albumPath = null) {
     newWindow.loadURL(finalUrl);
   }
 
-  // 窗口关闭时从集合中移除
+  // 强制显示窗口的保险机制
+  setTimeout(() => {
+    if (!newWindow.isVisible()) {
+      console.log('强制显示窗口');
+      newWindow.show();
+      newWindow.focus();
+    }
+  }, 5000); // 5秒后强制显示
+
+  // 监听加载失败事件
+  newWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('页面加载失败:', errorCode, errorDescription);
+    newWindow.loadURL(`data:text/html,
+      <html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
+        <h1>页面加载失败</h1>
+        <p>错误代码: ${errorCode}</p>
+        <p>错误描述: ${errorDescription}</p>
+        <button onclick="location.reload()" style="padding: 10px 20px; margin: 10px;">重试</button>
+      </body></html>`);
+  });
+
+  // 监听DOM就绪事件
+  newWindow.webContents.on('dom-ready', () => {
+    console.log('DOM已就绪');
+  });
   newWindow.on('closed', () => {
     windows.delete(newWindow);
     if (newWindow === mainWindow) {

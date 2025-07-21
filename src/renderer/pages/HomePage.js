@@ -878,12 +878,8 @@ function HomePage({ colorMode }) {
                       
                       console.log(`虚拟列表参数 - 宽度: ${width}, 高度: ${height}, 列数: ${columnsPerRow}, 行数: ${rowCount}, 行高: ${rowHeight}, 滚动位置: ${scrollTop}`);
                       
-                      // 添加key属性，在列数变化时强制重新创建List组件
-                      const listKey = `list-${columnsPerRow}-${userDensity}-${forceUpdate}`;
-                      
                       return (
                         <List
-                          key={listKey}
                           ref={listRef}
                           autoHeight
                           height={height}
@@ -894,7 +890,7 @@ function HomePage({ colorMode }) {
                           rowRenderer={renderRow}
                           scrollTop={scrollTop}
                           width={width}
-                          overscanRowCount={5}
+                          overscanRowCount={2}
                           onRowsRendered={onRowsRendered}
                         />
                       );
