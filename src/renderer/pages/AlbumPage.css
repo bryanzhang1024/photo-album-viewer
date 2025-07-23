@@ -20,15 +20,15 @@
 
 /* 紧凑模式下的样式调整 */
 .compact-view .masonry-grid {
-  margin-left: -16px; /* 与HomePage中的CARD_CONFIG.compact.spacing保持一致 */
+  margin-left: -8px; /* 与HomePage中的CARD_CONFIG.compact.spacing保持一致 */
 }
 
 .compact-view .masonry-grid_column {
-  padding-left: 16px; /* 与HomePage中的CARD_CONFIG.compact.spacing保持一致 */
+  padding-left: 8px; /* 与HomePage中的CARD_CONFIG.compact.spacing保持一致 */
 }
 
 .compact-view .masonry-item {
-  margin-bottom: 16px; /* 与HomePage中的CARD_CONFIG.compact.spacing保持一致 */
+  margin-bottom: 8px; /* 与HomePage中的CARD_CONFIG.compact.spacing保持一致 */
 }
 
 /* 标准模式下的样式调整 */

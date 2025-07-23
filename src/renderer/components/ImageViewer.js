@@ -56,9 +56,11 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           onClose();
           break;
         case '+':
+        case '=':  // 支持不按 Shift 的 = 键
           handleZoom(1.2);
           break;
         case '-':
+        case '_':  // 支持按 Shift 的 - 键
           handleZoom(0.8);
           break;
         case 'f':
