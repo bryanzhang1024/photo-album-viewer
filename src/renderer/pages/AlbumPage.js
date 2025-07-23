@@ -719,20 +719,7 @@ function AlbumPage({ colorMode }) {
                 size="small"
                 sx={{ mx: 0.5 }}
               >
-                <Badge
-                  badgeContent={favorites.albums.length + favorites.images.length}
-                  color="secondary"
-                  max={99}
-                  sx={{
-                    '& .MuiBadge-badge': {
-                      fontSize: '0.6rem',
-                      height: '16px',
-                      minWidth: '16px',
-                    }
-                  }}
-                >
-                  <FavoriteIcon sx={{ fontSize: '1.2rem' }} />
-                </Badge>
+                <FavoriteIcon sx={{ fontSize: '1.2rem' }} />
               </IconButton>
             </Tooltip>
 
