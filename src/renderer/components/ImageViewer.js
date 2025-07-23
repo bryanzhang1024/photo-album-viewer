@@ -47,9 +47,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     const handleKeyDown = (e) => {
       switch (e.key) {
         case 'ArrowLeft':
+        case 'a':
+        case 'A':
           handleNavigate('prev');
           break;
         case 'ArrowRight':
+        case 'd':
+        case 'D':
           handleNavigate('next');
           break;
         case 'Escape':
