@@ -31,8 +31,8 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import CasinoIcon from '@mui/icons-material/Casino';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import AlbumCard from '../components/AlbumCard';
-import { AutoSizer, List, WindowScroller } from 'react-virtualized';
-import 'react-virtualized/styles.css';
+import Masonry from 'react-masonry-css';
+import './AlbumPage.css';
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 
@@ -40,39 +40,12 @@ import { useFavorites } from '../contexts/FavoritesContext';
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
-// 交叉观察器API - 用于检测元素可见性
-let intersectionObserver = null;
-if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
-  intersectionObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach(entry => {
-        // 获取相簿ID并标记可见性
-        const albumId = entry.target.dataset.albumId;
-        if (albumId) {
-          // 通过自定义事件通知组件可见性变化
-          const event = new CustomEvent('album-visibility-change', {
-            detail: { 
-              albumId,
-              isVisible: entry.isIntersecting
-            }
-          });
-          window.dispatchEvent(event);
-        }
-      });
-    },
-    {
-      root: null, // 使用视口作为根
-      rootMargin: '100px', // 扩展可见性范围，提前加载
-      threshold: 0.1 // 10%可见就触发
-    }
-  );
-}
 
-// 简化的布局配置 - 使用统一系统
+// 优化布局配置 - 采用收藏页面的紧凑设计
 const DENSITY_CONFIG = {
-  compact: { baseWidth: 200, spacing: 16 },
-  standard: { baseWidth: 250, spacing: 16 },
-  comfortable: { baseWidth: 300, spacing: 16 }
+  compact: { baseWidth: 180, spacing: 8 },
+  standard: { baseWidth: 220, spacing: 10 },
+  comfortable: { baseWidth: 280, spacing: 12 }
 };
 
 function HomePage({ colorMode }) {
@@ -87,10 +60,7 @@ function HomePage({ colorMode }) {
   const [sortDirection, setSortDirection] = useState('asc');
   const [userDensity, setUserDensity] = useState(() => localStorage.getItem('userDensity') || 'standard');
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [visibleAlbums, setVisibleAlbums] = useState(new Set());
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  const listRef = useRef(null);
-  const visibleRowsRef = useRef(new Set());
   const scrollContainerRef = useRef(null);
   const [forceUpdate, setForceUpdate] = useState(0);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
@@ -146,27 +116,6 @@ function HomePage({ colorMode }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  // 监听相簿可见性变化
-  useEffect(() => {
-    const handleVisibilityChange = (event) => {
-      const { albumId, isVisible } = event.detail;
-      
-      setVisibleAlbums(prevVisibleAlbums => {
-        const newVisibleAlbums = new Set(prevVisibleAlbums);
-        if (isVisible) {
-          newVisibleAlbums.add(albumId);
-        } else {
-          newVisibleAlbums.delete(albumId);
-        }
-        return newVisibleAlbums;
-      });
-    };
-    
-    window.addEventListener('album-visibility-change', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('album-visibility-change', handleVisibilityChange);
-    };
-  }, []);
   
   // 从localStorage中读取上次的路径，并处理URL参数
   useEffect(() => {
@@ -202,24 +151,6 @@ function HomePage({ colorMode }) {
     }
   }, [location.search, urlPathProcessed]);
   
-  // 当密度、窗口宽度或强制更新计数器变化时，重新计算虚拟列表
-  useEffect(() => {
-    if (listRef.current) {
-      // 延迟执行以确保DOM已更新
-      setTimeout(() => {
-        try {
-          // 重新计算行高和缓存
-          console.log('重新计算虚拟列表布局...');
-          console.log(`当前窗口宽度: ${windowWidth}, 列数: ${getColumnsPerRow()}`);
-          
-          listRef.current.recomputeRowHeights();
-          listRef.current.forceUpdateGrid();
-        } catch (err) {
-          console.error('重新计算虚拟列表时出错:', err);
-        }
-      }, 100);
-    }
-  }, [userDensity, windowWidth, forceUpdate]);
   
   // 在组件挂载后恢复滚动位置
   useEffect(() => {
@@ -475,122 +406,19 @@ function HomePage({ colorMode }) {
     return relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
   };
   
-  // 简化的响应式布局 - 流体计算无最大限制
-  const getColumnsPerRow = useCallback(() => {
+  // 优化的响应式瀑布流布局 - 采用收藏页面的断点式设计
+  const getMasonryBreakpoints = useCallback(() => {
     const config = DENSITY_CONFIG[userDensity];
-    const containerPadding = isSmallScreen ? 16 : 32;
-    const scrollbarWidth = 8;
-    const availableWidth = Math.max(0, windowWidth - containerPadding - scrollbarWidth);
+    const containerPadding = isSmallScreen ? 8 : 12;
+    const scrollbarWidth = 2;
+    const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
     
-    // 流体计算，无最大列数限制，充分利用空间
-    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / (config.baseWidth + config.spacing)));
+    const columnWidth = config.baseWidth + config.spacing;
+    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
     
     return columns;
-  }, [windowWidth, userDensity, isSmallScreen]);
+  }, [windowWidth, isSmallScreen, userDensity]);
   
-// 精确的行高计算 - 基于AlbumCard实际渲染高度
-  const getRowHeight = useCallback(() => {
-    const config = DENSITY_CONFIG[userDensity];
-    
-    // 根据AlbumCard的实际结构计算
-    // 图片区域：使用AlbumCard中的固定比例
-    const imageHeight = Math.round(config.baseWidth * (userDensity === 'compact' ? 1 : 6/5));
-    
-    // 标题区域：根据密度模式
-    let titleHeight;
-    if (userDensity === 'compact') {
-      titleHeight = 0; // 紧凑模式不显示标题
-    } else {
-      titleHeight = 30; // CardContent高度 + 宽松内边距
-    }
-    
-    // 总高度 = 图片 + 标题 + 额外间距
-    return imageHeight + titleHeight + 8;
-  }, [userDensity]);
-  
-  // 生成唯一ID
-  const getAlbumId = (album, index) => {
-    return `album-${album.path}-${index}`;
-  };
-  
-  // 更新可视行的追踪
-  const updateVisibleRows = useCallback((startIndex, stopIndex) => {
-    visibleRowsRef.current = new Set();
-    for (let i = startIndex; i <= stopIndex; i++) {
-      visibleRowsRef.current.add(i);
-    }
-  }, []);
-  
-  // 渲染行（用于虚拟列表）
-  const renderRow = ({ index, key, style }) => {
-    try {
-      const sorted = sortedAlbums();
-      const columnsPerRow = getColumnsPerRow();
-      const config = DENSITY_CONFIG[userDensity];
-      
-      // 创建一个包含此行所有相簿的数组
-      const rowItems = [];
-      for (let i = 0; i < columnsPerRow; i++) {
-        const albumIndex = index * columnsPerRow + i;
-        if (albumIndex < sorted.length) {
-          const album = sorted[albumIndex];
-          rowItems.push(album);
-        }
-      }
-      
-      return (
-        <div 
-          key={key} 
-          style={{
-            ...style,
-            display: 'flex',
-            flexDirection: 'row',
-            marginBottom: `${config.spacing}px`,
-            width: '100%'
-          }}
-        >
-          {rowItems.map((album, i) => {
-            const albumId = getAlbumId(album, index * columnsPerRow + i);
-            const isAlbumVisible = visibleRowsRef.current.has(index);
-            const cardWidth = Math.floor((windowWidth - 64 - (columnsPerRow - 1) * config.spacing) / columnsPerRow);
-            
-            return (
-              <div 
-                key={`${album.path}-${i}`} 
-                style={{
-                  width: `${cardWidth}px`,
-                  marginRight: i < columnsPerRow - 1 ? `${config.spacing}px` : 0,
-                  height: `${Math.round(cardWidth * 0.75)}px`
-                }}
-                data-album-id={albumId}
-                ref={node => {
-                  if (node && intersectionObserver) {
-                    intersectionObserver.observe(node);
-                  }
-                }}
-              >
-                <AlbumCard 
-                  album={album}
-                  displayPath={getAlbumDisplayPath(album)}
-                  onClick={() => handleAlbumClick(album.path)}
-                  isCompactMode={userDensity === 'compact'}
-                  isVisible={isAlbumVisible}
-                />
-              </div>
-            );
-          })}
-        </div>
-      );
-    } catch (err) {
-      console.error('渲染行时出错:', err);
-      return <div key={key} style={style}>加载出错</div>;
-    }
-  };
-  
-  // 当列表滚动时更新可视范围
-  const onRowsRendered = ({ overscanStartIndex, overscanStopIndex }) => {
-    updateVisibleRows(overscanStartIndex, overscanStopIndex);
-  };
   
   // 打开设置对话框
   const handleOpenSettings = () => {
@@ -651,14 +479,6 @@ function HomePage({ colorMode }) {
     navigate('/favorites');
   };
   
-  // 添加一个useEffect来确保WindowScroller能够正确地获取滚动元素
-  useEffect(() => {
-    // 确保scrollContainerRef已经设置
-    if (scrollContainerRef.current) {
-      // 强制更新，确保WindowScroller使用正确的滚动元素
-      setForceUpdate(prev => prev + 1);
-    }
-  }, [scrollContainerRef.current]);
   
   // 处理随机选择相簿
   const handleRandomAlbum = () => {
@@ -854,45 +674,24 @@ function HomePage({ colorMode }) {
               </Typography>
             </Box>
             
-            <WindowScroller scrollElement={scrollContainerRef.current || window}>
-              {({ height, isScrolling, onChildScroll, scrollTop }) => (
-                <AutoSizer disableHeight>
-                  {({ width }) => {
-                    try {
-                      const columnsPerRow = getColumnsPerRow();
-                      const rowCount = Math.ceil(sortedAlbums().length / columnsPerRow);
-                      const rowHeight = getRowHeight();
-                      
-                      console.log(`虚拟列表参数 - 宽度: ${width}, 高度: ${height}, 列数: ${columnsPerRow}, 行数: ${rowCount}, 行高: ${rowHeight}, 滚动位置: ${scrollTop}`);
-                      
-                      return (
-                        <List
-                          ref={listRef}
-                          autoHeight
-                          height={height}
-                          isScrolling={isScrolling}
-                          onScroll={onChildScroll}
-                          rowCount={rowCount}
-                          rowHeight={rowHeight}
-                          rowRenderer={renderRow}
-                          scrollTop={scrollTop}
-                          width={width}
-                          overscanRowCount={2}
-                          onRowsRendered={onRowsRendered}
-                        />
-                      );
-                    } catch (err) {
-                      console.error('渲染虚拟列表时出错:', err);
-                      return (
-                        <Box sx={{ p: 2 }}>
-                          <Alert severity="error">加载相簿列表时出错: {err.message}</Alert>
-                        </Box>
-                      );
-                    }
-                  }}
-                </AutoSizer>
-              )}
-            </WindowScroller>
+            <Masonry
+              key={`albums-masonry-${userDensity}-${windowWidth}`}
+              breakpointCols={getMasonryBreakpoints()}
+              className="masonry-grid"
+              columnClassName="masonry-grid_column"
+            >
+              {sortedAlbums().map((album) => (
+                <div key={album.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
+                  <AlbumCard
+                    album={album}
+                    displayPath={getAlbumDisplayPath(album)}
+                    onClick={() => handleAlbumClick(album.path)}
+                    isCompactMode={userDensity === 'compact'}
+                    isVisible={true}
+                  />
+                </div>
+              ))}
+            </Masonry>
           </Box>
         )}
       </Box>
