@@ -117,12 +117,20 @@ export const FavoritesProvider = ({ children }) => {
       };
     } else {
       // 添加收藏
-      // 确保获取正确的预览图路径
+      // 确保获取正确的预览图信息
+      let previewImages = [];
       let previewImagePath = '';
+      
       if (album.previewImages && album.previewImages.length > 0) {
+        previewImages = album.previewImages.slice(0, 4); // 保存前4张预览图
         previewImagePath = album.previewImages[0].path;
       } else if (album.previewImagePath) {
         previewImagePath = album.previewImagePath;
+        // 如果只有单个路径，构造预览图数组
+        previewImages = [{
+          path: album.previewImagePath,
+          name: album.previewImagePath.split(/[/\\]/).pop()
+        }];
       }
 
       const newAlbum = {
@@ -130,7 +138,8 @@ export const FavoritesProvider = ({ children }) => {
         path: album.path,
         name: album.name,
         imageCount: album.imageCount || 0,
-        previewImagePath: previewImagePath,
+        previewImages: previewImages, // 保存预览图数组
+        previewImagePath: previewImagePath, // 保持向后兼容
         addedAt: Date.now()
       };
 
@@ -158,11 +167,13 @@ export const FavoritesProvider = ({ children }) => {
         images: favorites.images.filter(item => item.path !== image.path)
       };
     } else {
-      // 添加收藏
+      // 添加收藏 - 保存完整的图片信息
       const newImage = {
         id: `image_${Date.now()}`,
         path: image.path,
         name: image.name,
+        size: image.size || 0, // 保存文件大小
+        lastModified: image.lastModified || Date.now(), // 保存修改时间
         albumPath: albumPath || '',
         albumName: albumName || getBasename(albumPath || ''),
         addedAt: Date.now()

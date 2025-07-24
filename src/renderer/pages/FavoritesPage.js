@@ -148,7 +148,7 @@ function FavoritesPage({ colorMode }) {
     const images = sortedImages().map(img => ({
       path: img.path,
       name: img.name,
-      url: img.thumbnailUrl || ''
+      url: img.path // 使用原始图片路径，ImageViewer会处理缩略图加载
     }));
     
     setViewerImages(images);
@@ -251,6 +251,8 @@ function FavoritesPage({ colorMode }) {
               displayPath={album.path}
               onClick={() => handleAlbumClick(album.path)}
               isCompactMode={userDensity === 'compact'}
+              isFavoritesPage={true}
+              isVisible={true}
             />
           </div>
         ))}
@@ -288,8 +290,9 @@ function FavoritesPage({ colorMode }) {
               image={image}
               onClick={() => handleImageClick(image, index)}
               onAlbumClick={() => handleNavigateToAlbum(image.albumPath)}
-              density={userDensity}
+              isCompactMode={userDensity === 'compact'}
               showAlbumLink={true}
+              isFavoritesPage={true}
             />
           </div>
         ))}

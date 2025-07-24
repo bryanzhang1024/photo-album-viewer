@@ -60,14 +60,22 @@ function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = fa
           filename.startsWith('main');
         
         // 获取缩略图 - 使用主进程中配置的分辨率
+        console.log(`正在获取缩略图: ${image.path}`);
         const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, isPriority ? 0 : 1);
         
         if (!url) {
-          console.error(`无法获取缩略图: ${image.path}`);
+          console.error(`无法获取缩略图: ${image.path}`, {
+            imageName: image.name,
+            imageSize: image.size,
+            albumPath: image.albumPath,
+            albumName: image.albumName
+          });
           setImageError(true);
           setLoading(false);
           return;
         }
+        
+        console.log(`缩略图获取成功: ${image.path} -> ${url}`);
         
         // 缓存到会话存储
         try {
