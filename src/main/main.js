@@ -1072,6 +1072,32 @@ ipcMain.handle('show-in-folder', async (event, filePath) => {
   }
 });
 
+// 复制图片到剪贴板
+ipcMain.handle('copy-image-to-clipboard', async (event, filePath) => {
+  try {
+    const { clipboard, nativeImage } = require('electron');
+    
+    if (!fs.existsSync(filePath)) {
+      throw new Error('图片文件不存在');
+    }
+    
+    // 读取图片文件并创建nativeImage
+    const image = nativeImage.createFromPath(filePath);
+    
+    if (image.isEmpty()) {
+      throw new Error('无法读取图片文件');
+    }
+    
+    // 复制到剪贴板
+    clipboard.writeImage(image);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('复制图片到剪贴板失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // 显示右键菜单
 ipcMain.handle('show-context-menu', async (event, menuItems) => {
   try {

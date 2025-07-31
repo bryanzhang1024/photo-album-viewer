@@ -7,7 +7,11 @@ import {
   Typography,
   Box,
   Fade,
-  Tooltip
+  Tooltip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
@@ -20,6 +24,8 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import Rotate90DegreesCwIcon from '@mui/icons-material/Rotate90DegreesCw';
 import { useFavorites } from '../contexts/FavoritesContext';
 const { ipcRenderer } = window.require('electron');
 
@@ -31,8 +37,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [isDragging, setIsDragging] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(true);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [clickTimer, setClickTimer] = useState(null);
-  const [clickCount, setClickCount] = useState(0);
+  const [contextMenu, setContextMenu] = useState(null);
   
   const toolbarRef = useRef(null);
   const mouseInactivityTimer = useRef(null);
@@ -205,19 +210,18 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   
   // 处理鼠标拖动开始
   const handleMouseDown = (e) => {
-    // 如果是右键点击，导航到下一张图片
-    if (e.button === 2) {
+    // 中键点击关闭窗口
+    if (e.button === 1) {
       e.preventDefault();
-      handleNavigate('next');
+      onClose();
       return;
     }
     
-    // 如果放大了，则开始拖动
-    if (zoomLevel > 1) {
+    // 如果放大了，则开始拖动（左键拖动）
+    if (e.button === 0 && zoomLevel > 1) {
       setDragStart({ x: e.clientX, y: e.clientY });
       setIsDragging(true);
     }
-    // 移除左键单击导航到下一张的功能，避免与双击冲突
   };
   
   // 处理鼠标拖动
@@ -249,101 +253,81 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     }
   };
   
-  // 处理右键菜单，阻止默认行为
+  // 处理右键菜单
   const handleContextMenu = (e) => {
     e.preventDefault();
-    return false;
-  };
-  
-  // 处理单击事件（与双击区分开）
-  const handleClick = (e) => {
-    // 只有当点击的是容器本身（而非图片或按钮）时才关闭
-    if (e.target === e.currentTarget) {
-      onClose();
-      return;
-    }
     
-    // 处理工具栏切换和图片导航
-    if (e.button === 0) { // 左键点击
-      // 增加点击计数
-      const newClickCount = clickCount + 1;
-      setClickCount(newClickCount);
-      
-      // 清除之前的定时器
-      if (clickTimer) {
-        clearTimeout(clickTimer);
-      }
-      
-      // 设置新的定时器
-      const timer = setTimeout(() => {
-        // 单击事件
-        if (newClickCount === 1) {
-          // 如果没有放大且点击的是图片，则导航到上一张
-          if (zoomLevel === 1 && e.target !== e.currentTarget) {
-            handleNavigate('prev');
-          }
-        }
-        // 重置点击计数
-        setClickCount(0);
-      }, 250); // 250ms 内的多次点击被视为双击
-      
-      setClickTimer(timer);
-    }
+    // 设置右键菜单位置
+    setContextMenu({
+      mouseX: e.clientX + 2,
+      mouseY: e.clientY - 6,
+    });
   };
-  
-  // 处理双击
-  const handleDoubleClick = (e) => {
-    // 清除单击定时器，防止触发单击事件
-    if (clickTimer) {
-      clearTimeout(clickTimer);
-      setClickTimer(null);
-    }
-    setClickCount(0);
-    
-    if (zoomLevel > 1) {
-      // 如果已经放大，则重置缩放
-      setZoomLevel(1);
-      setDragOffset({ x: 0, y: 0 });
-    } else {
-      // 否则放大到2倍
-      setZoomLevel(2);
-    }
-  };
-  
-  // 用于滚轮防抖的引用
-  const lastWheelTimeRef = useRef(0);
-  const accumulatedDeltaRef = useRef(0);
-  const wheelThreshold = 500; // 滚轮阈值，防止顺滑滚动软件的跳跃
-  const wheelCooldown = 150; // 冷却时间（毫秒）
 
-  // 处理鼠标滚轮：正常模式切换图片，放大模式垂直滚动
+  // 关闭右键菜单
+  const handleCloseContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  // 复制图片到剪贴板
+  const handleCopyImage = async () => {
+    if (currentImage) {
+      try {
+        // 使用Electron的clipboard API复制图片
+        await ipcRenderer.invoke('copy-image-to-clipboard', currentImage.path);
+      } catch (error) {
+        console.error('复制图片失败:', error);
+      }
+    }
+    handleCloseContextMenu();
+  };
+
+  // 顺时针旋转图片
+  const handleRotateImage = () => {
+    // 这里可以实现图片旋转功能
+    console.log('旋转图片');
+    handleCloseContextMenu();
+  };
+
+  // 切换全屏
+  const handleToggleFullScreen = () => {
+    toggleFullscreen();
+    handleCloseContextMenu();
+  };
+  
+  // 处理左键单击：界面分区导航（移除点击空白关闭）
+  const handleClick = (e) => {
+    // 左键单击直接执行导航，不再等待延时检测
+    if (e.button === 0 && zoomLevel === 1) { // 左键点击且未缩放状态
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const containerWidth = rect.width;
+      
+      // 左侧50%区域：上一张，右侧50%区域：下一张
+      if (clickX < containerWidth / 2) {
+        handleNavigate('prev');
+      } else {
+        handleNavigate('next');
+      }
+    }
+  };
+  
+  
+  // 用于滚轮缩放的引用
+  const lastWheelTimeRef = useRef(0);
+
+  // 处理鼠标滚轮：用于缩放图片
   const handleWheel = (e) => {
     e.preventDefault();
     
     const now = Date.now();
     const timeDiff = now - lastWheelTimeRef.current;
     
-    if (zoomLevel === 1) {
-      // 正常模式：滚轮切换图片（带防抖）
-      accumulatedDeltaRef.current += e.deltaY;
-      
-      // 检查是否超过阈值或时间冷却
-      if (Math.abs(accumulatedDeltaRef.current) >= wheelThreshold || timeDiff > wheelCooldown) {
-        const direction = accumulatedDeltaRef.current > 0 ? 'next' : 'prev';
-        handleNavigate(direction);
-        
-        // 重置计数器
-        accumulatedDeltaRef.current = 0;
-        lastWheelTimeRef.current = now;
-      }
-    } else {
-      // 放大模式：滚轮垂直滚动图片（方向已反转）
-      const scrollSpeed = 2;
-      const deltaY = e.deltaY * scrollSpeed;
-      setDragOffset(prev => ({
-        ...prev,
-        y: prev.y - deltaY  // 反转方向：向上滚动=图片上移，向下滚动=图片下移
-      }));
+    // 滚轮用于缩放，不再是翻页
+    if (timeDiff > 50) { // 50ms防抖
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1; // 向下滚动缩小，向上滚动放大
+      handleZoom(zoomFactor);
+      lastWheelTimeRef.current = now;
     }
   };
   
@@ -503,7 +487,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      onDoubleClick={handleDoubleClick}
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
       onClick={handleClick}
@@ -526,6 +509,63 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
         )}
         
       </Box>
+      
+      {/* 右键菜单 */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleCloseContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+        PaperProps={{
+          style: {
+            minWidth: 180,
+          },
+        }}
+      >
+        <MenuItem onClick={handleCopyImage}>
+          <ListItemIcon>
+            <ContentCopyIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>复制图片</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleShowInFolder}>
+          <ListItemIcon>
+            <FolderOpenIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>在文件夹中显示</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleToggleFavorite}>
+          <ListItemIcon>
+            {isCurrentImageFavorited ? 
+              <FavoriteIcon fontSize="small" color="error" /> : 
+              <FavoriteBorderIcon fontSize="small" />
+            }
+          </ListItemIcon>
+          <ListItemText>{isCurrentImageFavorited ? '取消收藏' : '收藏图片'}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleRotateImage}>
+          <ListItemIcon>
+            <Rotate90DegreesCwIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>顺时针旋转90°</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleToggleFullScreen}>
+          <ListItemIcon>
+            {isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+          </ListItemIcon>
+          <ListItemText>{isFullscreen ? '退出全屏' : '全屏显示'}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={onClose}>
+          <ListItemIcon>
+            <CloseIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>关闭查看器</ListItemText>
+        </MenuItem>
+      </Menu>
     </Dialog>
   );
 }
