@@ -7,11 +7,7 @@ import {
   Typography,
   Box,
   Fade,
-  Tooltip,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText
+  Tooltip
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
@@ -24,8 +20,6 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import Rotate90DegreesCwIcon from '@mui/icons-material/Rotate90DegreesCw';
 import { useFavorites } from '../contexts/FavoritesContext';
 const { ipcRenderer } = window.require('electron');
 
@@ -37,7 +31,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [isDragging, setIsDragging] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(true);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [contextMenu, setContextMenu] = useState(null);
   
   const toolbarRef = useRef(null);
   const mouseInactivityTimer = useRef(null);
@@ -253,47 +246,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     }
   };
   
-  // 处理右键菜单
+  // 处理右键点击 - 关闭图片
   const handleContextMenu = (e) => {
     e.preventDefault();
-    
-    // 设置右键菜单位置
-    setContextMenu({
-      mouseX: e.clientX + 2,
-      mouseY: e.clientY - 6,
-    });
+    onClose();
   };
 
-  // 关闭右键菜单
-  const handleCloseContextMenu = () => {
-    setContextMenu(null);
-  };
-
-  // 复制图片到剪贴板
-  const handleCopyImage = async () => {
-    if (currentImage) {
-      try {
-        // 使用Electron的clipboard API复制图片
-        await ipcRenderer.invoke('copy-image-to-clipboard', currentImage.path);
-      } catch (error) {
-        console.error('复制图片失败:', error);
-      }
-    }
-    handleCloseContextMenu();
-  };
-
-  // 顺时针旋转图片
-  const handleRotateImage = () => {
-    // 这里可以实现图片旋转功能
-    console.log('旋转图片');
-    handleCloseContextMenu();
-  };
-
-  // 切换全屏
-  const handleToggleFullScreen = () => {
-    toggleFullscreen();
-    handleCloseContextMenu();
-  };
   
   // 处理左键单击：界面分区导航（移除点击空白关闭）
   const handleClick = (e) => {
@@ -509,63 +467,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
         )}
         
       </Box>
-      
-      {/* 右键菜单 */}
-      <Menu
-        open={contextMenu !== null}
-        onClose={handleCloseContextMenu}
-        anchorReference="anchorPosition"
-        anchorPosition={
-          contextMenu !== null
-            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
-            : undefined
-        }
-        PaperProps={{
-          style: {
-            minWidth: 180,
-          },
-        }}
-      >
-        <MenuItem onClick={handleCopyImage}>
-          <ListItemIcon>
-            <ContentCopyIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>复制图片</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleShowInFolder}>
-          <ListItemIcon>
-            <FolderOpenIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>在文件夹中显示</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleToggleFavorite}>
-          <ListItemIcon>
-            {isCurrentImageFavorited ? 
-              <FavoriteIcon fontSize="small" color="error" /> : 
-              <FavoriteBorderIcon fontSize="small" />
-            }
-          </ListItemIcon>
-          <ListItemText>{isCurrentImageFavorited ? '取消收藏' : '收藏图片'}</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleRotateImage}>
-          <ListItemIcon>
-            <Rotate90DegreesCwIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>顺时针旋转90°</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleToggleFullScreen}>
-          <ListItemIcon>
-            {isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
-          </ListItemIcon>
-          <ListItemText>{isFullscreen ? '退出全屏' : '全屏显示'}</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={onClose}>
-          <ListItemIcon>
-            <CloseIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>关闭查看器</ListItemText>
-        </MenuItem>
-      </Menu>
     </Dialog>
   );
 }
