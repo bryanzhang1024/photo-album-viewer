@@ -110,32 +110,24 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
         clearTimeout(mouseInactivityTimer.current);
       }
       
-      // 检查鼠标是否在工具栏附近（顶部100px区域）
-      if (e.clientY < 100) {
+      // 检查鼠标是否在工具栏附近（顶部80px区域，提前检测）
+      if (e.clientY < 80) {
         setToolbarVisible(true);
       } else {
-        // 如果鼠标不在工具栏附近，设置定时器在2秒后隐藏工具栏
+        // 如果鼠标不在工具栏附近，设置定时器在1秒后隐藏工具栏
         mouseInactivityTimer.current = setTimeout(() => {
           setToolbarVisible(false);
-        }, 2000);
+        }, 1000);
       }
     };
     
-    // 初始显示工具栏
-    setToolbarVisible(true);
-    
-    // 设置定时器，3秒后如果鼠标不在工具栏附近则隐藏工具栏
-    const initialTimer = setTimeout(() => {
-      if (mousePosition.y >= 100) {
-        setToolbarVisible(false);
-      }
-    }, 3000);
+    // 初始隐藏工具栏
+    setToolbarVisible(false);
     
     window.addEventListener('mousemove', handleMouseMove);
     
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      clearTimeout(initialTimer);
       if (mouseInactivityTimer.current) {
         clearTimeout(mouseInactivityTimer.current);
       }
@@ -337,10 +329,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.7)',
           top: 0,
           zIndex: 1100,
-          transition: 'opacity 0.3s, transform 0.3s',
+          transition: 'opacity 0.2s ease-in-out, transform 0.2s ease-in-out',
           opacity: toolbarVisible ? 1 : 0,
           transform: toolbarVisible ? 'translateY(0)' : 'translateY(-100%)',
-          pointerEvents: toolbarVisible ? 'auto' : 'none'
+          pointerEvents: toolbarVisible ? 'auto' : 'none',
+          backdropFilter: 'blur(5px)',
+          WebkitBackdropFilter: 'blur(5px)'
         }}
       >
         <Toolbar variant="dense" sx={{ minHeight: '40px' }}>

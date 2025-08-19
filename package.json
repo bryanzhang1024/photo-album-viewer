@@ -1,6 +1,6 @@
 {
   "name": "photo-album-viewer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "照片相簿浏览器 - 穿透多层文件夹查看底层相簿",
   "main": "src/main/main.js",
   "scripts": {
