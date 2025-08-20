@@ -11,12 +11,18 @@ import {
   Paper,
   Button,
   Divider,
-  Container
+  Container,
+  IconButton,
+  AppBar,
+  Toolbar
 } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../contexts/SettingsContext';
 
 function SettingsPage() {
   const { settings, updateSetting, resetSettings } = useSettings();
+  const navigate = useNavigate();
 
   const handleToggle = (key) => (event) => {
     updateSetting(key, event.target.checked);
@@ -27,10 +33,24 @@ function SettingsPage() {
   };
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        设置
-      </Typography>
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <AppBar position="static" elevation={0}>
+        <Toolbar>
+          <IconButton 
+            edge="start" 
+            color="inherit" 
+            onClick={() => navigate(-1)}
+            sx={{ mr: 2 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            设置
+          </Typography>
+        </Toolbar>
+      </AppBar>
+      
+      <Container maxWidth="md" sx={{ py: 4, flexGrow: 1 }}>
       
       <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
@@ -109,6 +129,7 @@ function SettingsPage() {
         </Box>
       </Paper>
     </Container>
+    </Box>
   );
 }
 

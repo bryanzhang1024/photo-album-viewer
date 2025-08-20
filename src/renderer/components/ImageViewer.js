@@ -189,6 +189,29 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     }
   };
 
+  // 计算旋转后的图片尺寸，使其填满屏幕
+  const calculateRotatedDimensions = () => {
+    const rotation = calculateRotation();
+    const isRotated = Math.abs(rotation) % 180 !== 0;
+    
+    if (!isRotated) {
+      return {
+        width: `${zoomLevel * 100}%`,
+        height: `${zoomLevel * 100}%`,
+        objectFit: 'contain'
+      };
+    }
+    
+    // 旋转90度后，需要交换宽高比例
+    return {
+      width: `${zoomLevel * 100}vh`,
+      height: `${zoomLevel * 100}vw`,
+      objectFit: 'cover',
+      maxWidth: '100vh',
+      maxHeight: '100vw'
+    };
+  };
+
   // 计算旋转角度
   const calculateRotation = () => {
     let rotation = manualRotation;
@@ -520,13 +543,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
             alt={currentImage.name}
             onLoad={(e) => detectImageOrientation(e.target)}
             style={{ 
-              maxWidth: `${zoomLevel * 100}%`,
-              maxHeight: `${zoomLevel * 100}%`,
-              objectFit: 'contain',
-              transition: zoomLevel === 1 ? 'transform 0.2s ease' : 'none',
+              ...calculateRotatedDimensions(),
+              transition: 'none',
               cursor: zoomLevel > 1 ? 'move' : 'default',
               transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${calculateRotation()}deg)`,
-              userSelect: 'none'
+              userSelect: 'none',
+              position: 'absolute'
             }}
             draggable={false}
           />
