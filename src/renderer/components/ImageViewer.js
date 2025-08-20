@@ -7,7 +7,8 @@ import {
   Typography,
   Box,
   Fade,
-  Tooltip
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
@@ -39,6 +40,9 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [manualRotation, setManualRotation] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState('');
+  const [prevImageDimensions, setPrevImageDimensions] = useState({ width: 0, height: 0 });
+  const [prevRotation, setPrevRotation] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   
   const toolbarRef = useRef(null);
   const mouseInactivityTimer = useRef(null);
@@ -50,11 +54,51 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const { settings } = useSettings();
   
-  // 重置图片加载状态当图片切换时
+  // 预加载图片并平滑过渡
   useEffect(() => {
+    if (!currentImage) return;
+
+    setIsTransitioning(true);
     setImageLoaded(false);
-    setCurrentImageUrl(`file://${currentImage?.path}`);
+    
+    // 创建新的图片对象进行预加载
+    const img = new Image();
+    img.onload = () => {
+      detectImageOrientation(img);
+      setIsTransitioning(false);
+    };
+    img.onerror = () => {
+      setImageLoaded(true);
+      setIsTransitioning(false);
+    };
+    img.src = `file://${currentImage.path}`;
+    
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
   }, [currentImage]);
+
+  // 预加载相邻图片
+  useEffect(() => {
+    if (!currentImage || images.length <= 1) return;
+
+    const preloadImages = () => {
+      const preloadIndices = [
+        (currentIndex - 1 + images.length) % images.length,
+        (currentIndex + 1) % images.length
+      ];
+
+      preloadIndices.forEach(index => {
+        if (images[index]) {
+          const img = new Image();
+          img.src = `file://${images[index].path}`;
+        }
+      });
+    };
+
+    preloadImages();
+  }, [currentIndex, images]);
 
   // 添加键盘导航支持
   useEffect(() => {
@@ -242,13 +286,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       newIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
     }
     
-    // 重置状态但延迟显示，避免闪烁
-    setImageLoaded(false);
-    setZoomLevel(1);
-    setDragOffset({ x: 0, y: 0 });
-    setManualRotation(0);
-    setIsVertical(false);
-    setImageDimensions({ width: 0, height: 0 });
     onIndexChange(newIndex);
   };
 
@@ -267,13 +304,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       randomIndex = Math.floor(Math.random() * images.length);
     } while (randomIndex === currentIndex);
     
-    // 重置状态但延迟显示，避免闪烁
-    setImageLoaded(false);
-    setZoomLevel(1);
-    setDragOffset({ x: 0, y: 0 });
-    setManualRotation(0);
-    setIsVertical(false);
-    setImageDimensions({ width: 0, height: 0 });
     onIndexChange(randomIndex);
   };
   
@@ -567,15 +597,23 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           />
         )}
         
-        {!imageLoaded && currentImage && (
+        {(!imageLoaded || isTransitioning) && currentImage && (
           <Box sx={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: '1.2rem'
+            flexDirection: 'column',
+            color: 'rgba(255, 255, 255, 0.7)',
+            gap: 2
           }}>
-            加载中...
+            <CircularProgress size={40} thickness={4} sx={{ color: 'rgba(255, 255, 255, 0.5)' }} />
+            <Typography variant="body2" sx={{ 
+              fontSize: '0.9rem',
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontWeight: 300
+            }}>
+              正在加载...
+            </Typography>
           </Box>
         )}
       </Box>
