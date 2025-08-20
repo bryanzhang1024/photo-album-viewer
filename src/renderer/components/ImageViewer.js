@@ -37,6 +37,8 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [isVertical, setIsVertical] = useState(false);
   const [manualRotation, setManualRotation] = useState(0);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState('');
   
   const toolbarRef = useRef(null);
   const mouseInactivityTimer = useRef(null);
@@ -48,6 +50,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const { settings } = useSettings();
   
+  // 重置图片加载状态当图片切换时
+  useEffect(() => {
+    setImageLoaded(false);
+    setCurrentImageUrl(`file://${currentImage?.path}`);
+  }, [currentImage]);
+
   // 添加键盘导航支持
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -186,6 +194,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
         width: img.naturalWidth,
         height: img.naturalHeight
       });
+      setImageLoaded(true);
     }
   };
 
@@ -233,7 +242,8 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       newIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
     }
     
-    // 重置缩放、拖动和旋转状态
+    // 重置状态但延迟显示，避免闪烁
+    setImageLoaded(false);
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
     setManualRotation(0);
@@ -257,7 +267,8 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       randomIndex = Math.floor(Math.random() * images.length);
     } while (randomIndex === currentIndex);
     
-    // 重置缩放、拖动和旋转状态
+    // 重置状态但延迟显示，避免闪烁
+    setImageLoaded(false);
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
     setManualRotation(0);
@@ -548,12 +559,25 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               cursor: zoomLevel > 1 ? 'move' : 'default',
               transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${calculateRotation()}deg)`,
               userSelect: 'none',
-              position: 'absolute'
+              position: 'absolute',
+              opacity: imageLoaded ? 1 : 0,
+              visibility: imageLoaded ? 'visible' : 'hidden'
             }}
             draggable={false}
           />
         )}
         
+        {!imageLoaded && currentImage && (
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'rgba(255, 255, 255, 0.5)',
+            fontSize: '1.2rem'
+          }}>
+            加载中...
+          </Box>
+        )}
       </Box>
     </Dialog>
   );
