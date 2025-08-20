@@ -30,6 +30,7 @@ import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import CasinoIcon from '@mui/icons-material/Casino';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import SettingsIcon from '@mui/icons-material/Settings';
 import AlbumCard from '../components/AlbumCard';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css';
@@ -626,6 +627,16 @@ function HomePage({ colorMode }) {
             >
               <RefreshIcon sx={{ fontSize: '1.2rem' }} />
             </IconButton>
+            
+            <Tooltip title="设置">
+              <IconButton 
+                color="inherit" 
+                onClick={() => navigate('/settings')}
+                size="small"
+              >
+                <SettingsIcon sx={{ fontSize: '1.2rem' }} />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Toolbar>
       </AppBar>

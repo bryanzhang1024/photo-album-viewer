@@ -20,7 +20,10 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
+import RotateLeftIcon from '@mui/icons-material/RotateLeft';
+import RotateRightIcon from '@mui/icons-material/RotateRight';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { useSettings } from '../contexts/SettingsContext';
 const { ipcRenderer } = window.require('electron');
 
 function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
@@ -31,14 +34,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [isDragging, setIsDragging] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(true);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+  const [isVertical, setIsVertical] = useState(false);
+  const [manualRotation, setManualRotation] = useState(0);
   
   const toolbarRef = useRef(null);
   const mouseInactivityTimer = useRef(null);
+  const imgRef = useRef(null);
   
   const currentImage = images[currentIndex];
   
-  // 使用收藏上下文
+  // 使用收藏上下文和设置上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
+  const { settings } = useSettings();
   
   // 添加键盘导航支持
   useEffect(() => {
@@ -79,6 +87,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           break;
         case 'r':
           handleRandomImage();
+          break;
+        case 'q':
+          handleManualRotate('left');
+          break;
+        case 'e':
+          handleManualRotate('right');
           break;
         default:
           break;
@@ -163,6 +177,30 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     }
   };
   
+  // 检测图片是否为竖屏
+  const detectImageOrientation = (img) => {
+    if (img && img.naturalWidth && img.naturalHeight) {
+      const isVerticalImg = img.naturalHeight > img.naturalWidth;
+      setIsVertical(isVerticalImg);
+      setImageDimensions({
+        width: img.naturalWidth,
+        height: img.naturalHeight
+      });
+    }
+  };
+
+  // 计算旋转角度
+  const calculateRotation = () => {
+    let rotation = manualRotation;
+    
+    if (settings.autoRotateVerticalImages && isVertical) {
+      const autoRotation = settings.rotationDirection === 'right' ? 90 : -90;
+      rotation += autoRotation;
+    }
+    
+    return rotation;
+  };
+
   // 导航到上一张/下一张图片
   const handleNavigate = (direction) => {
     let newIndex;
@@ -172,10 +210,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       newIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
     }
     
-    // 重置缩放和拖动状态
+    // 重置缩放、拖动和旋转状态
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
+    setManualRotation(0);
+    setIsVertical(false);
+    setImageDimensions({ width: 0, height: 0 });
     onIndexChange(newIndex);
+  };
+
+  // 手动旋转图片
+  const handleManualRotate = (direction) => {
+    const rotationAmount = direction === 'right' ? 90 : -90;
+    setManualRotation(prev => prev + rotationAmount);
   };
 
   // 随机选择一张图片
@@ -187,9 +234,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       randomIndex = Math.floor(Math.random() * images.length);
     } while (randomIndex === currentIndex);
     
-    // 重置缩放和拖动状态
+    // 重置缩放、拖动和旋转状态
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
+    setManualRotation(0);
+    setIsVertical(false);
+    setImageDimensions({ width: 0, height: 0 });
     onIndexChange(randomIndex);
   };
   
@@ -409,9 +459,29 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               color="inherit" 
               onClick={() => handleZoom(1.2)} 
               size="small"
-              sx={{ mr: 1 }}
+              sx={{ mr: 0.5 }}
             >
               <ZoomInIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="向左旋转 (Q)">
+            <IconButton 
+              color="inherit" 
+              onClick={() => handleManualRotate('left')} 
+              size="small"
+              sx={{ mr: 0.5 }}
+            >
+              <RotateLeftIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="向右旋转 (E)">
+            <IconButton 
+              color="inherit" 
+              onClick={() => handleManualRotate('right')} 
+              size="small"
+              sx={{ mr: 1 }}
+            >
+              <RotateRightIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title={isFullscreen ? "退出全屏 (F)" : "全屏 (F)"}>
@@ -445,15 +515,17 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       >
         {currentImage && (
           <img 
+            ref={imgRef}
             src={`file://${currentImage.path}`}
             alt={currentImage.name}
+            onLoad={(e) => detectImageOrientation(e.target)}
             style={{ 
               maxWidth: `${zoomLevel * 100}%`,
               maxHeight: `${zoomLevel * 100}%`,
               objectFit: 'contain',
               transition: zoomLevel === 1 ? 'transform 0.2s ease' : 'none',
               cursor: zoomLevel > 1 ? 'move' : 'default',
-              transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+              transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${calculateRotation()}deg)`,
               userSelect: 'none'
             }}
             draggable={false}

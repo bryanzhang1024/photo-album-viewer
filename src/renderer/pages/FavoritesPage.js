@@ -28,6 +28,7 @@ import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useFavorites } from '../contexts/FavoritesContext';
 import ImageViewer from '../components/ImageViewer';
 import AlbumCard from '../components/AlbumCard';
@@ -394,6 +395,16 @@ function FavoritesPage({ colorMode }) {
             >
               <RefreshIcon sx={{ fontSize: '1.2rem' }} />
             </IconButton>
+            
+            <Tooltip title="设置">
+              <IconButton 
+                color="inherit" 
+                onClick={() => navigate('/settings')}
+                size="small"
+              >
+                <SettingsIcon sx={{ fontSize: '1.2rem' }} />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Toolbar>
         

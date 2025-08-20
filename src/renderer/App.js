@@ -7,7 +7,9 @@ import HomePage from './pages/HomePage';
 import AlbumPage from './pages/AlbumPage';
 import FavoritesPage from './pages/FavoritesPage';
 import TestPage from './pages/TestPage';
+import SettingsPage from './pages/SettingsPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 
 // 创建一个上下文来保存滚动位置
 export const ScrollPositionContext = createContext({
@@ -107,16 +109,19 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <FavoritesProvider>
-        <ScrollPositionContext.Provider value={scrollContext}>
-          <Routes>
-            <Route path="/" element={<HomePage colorMode={colorMode} />} />
-            <Route path="/test" element={<TestPage colorMode={colorMode} />} />
-            <Route path="/album/:albumPath" element={<AlbumPage colorMode={colorMode} />} />
-            <Route path="/favorites" element={<FavoritesPage colorMode={colorMode} />} />
-          </Routes>
-        </ScrollPositionContext.Provider>
-      </FavoritesProvider>
+      <SettingsProvider>
+        <FavoritesProvider>
+          <ScrollPositionContext.Provider value={scrollContext}>
+            <Routes>
+              <Route path="/" element={<HomePage colorMode={colorMode} />} />
+              <Route path="/test" element={<TestPage colorMode={colorMode} />} />
+              <Route path="/album/:albumPath" element={<AlbumPage colorMode={colorMode} />} />
+              <Route path="/favorites" element={<FavoritesPage colorMode={colorMode} />} />
+              <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
+            </Routes>
+          </ScrollPositionContext.Provider>
+        </FavoritesProvider>
+      </SettingsProvider>
     </ThemeProvider>
   );
 }
