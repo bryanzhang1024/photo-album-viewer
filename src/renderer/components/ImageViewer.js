@@ -380,18 +380,27 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   // 用于滚轮缩放的引用
   const lastWheelTimeRef = useRef(0);
 
-  // 处理鼠标滚轮：用于缩放图片
+  // 处理鼠标滚轮：ctrl+滚轮缩放，普通滚轮翻页
   const handleWheel = (e) => {
     e.preventDefault();
     
     const now = Date.now();
     const timeDiff = now - lastWheelTimeRef.current;
     
-    // 滚轮用于缩放，不再是翻页
-    if (timeDiff > 50) { // 50ms防抖
-      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1; // 向下滚动缩小，向上滚动放大
-      handleZoom(zoomFactor);
-      lastWheelTimeRef.current = now;
+    if (e.ctrlKey) {
+      // ctrl+滚轮：缩放
+      if (timeDiff > 50) { // 50ms防抖
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1; // 向下滚动缩小，向上滚动放大
+        handleZoom(zoomFactor);
+        lastWheelTimeRef.current = now;
+      }
+    } else {
+      // 普通滚轮：翻页
+      if (timeDiff > 100) { // 100ms防抖，防止翻页过快
+        const direction = e.deltaY > 0 ? 'next' : 'prev'; // 向下滚动下一张，向上滚动上一张
+        handleNavigate(direction);
+        lastWheelTimeRef.current = now;
+      }
     }
   };
   
@@ -493,7 +502,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               <FolderOpenIcon />
             </IconButton>
           </Tooltip>
-          <Tooltip title="缩小 (-)">
+          <Tooltip title="缩小 (Ctrl+滚轮向下)">
             <IconButton 
               color="inherit" 
               onClick={() => handleZoom(0.8)} 
@@ -518,7 +527,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               </Typography>
             </IconButton>
           </Tooltip>
-          <Tooltip title="放大 (+)">
+          <Tooltip title="放大 (Ctrl+滚轮向上)">
             <IconButton 
               color="inherit" 
               onClick={() => handleZoom(1.2)} 
