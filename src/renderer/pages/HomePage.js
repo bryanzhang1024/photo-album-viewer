@@ -32,6 +32,7 @@ import CasinoIcon from '@mui/icons-material/Casino';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AlbumCard from '../components/AlbumCard';
+import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css';
 import { ScrollPositionContext } from '../App';
@@ -500,6 +501,22 @@ function HomePage({ colorMode }) {
       setError('没有可用的相簿进行随机选择');
     }
   };
+
+  // 处理导航面板的文件夹导航
+  const handleNavigationPanelNavigate = (folderPath) => {
+    // 保存当前滚动位置
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+    
+    // 检查是否是当前已经扫描的路径的子目录
+    if (folderPath && folderPath !== rootPath) {
+      // 导航到新的文件夹 - 设置为新的根路径并重新扫描
+      setRootPath(folderPath);
+      localStorage.setItem(windowStorageKey, folderPath);
+      scanDirectory(folderPath);
+    }
+  };
   
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -706,6 +723,14 @@ function HomePage({ colorMode }) {
           </Box>
         )}
       </Box>
+
+      {/* 浮动导航面板 */}
+      <FloatingNavigationPanel
+        currentPath={rootPath}
+        onNavigate={handleNavigationPanelNavigate}
+        rootPath={rootPath}
+        isVisible={!!rootPath} // 只有选择了根路径后才显示
+      />
       
       <Snackbar 
         open={!!error} 
