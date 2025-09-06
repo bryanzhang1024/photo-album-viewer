@@ -153,3 +153,85 @@ export const normalizePath = (filePath) => {
   // Unix风格路径
   return filePath.replace(/[\\\/]+/g, '/');
 };
+
+/**
+ * 获取面包屑导航路径
+ * @param {string} currentPath 当前路径
+ * @param {string} rootPath 根路径
+ * @returns {Array<{name: string, path: string}>}
+ */
+export const getBreadcrumbPaths = (currentPath, rootPath) => {
+  if (!currentPath) return [];
+  
+  const breadcrumbs = [];
+  let relativePath = rootPath ? getRelativePath(rootPath, currentPath) : currentPath;
+  
+  // 如果是根路径，直接返回根目录
+  if (!relativePath || relativePath === '.') {
+    breadcrumbs.push({
+      name: getBasename(rootPath || currentPath),
+      path: rootPath || currentPath
+    });
+    return breadcrumbs;
+  }
+  
+  // 添加根目录
+  if (rootPath) {
+    breadcrumbs.push({
+      name: getBasename(rootPath),
+      path: rootPath
+    });
+  }
+  
+  // 构建面包屑路径
+  const parts = relativePath.split('/').filter(Boolean);
+  let currentBreadcrumbPath = rootPath || '';
+  
+  parts.forEach((part) => {
+    currentBreadcrumbPath = joinPath(currentBreadcrumbPath, part);
+    breadcrumbs.push({
+      name: part,
+      path: currentBreadcrumbPath
+    });
+  });
+  
+  return breadcrumbs;
+};
+
+/**
+ * 检查是否为支持的图片格式
+ * @param {string} filePath 
+ * @returns {boolean}
+ */
+export const isImageFile = (filePath) => {
+  if (!filePath) return false;
+  const ext = filePath.toLowerCase();
+  const dotIndex = ext.lastIndexOf('.');
+  if (dotIndex === -1) return false;
+  
+  const extension = ext.substring(dotIndex);
+  const supportedFormats = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
+  return supportedFormats.includes(extension);
+};
+
+/**
+ * 生成显示路径（截断长路径）
+ * @param {string} fullPath 完整路径
+ * @param {number} maxLength 最大长度
+ * @returns {string}
+ */
+export const getDisplayPath = (fullPath, maxLength = 50) => {
+  if (!fullPath || fullPath.length <= maxLength) {
+    return fullPath;
+  }
+  
+  const parts = fullPath.split(/[\\\/]/).filter(Boolean);
+  if (parts.length <= 2) {
+    return fullPath;
+  }
+  
+  // 保留开头和结尾，中间用...替代
+  const start = parts.slice(0, 2).join('/');
+  const end = parts.slice(-2).join('/');
+  return `${start}/.../${end}`;
+};

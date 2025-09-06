@@ -644,95 +644,420 @@ app.on('activate', () => {
   }
 });
 
-// 扫描文件夹，查找最底层含图片的文件夹
-async function scanDirectories(rootPath) {
-  const albums = [];
+// 新的智能导航扫描系统
+const SCAN_CONFIG = {
+  SAMPLE_LIMIT: 20,      // 采样文件限制
+  MAX_PREVIEW_SAMPLES: 4, // 最大预览样本
+  MAX_CHILD_SCAN: 10,    // 最大子目录扫描
+  TIMEOUT_MS: 2000,      // 超时时间
+  PARALLEL_LIMIT: 5      // 并行限制
+};
+
+const NODE_TYPES = {
+  FOLDER: 'folder',
+  ALBUM: 'album', 
+  EMPTY: 'empty'
+};
+
+/**
+ * 智能扫描单层目录，返回导航节点
+ * @param {string} targetPath - 目标路径
+ * @returns {Promise<Object>} 导航响应
+ */
+async function scanNavigationLevel(targetPath) {
+  const startTime = Date.now();
   
-  async function processDirectory(dirPath, relativePath = '') {
-    try {
-      const entries = await readdir(dirPath);
-      
-      // 检查是否为空文件夹
-      if (entries.length === 0) return;
-      
-      // 检查此文件夹是否包含图片和子文件夹
-      let hasImages = false;
-      let hasSubDirs = false;
-      let imageFiles = [];
-      
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry);
-        try {
-          const entryStats = await stat(fullPath);
-          
-          if (entryStats.isDirectory()) {
-            hasSubDirs = true;
-          } else if (entryStats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
-            hasImages = true;
-            imageFiles.push({
-              path: fullPath,
-              name: entry,
-              size: entryStats.size,
-              lastModified: entryStats.mtime
-            });
-          }
-        } catch (err) {
-          console.error(`无法访问 ${fullPath}:`, err);
-          // 跳过无法访问的文件或目录
-          continue;
-        }
-      }
-      
-      // 如果有图片，则当前目录是一个相簿（无论是否有子目录）
-      if (hasImages) {
-        // 只获取前4张图片作为预览
-        const previewImages = imageFiles.slice(0, 4);
-        
-        albums.push({
-          name: path.basename(dirPath),
-          path: dirPath,
-          relativePath: relativePath || path.basename(dirPath),
-          previewImages,
-          imageCount: imageFiles.length
-        });
-      }
-      
-      // 如果有子目录，则递归处理子目录
-      if (hasSubDirs) {
-        // 并行处理子目录以提高性能
-        const subdirPromises = [];
-        
-        for (const entry of entries) {
-          const fullPath = path.join(dirPath, entry);
-          try {
-            const entryStats = await stat(fullPath);
-            
-            if (entryStats.isDirectory()) {
-              subdirPromises.push(
-                processDirectory(
-                  fullPath,
-                  relativePath ? path.join(relativePath, entry) : entry
-                )
-              );
-            }
-          } catch (err) {
-            console.error(`无法访问 ${fullPath}:`, err);
-            continue;
-          }
-        }
-        
-        // 等待所有子目录处理完成
-        if (subdirPromises.length > 0) {
-          await Promise.all(subdirPromises);
-        }
-      }
-    } catch (error) {
-      console.error(`Error processing directory ${dirPath}:`, error);
+  try {
+    const entries = await readdir(targetPath);
+    if (entries.length === 0) {
+      return createNavigationResponse([], targetPath, path.dirname(targetPath), []);
     }
+
+    // 并行处理目录项
+    const nodePromises = entries
+      .slice(0, 100) // 限制处理数量防止过载
+      .map(entry => processNavigationEntry(targetPath, entry));
+    
+    const nodes = (await Promise.all(nodePromises)).filter(Boolean);
+    
+    // 按类型和名称排序：文件夹在前，相册在后
+    nodes.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === NODE_TYPES.FOLDER ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
+
+    const parentPath = path.dirname(targetPath);
+    const breadcrumbs = generateBreadcrumbs(targetPath);
+    
+    const response = createNavigationResponse(nodes, targetPath, parentPath, breadcrumbs);
+    response.metadata.scanTime = Date.now() - startTime;
+    
+    console.log(`智能扫描完成: ${targetPath}, 耗时: ${response.metadata.scanTime}ms, 节点: ${nodes.length}`);
+    return response;
+    
+  } catch (error) {
+    console.error(`扫描失败 ${targetPath}:`, error);
+    return createErrorResponse(error.message, targetPath);
+  }
+}
+
+/**
+ * 处理单个目录项，返回导航节点
+ */
+async function processNavigationEntry(parentPath, entry) {
+  const fullPath = path.join(parentPath, entry);
+  
+  try {
+    const stats = await stat(fullPath);
+    
+    if (stats.isFile()) {
+      return null; // 跳过文件
+    }
+    
+    if (!stats.isDirectory()) {
+      return null; // 跳过其他类型
+    }
+    
+    // 检查目录类型
+    const nodeType = await determineNodeType(fullPath);
+    
+    if (nodeType === NODE_TYPES.ALBUM) {
+      return createAlbumNode(fullPath, entry, await getAlbumStats(fullPath));
+    } else if (nodeType === NODE_TYPES.FOLDER) {
+      return createFolderNode(fullPath, entry, await getFolderStats(fullPath));
+    }
+    
+    return null;
+    
+  } catch (error) {
+    console.warn(`跳过无法访问的项目 ${fullPath}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * 确定节点类型：文件夹还是相册
+ */
+async function determineNodeType(dirPath) {
+  try {
+    const entries = await readdir(dirPath);
+    if (entries.length === 0) return NODE_TYPES.EMPTY;
+    
+    // 快速检查：只看前20个项目
+    const sampleEntries = entries.slice(0, SCAN_CONFIG.SAMPLE_LIMIT);
+    
+    for (const entry of sampleEntries) {
+      const entryPath = path.join(dirPath, entry);
+      try {
+        const stats = await stat(entryPath);
+        
+        if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+          return NODE_TYPES.ALBUM; // 发现图片，是相册
+        }
+      } catch {
+        continue; // 跳过无法访问的文件
+      }
+    }
+    
+    return NODE_TYPES.FOLDER; // 没有直接图片，是文件夹
+    
+  } catch (error) {
+    console.warn(`检查节点类型失败 ${dirPath}:`, error.message);
+    return NODE_TYPES.EMPTY;
+  }
+}
+
+/**
+ * 获取相册统计信息
+ */
+async function getAlbumStats(dirPath) {
+  try {
+    const entries = await readdir(dirPath);
+    const imageFiles = [];
+    
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry);
+      try {
+        const stats = await stat(entryPath);
+        
+        if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+          imageFiles.push({
+            path: entryPath,
+            name: entry,
+            size: stats.size,
+            lastModified: stats.mtime
+          });
+        }
+      } catch {
+        continue; // 跳过无法访问的文件
+      }
+    }
+    
+    // 按修改时间排序，取前4张作为预览
+    imageFiles.sort((a, b) => b.lastModified - a.lastModified);
+    const previewImages = imageFiles.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
+    
+    return {
+      imageCount: imageFiles.length,
+      previewImages: previewImages.map(img => img.path),
+      firstImageDate: imageFiles.length > 0 ? imageFiles[imageFiles.length - 1].lastModified : null,
+      lastImageDate: imageFiles.length > 0 ? imageFiles[0].lastModified : null,
+      totalSize: imageFiles.reduce((sum, img) => sum + img.size, 0),
+      lastModified: imageFiles.length > 0 ? imageFiles[0].lastModified : new Date()
+    };
+    
+  } catch (error) {
+    console.warn(`获取相册统计失败 ${dirPath}:`, error.message);
+    return {
+      imageCount: 0,
+      previewImages: [],
+      firstImageDate: null,
+      lastImageDate: null,
+      totalSize: 0,
+      lastModified: new Date()
+    };
+  }
+}
+
+/**
+ * 获取文件夹统计信息（采样估算）
+ */
+async function getFolderStats(dirPath) {
+  try {
+    const entries = await readdir(dirPath);
+    const sampleSize = Math.min(entries.length, SCAN_CONFIG.MAX_CHILD_SCAN);
+    const sampleEntries = entries.slice(0, sampleSize);
+    
+    let folderCount = 0;
+    let estimatedImages = 0;
+    let previewSamples = [];
+    let hasSubAlbums = false;
+    let lastModified = new Date(0);
+    
+    // 并行处理样本
+    const promises = sampleEntries.map(async (entry) => {
+      const entryPath = path.join(dirPath, entry);
+      try {
+        const stats = await stat(entryPath);
+        
+        if (stats.isDirectory()) {
+          folderCount++;
+          
+          // 快速检查子目录是否包含图片
+          const quickCheck = await quickScanForImages(entryPath);
+          if (quickCheck.hasImages) {
+            hasSubAlbums = true;
+            estimatedImages += quickCheck.imageCount;
+            previewSamples.push(...quickCheck.samples.slice(0, 2));
+          }
+          
+          if (stats.mtime > lastModified) {
+            lastModified = stats.mtime;
+          }
+        }
+      } catch {
+        // 跳过无法访问的目录
+      }
+    });
+    
+    await Promise.all(promises);
+    
+    // 基于采样估算总数
+    if (folderCount > 0 && sampleSize < entries.length) {
+      const ratio = entries.length / sampleSize;
+      estimatedImages = Math.round(estimatedImages * ratio);
+    }
+    
+    return {
+      childFolders: entries.filter(entry => {
+        try {
+          return require('fs').statSync(path.join(dirPath, entry)).isDirectory();
+        } catch {
+          return false;
+        }
+      }).length,
+      estimatedImages,
+      previewSamples: previewSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES),
+      hasSubAlbums,
+      hasMore: entries.length > sampleSize,
+      sampleSize,
+      lastModified
+    };
+    
+  } catch (error) {
+    console.warn(`获取文件夹统计失败 ${dirPath}:`, error.message);
+    return {
+      childFolders: 0,
+      estimatedImages: 0,
+      previewSamples: [],
+      hasSubAlbums: false,
+      hasMore: false,
+      sampleSize: 0,
+      lastModified: new Date()
+    };
+  }
+}
+
+/**
+ * 快速扫描检查目录是否包含图片
+ */
+async function quickScanForImages(dirPath) {
+  try {
+    const entries = await readdir(dirPath);
+    const sampleEntries = entries.slice(0, 10); // 只检查前10个
+    
+    const samples = [];
+    let imageCount = 0;
+    
+    for (const entry of sampleEntries) {
+      const entryPath = path.join(dirPath, entry);
+      try {
+        const stats = await stat(entryPath);
+        
+        if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+          samples.push(entryPath);
+          imageCount++;
+          
+          if (samples.length >= 2) break; // 只需要2个样本
+        }
+      } catch {
+        continue;
+      }
+    }
+    
+    // 如果样本不足，估算总数
+    if (imageCount > 0 && sampleEntries.length === 10 && entries.length > 10) {
+      imageCount = Math.round(imageCount * (entries.length / 10));
+    }
+    
+    return {
+      hasImages: samples.length > 0,
+      imageCount,
+      samples
+    };
+    
+  } catch {
+    return {
+      hasImages: false,
+      imageCount: 0,
+      samples: []
+    };
+  }
+}
+
+/**
+ * 生成面包屑导航
+ */
+function generateBreadcrumbs(currentPath) {
+  const breadcrumbs = [];
+  const parts = currentPath.split(path.sep).filter(Boolean);
+  
+  let buildPath = '';
+  for (let i = 0; i < parts.length; i++) {
+    buildPath = path.join(buildPath, parts[i]);
+    if (buildPath === '') buildPath = path.sep; // 处理根路径
+    
+    breadcrumbs.push({
+      name: parts[i],
+      path: buildPath
+    });
   }
   
-  await processDirectory(rootPath);
-  return albums;
+  return breadcrumbs;
+}
+
+/**
+ * 创建导航响应
+ */
+function createNavigationResponse(nodes, currentPath, parentPath, breadcrumbs) {
+  return {
+    success: true,
+    nodes,
+    currentPath,
+    parentPath,
+    breadcrumbs,
+    error: null,
+    metadata: {
+      totalNodes: nodes.length,
+      folderCount: nodes.filter(n => n.type === NODE_TYPES.FOLDER).length,
+      albumCount: nodes.filter(n => n.type === NODE_TYPES.ALBUM).length,
+      totalImages: nodes.reduce((sum, n) => sum + (n.imageCount || 0), 0),
+      scanTime: 0 // 将在调用处设置
+    }
+  };
+}
+
+/**
+ * 创建错误响应
+ */
+function createErrorResponse(message, currentPath) {
+  return {
+    success: false,
+    nodes: [],
+    currentPath,
+    parentPath: '',
+    breadcrumbs: [],
+    error: {
+      message,
+      timestamp: Date.now()
+    },
+    metadata: null
+  };
+}
+
+/**
+ * 创建文件夹节点
+ */
+function createFolderNode(path, name, stats) {
+  return {
+    path,
+    name,
+    type: NODE_TYPES.FOLDER,
+    hasImages: false,
+    imageCount: stats.estimatedImages || 0,
+    childFolders: stats.childFolders || 0,
+    samples: stats.previewSamples || [],
+    lastModified: stats.lastModified || new Date(),
+    // 文件夹特有属性
+    estimatedImages: stats.estimatedImages || 0,
+    previewSamples: stats.previewSamples || [],
+    hasSubAlbums: stats.hasSubAlbums || false,
+    quickStats: {
+      hasMore: stats.hasMore || false,
+      sampleSize: stats.sampleSize || 0
+    }
+  };
+}
+
+/**
+ * 创建相册节点
+ */
+function createAlbumNode(path, name, stats) {
+  return {
+    path,
+    name,
+    type: NODE_TYPES.ALBUM,
+    hasImages: true,
+    imageCount: stats.imageCount || 0,
+    childFolders: 0,
+    samples: stats.previewImages || [],
+    lastModified: stats.lastModified || new Date(),
+    // 相册特有属性
+    previewImages: stats.previewImages || [],
+    firstImageDate: stats.firstImageDate || null,
+    lastImageDate: stats.lastImageDate || null,
+    totalSize: stats.totalSize || 0
+  };
+}
+
+// 保留旧的扫描函数用于兼容性，标记为已废弃
+async function scanDirectories(rootPath) {
+  console.warn('scanDirectories 已废弃，请使用 scanNavigationLevel');
+  const response = await scanNavigationLevel(rootPath);
+  // 转换为旧格式以保持兼容性
+  return response.nodes.filter(node => node.type === NODE_TYPES.ALBUM);
 }
 
 // 处理选择文件夹请求
@@ -752,10 +1077,23 @@ ipcMain.handle('select-directory', async () => {
   }
 });
 
-// 处理扫描文件夹请求
+// 新的智能导航API
+ipcMain.handle('scan-navigation-level', async (event, targetPath) => {
+  try {
+    console.log(`开始智能扫描: ${targetPath}`);
+    const response = await scanNavigationLevel(targetPath);
+    console.log(`扫描完成: ${response.metadata ? `${response.metadata.totalNodes} 个节点，耗时 ${response.metadata.scanTime}ms` : '扫描失败'}`);
+    return response;
+  } catch (error) {
+    console.error('智能扫描错误:', error);
+    return createErrorResponse(error.message, targetPath);
+  }
+});
+
+// 处理扫描文件夹请求（兼容性保留）
 ipcMain.handle('scan-directory', async (event, rootPath) => {
   try {
-    console.log(`开始扫描文件夹: ${rootPath}`);
+    console.log(`开始扫描文件夹: ${rootPath}（兼容模式）`);
     const startTime = Date.now();
     const albums = await scanDirectories(rootPath);
     const endTime = Date.now();

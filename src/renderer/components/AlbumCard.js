@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import ImageIcon from '@mui/icons-material/Image';
+import FolderIcon from '@mui/icons-material/Folder';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -35,26 +36,67 @@ const observers = new Map();
 // 全局请求映射 - 防止重复请求
 const thumbnailRequests = new Map();
 
-// 相簿预览卡片组件
-function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = false, isFavoritesPage = false }) {
+// 相簿/文件夹预览卡片组件 - 重构版本
+function AlbumCard({ 
+  node,           // 新的导航节点数据
+  album,          // 兼容性：旧的相册数据 
+  displayPath, 
+  onClick, 
+  isCompactMode, 
+  isVisible = false, 
+  isFavoritesPage = false 
+}) {
   const [previewUrls, setPreviewUrls] = useState([]);
   const [loading, setLoading] = useState(true);
   const cardRef = useRef(null);
   const theme = useTheme();
   
+  // 数据兼容性处理：优先使用新的node数据，回退到旧的album数据
+  const cardData = useMemo(() => {
+    if (node) {
+      return {
+        path: node.path,
+        name: node.name,
+        type: node.type,
+        imageCount: node.imageCount,
+        samples: node.samples || node.previewSamples || [],
+        hasImages: node.hasImages,
+        childFolders: node.childFolders,
+        estimatedImages: node.estimatedImages
+      };
+    } else if (album) {
+      return {
+        path: album.path,
+        name: album.name,
+        type: 'album',
+        imageCount: album.imageCount,
+        samples: album.previewImages?.map(img => img.path) || [],
+        hasImages: true,
+        childFolders: 0,
+        estimatedImages: 0
+      };
+    }
+    return null;
+  }, [node, album]);
+  
   // 使用记忆化来缓存图片URLs
   const cacheKey = useMemo(() => {
-    if (!album?.path) return '';
-    return `album_preview_${album.path}`;
-  }, [album?.path]);
+    if (!cardData?.path) return '';
+    return `card_preview_${cardData.path}`;
+  }, [cardData?.path]);
   
   // 使用收藏上下文
   const { isAlbumFavorited, toggleAlbumFavorite } = useFavorites();
-  const isFavorited = album ? isAlbumFavorited(album.path) : false;
+  const isFavorited = cardData ? isAlbumFavorited(cardData.path) : false;
+  
+  // 如果没有有效数据，返回空组件
+  if (!cardData) {
+    return null;
+  }
   
   // 根据可见性加载预览图
   useEffect(() => {
-    if (!album || !ipcRenderer) {
+    if (!cardData || !ipcRenderer) {
       setLoading(false);
       return;
     }
@@ -73,7 +115,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     }
 
     // 预览图请求的唯一标识，用于防止重复请求
-    const requestId = `req_${album.path}`;
+    const requestId = `req_${cardData.path}`;
     
     // 检查是否已经发起了请求
     if (thumbnailRequests.has(requestId)) {
@@ -88,8 +130,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
         setLoading(true);
         
         // 获取预览图路径
-        const previews = album.previewImages || [];
-        const imagePaths = previews.slice(0, 4).map(image => image.path);
+        const imagePaths = cardData.samples ? cardData.samples.slice(0, 4) : [];
         
         if (imagePaths.length === 0) {
           setLoading(false);
@@ -134,7 +175,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     };
     
     loadPreviewImages();
-  }, [album, cacheKey, isVisible]);
+  }, [cardData, cacheKey, isVisible]);
   
   // 清理旧的会话缓存
   const clearOldSessionCache = () => {
@@ -158,9 +199,120 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
       <Skeleton variant="rectangular" width="100%" height="100%" />
     </Box>
   );
+
+  // 文件夹预览渲染
+  const renderFolderPreview = () => {
+    const hasPreviewImages = previewUrls.length > 0;
+    
+    return (
+      <Box sx={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        {/* 主要内容区域 */}
+        <Box sx={{ 
+          flex: 1, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          bgcolor: hasPreviewImages ? 'transparent' : 'rgba(0,0,0,0.03)'
+        }}>
+          {hasPreviewImages ? (
+            // 有预览图时的网格布局
+            <Box sx={{ 
+              width: '100%', 
+              height: '100%',
+              display: 'grid',
+              gridTemplateColumns: previewUrls.length === 1 ? '1fr' : '1fr 1fr',
+              gridTemplateRows: previewUrls.length <= 2 ? '1fr' : '1fr 1fr',
+              gap: '2px',
+              p: 1
+            }}>
+              {previewUrls.slice(0, 4).map((url, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    bgcolor: 'rgba(0,0,0,0.05)',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    position: 'relative'
+                  }}
+                >
+                  <img
+                    src={url}
+                    alt={`预览 ${index + 1}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover'
+                    }}
+                    loading="lazy"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                    }}
+                  />
+                </Box>
+              ))}
+            </Box>
+          ) : (
+            // 无预览图时的文件夹图标
+            <FolderIcon sx={{ 
+              fontSize: 64, 
+              color: 'primary.main',
+              opacity: 0.6
+            }} />
+          )}
+        </Box>
+
+        {/* 文件夹统计信息 */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            bgcolor: 'rgba(0,0,0,0.7)',
+            color: 'white',
+            borderRadius: '12px',
+            px: 1,
+            py: 0.5,
+            fontSize: '0.7rem',
+            fontWeight: 'medium',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5
+          }}
+        >
+          <FolderIcon sx={{ fontSize: '0.8rem' }} />
+          {cardData.childFolders || 0}
+        </Box>
+
+        {/* 图片数量标签（如果有的话） */}
+        {cardData.estimatedImages > 0 && (
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 8,
+              right: 8,
+              bgcolor: 'rgba(25, 118, 210, 0.8)', // primary.main with opacity
+              color: 'white',
+              borderRadius: '12px',
+              px: 1,
+              py: 0.5,
+              fontSize: '0.7rem',
+              fontWeight: 'medium'
+            }}
+          >
+            ~{cardData.estimatedImages} 张
+          </Box>
+        )}
+      </Box>
+    );
+  };
   
-  // 根据预览图数量返回不同的预览布局
+  // 根据节点类型和预览图数量返回不同的预览布局
   const renderPreview = () => {
+    if (!cardData) return null;
+
+    const isFolder = cardData.type === 'folder';
+    
     if (loading) {
       return (
         <Box sx={{ height: '100%', position: 'relative' }}>
@@ -169,6 +321,12 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
       );
     }
     
+    // 文件夹类型的特殊渲染
+    if (isFolder) {
+      return renderFolderPreview();
+    }
+    
+    // 相册类型的原有逻辑
     if (previewUrls.length === 0) {
       return (
         <Box 
@@ -190,7 +348,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
         <Box sx={{ height: '100%', position: 'relative' }}>
           <img 
             src={previewUrls[0]} 
-            alt={album.name} 
+            alt={cardData.name} 
             style={{ 
               width: '100%',
               height: '100%',
@@ -217,7 +375,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
               fontSize: '0.75rem'
             }}
           >
-            {album.imageCount || 0} 张
+            {cardData.imageCount || 0} 张
           </Box>
         </Box>
       );
@@ -230,7 +388,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
         <Box sx={{ flexGrow: 3, height: '100%', position: 'relative' }}>
           <img 
             src={previewUrls[0]} 
-            alt={`${album.name} 预览 1`} 
+            alt={`${cardData.name} 预览 1`} 
             style={{ 
               width: '100%',
               height: '100%',
@@ -330,7 +488,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
             fontWeight: 'medium'
           }}
         >
-          {album.imageCount || 0}
+          {cardData.imageCount || 0}
         </Box>
       </Box>
     );
@@ -339,8 +497,14 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
   // 处理收藏点击
   const handleFavoriteClick = (e) => {
     e.stopPropagation(); // 阻止事件冒泡，避免触发卡片点击
-    if (album) {
-      toggleAlbumFavorite(album);
+    if (cardData) {
+      // 为了兼容性，构造album格式
+      const albumForFavorite = {
+        path: cardData.path,
+        name: cardData.name,
+        imageCount: cardData.imageCount
+      };
+      toggleAlbumFavorite(albumForFavorite);
     }
   };
 
@@ -349,7 +513,7 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     e.stopPropagation(); // 阻止事件冒泡
     if (!ipcRenderer) return;
     
-    ipcRenderer.invoke('create-new-window', album.path)
+    ipcRenderer.invoke('create-new-window', cardData.path)
       .then(result => {
         if (result.success) {
           console.log('新窗口已创建');
@@ -366,12 +530,12 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     e.preventDefault();
     e.stopPropagation();
     
-    if (!album || !album.path) {
-      console.error('相簿数据不完整');
+    if (!cardData || !cardData.path) {
+      console.error('卡片数据不完整');
       return;
     }
 
-    console.log('右键菜单触发:', album.name, album.path);
+    console.log('右键菜单触发:', cardData.name, cardData.path);
 
     if (!ipcRenderer) {
       console.error('ipcRenderer 不可用');
@@ -396,8 +560,8 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
       `;
 
       const items = [
-        { text: '在新实例中查看此文件夹', action: handleNewInstance },
-        { text: isFavorited ? '取消收藏相簿' : '收藏相簿', action: () => handleFavoriteClick({ stopPropagation: () => {} }) },
+        { text: cardData.type === 'folder' ? '在新实例中查看此文件夹' : '在新实例中查看此相册', action: handleNewInstance },
+        { text: isFavorited ? '取消收藏' : '收藏', action: () => handleFavoriteClick({ stopPropagation: () => {} }) },
         { text: '在文件管理器中打开', action: handleShowInFolder }
       ];
 
@@ -477,8 +641,8 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     }
     
     try {
-      console.log('创建新实例:', album.path);
-      const result = await ipcRenderer.invoke('create-new-instance', album.path);
+      console.log('创建新实例:', cardData.path);
+      const result = await ipcRenderer.invoke('create-new-instance', cardData.path);
       console.log('创建结果:', result);
       if (!result.success) {
         alert(`创建失败: ${result.error}`);
@@ -497,8 +661,8 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
     }
     
     try {
-      console.log('显示文件夹:', album.path);
-      const result = await ipcRenderer.invoke('show-in-folder', album.path);
+      console.log('显示文件夹:', cardData.path);
+      const result = await ipcRenderer.invoke('show-in-folder', cardData.path);
       console.log('显示结果:', result);
       if (!result.success) {
         alert(`显示失败: ${result.error}`);
@@ -552,10 +716,10 @@ function AlbumCard({ album, displayPath, onClick, isCompactMode, isVisible = fal
                 variant="subtitle2" 
                 component="div" 
                 noWrap 
-                title={album.name}
+                title={cardData.name}
                 sx={{ fontWeight: 'medium' }}
               >
-                {album.name}
+                {cardData.name}
               </Typography>
               
               <Typography 

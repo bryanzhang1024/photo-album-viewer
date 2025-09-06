@@ -33,6 +33,7 @@ import CasinoIcon from '@mui/icons-material/Casino';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AlbumCard from '../components/AlbumCard';
+import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css';
@@ -57,6 +58,10 @@ function HomePage({ colorMode }) {
   const theme = useTheme();
   const [rootPath, setRootPath] = useState('');
   const [albums, setAlbums] = useState([]);
+  const [navigationNodes, setNavigationNodes] = useState([]); // 新的导航节点数据
+  const [currentPath, setCurrentPath] = useState(''); // 当前导航路径
+  const [breadcrumbs, setBreadcrumbs] = useState([]); // 面包屑导航
+  const [metadata, setMetadata] = useState(null); // 当前层级的元数据
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -67,7 +72,8 @@ function HomePage({ colorMode }) {
   const scrollContainerRef = useRef(null);
   const [forceUpdate, setForceUpdate] = useState(0);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
-  const [browsingPath, setBrowsingPath] = useState(null); // 当前浏览路径
+  const [browsingPath, setBrowsingPath] = useState(null); // 当前浏览路径（兼容性保留）
+  const [useNewArchitecture, setUseNewArchitecture] = useState(true); // 是否使用新架构
   
   // 为当前窗口生成唯一的存储键
   const getWindowStorageKey = () => {
@@ -201,7 +207,11 @@ function HomePage({ colorMode }) {
         setRootPath(selectedDir);
         // 保存到localStorage
         localStorage.setItem(windowStorageKey, selectedDir);
-        await scanDirectory(selectedDir);
+        if (useNewArchitecture) {
+          await scanNavigationLevel(selectedDir);
+        } else {
+          await scanDirectory(selectedDir);
+        }
       }
     } catch (err) {
       setError('选择文件夹时出错: ' + err.message);
@@ -231,8 +241,50 @@ function HomePage({ colorMode }) {
     }
   };
   
-  // 扫描文件夹 - 支持层级浏览
+  // 智能导航扫描 - 新架构
+  const scanNavigationLevel = async (targetPath) => {
+    try {
+      if (!ipcRenderer) {
+        setError('无法访问ipcRenderer, Electron可能没有正确加载');
+        return;
+      }
+      
+      setLoading(true);
+      setError('');
+      
+      console.log(`开始扫描导航层级: ${targetPath}`);
+      const response = await ipcRenderer.invoke('scan-navigation-level', targetPath);
+      
+      if (response.success) {
+        setNavigationNodes(response.nodes);
+        setCurrentPath(response.currentPath);
+        setBreadcrumbs(response.breadcrumbs);
+        setMetadata(response.metadata);
+        
+        // 同时更新旧数据以保持兼容性
+        const albumNodes = response.nodes.filter(node => node.type === 'album');
+        setAlbums(albumNodes);
+        setBrowsingPath(targetPath);
+        
+        console.log(`扫描完成: ${response.metadata.totalNodes} 个节点`);
+      } else {
+        setError(response.error?.message || '扫描失败');
+      }
+    } catch (err) {
+      console.error('扫描错误:', err);
+      setError('扫描文件夹时出错: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 扫描文件夹 - 兼容性保留  
   const scanDirectory = async (path) => {
+    if (useNewArchitecture) {
+      return await scanNavigationLevel(path);
+    }
+    
+    // 原有的扫描逻辑（兼容性保留）
     try {
       if (!ipcRenderer) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
@@ -279,6 +331,30 @@ function HomePage({ colorMode }) {
     } catch (err) {
       setError('扫描文件夹时出错: ' + err.message);
       setLoading(false);
+    }
+  };
+
+  // 处理导航点击 - 新架构
+  const handleNavigate = async (targetPath) => {
+    if (targetPath === currentPath) return; // 避免重复导航
+    
+    console.log(`导航到: ${targetPath}`);
+    await scanNavigationLevel(targetPath);
+  };
+
+  // 处理节点点击 - 支持文件夹和相册
+  const handleNodeClick = async (node) => {
+    if (node.type === 'folder') {
+      // 文件夹类型：导航到该文件夹
+      await handleNavigate(node.path);
+    } else if (node.type === 'album') {
+      // 相册类型：打开相册页面
+      navigate(`/album`, { state: { 
+        albumPath: node.path,
+        albumName: node.name,
+        fromHomePage: true,
+        browsingPath: currentPath || rootPath
+      }});
     }
   };
   
@@ -392,6 +468,41 @@ function HomePage({ colorMode }) {
       
       return sortDirection === 'asc' ? comparison : -comparison;
     });
+  };
+
+  // 新架构的排序函数
+  const sortedNodes = () => {
+    if (!navigationNodes.length) return [];
+    
+    return [...navigationNodes].sort((a, b) => {
+      // 文件夹总是排在相册前面
+      if (a.type !== b.type) {
+        if (a.type === 'folder' && b.type === 'album') return -1;
+        if (a.type === 'album' && b.type === 'folder') return 1;
+      }
+      
+      let comparison = 0;
+      
+      if (sortBy === 'name') {
+        comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
+      } else if (sortBy === 'imageCount') {
+        comparison = (a.imageCount || 0) - (b.imageCount || 0);
+      } else if (sortBy === 'lastModified') {
+        const aDate = a.lastModified || 0;
+        const bDate = b.lastModified || 0;
+        comparison = new Date(aDate) - new Date(bDate);
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  };
+
+  // 获取节点显示路径
+  const getNodeDisplayPath = (node) => {
+    if (!node || !currentPath) return '';
+    
+    const relativePath = getRelativePath(currentPath, node.path);
+    return relativePath || node.name;
   };
   
   // 处理相簿点击
@@ -704,6 +815,18 @@ function HomePage({ colorMode }) {
         </Toolbar>
       </AppBar>
       
+      {/* 面包屑导航 */}
+      {useNewArchitecture && currentPath && (
+        <BreadcrumbNavigation
+          breadcrumbs={breadcrumbs}
+          currentPath={currentPath}
+          onNavigate={handleNavigate}
+          showStats={true}
+          metadata={metadata}
+          compact={isSmallScreen}
+        />
+      )}
+
       <Box 
         ref={scrollContainerRef}
         className="scroll-container"
@@ -723,7 +846,7 @@ function HomePage({ colorMode }) {
           </Box>
         ) : error ? (
           <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-        ) : albums.length === 0 ? (
+        ) : (useNewArchitecture ? navigationNodes.length === 0 : albums.length === 0) ? (
           <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="h6" gutterBottom>没有找到相簿</Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
@@ -739,53 +862,68 @@ function HomePage({ colorMode }) {
           </Paper>
         ) : (
           <Box>
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle1">
-                找到 {albums.length} 个相簿
-              </Typography>
-              {(() => {
-                const pathInfo = getCurrentPathInfo();
-                if (pathInfo) {
-                  if (pathInfo.type === 'browsing') {
-                    return (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            {!useNewArchitecture && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle1">
+                  找到 {albums.length} 个相簿
+                </Typography>
+                {(() => {
+                  const pathInfo = getCurrentPathInfo();
+                  if (pathInfo) {
+                    if (pathInfo.type === 'browsing') {
+                      return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            根目录: {getBasename(rootPath)}
+                          </Typography>
+                          <Typography variant="caption" color="primary" sx={{ fontWeight: 500 }}>
+                            当前浏览: {pathInfo.displayPath}
+                          </Typography>
+                        </Box>
+                      );
+                    } else {
+                      return (
                         <Typography variant="caption" color="text.secondary" display="block">
                           根目录: {getBasename(rootPath)}
                         </Typography>
-                        <Typography variant="caption" color="primary" sx={{ fontWeight: 500 }}>
-                          当前浏览: {pathInfo.displayPath}
-                        </Typography>
-                      </Box>
-                    );
-                  } else {
-                    return (
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        根目录: {getBasename(rootPath)}
-                      </Typography>
-                    );
+                      );
+                    }
                   }
-                }
-                return null;
-              })()}
-            </Box>
+                  return null;
+                })()}
+              </Box>
+            )}
             
             <Masonry
-              key={`albums-masonry-${userDensity}-${windowWidth}`}
+              key={`masonry-${userDensity}-${windowWidth}-${useNewArchitecture ? 'new' : 'old'}`}
               breakpointCols={getMasonryBreakpoints()}
               className="masonry-grid"
               columnClassName="masonry-grid_column"
             >
-              {sortedAlbums().map((album) => (
-                <div key={album.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
-                  <AlbumCard
-                    album={album}
-                    displayPath={getAlbumDisplayPath(album)}
-                    onClick={() => handleAlbumClick(album.path)}
-                    isCompactMode={userDensity === 'compact'}
-                    isVisible={true}
-                  />
-                </div>
-              ))}
+              {(useNewArchitecture ? 
+                sortedNodes().map((node) => (
+                  <div key={node.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
+                    <AlbumCard
+                      node={node}
+                      displayPath={getNodeDisplayPath(node)}
+                      onClick={() => handleNodeClick(node)}
+                      isCompactMode={userDensity === 'compact'}
+                      isVisible={true}
+                    />
+                  </div>
+                )) :
+                sortedAlbums().map((album) => (
+                  <div key={album.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
+                    <AlbumCard
+                      album={album}
+                      displayPath={getAlbumDisplayPath(album)}
+                      onClick={() => handleAlbumClick(album.path)}
+                      isCompactMode={userDensity === 'compact'}
+                      isVisible={true}
+                    />
+                  </div>
+                ))
+              )}
             </Masonry>
           </Box>
         )}
