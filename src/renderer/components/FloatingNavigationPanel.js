@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getBasename, getRelativePath } from '../utils/pathUtils';
 import {
   Box,
   Paper,
@@ -12,7 +13,9 @@ import {
   Collapse,
   Tooltip,
   useTheme,
-  Divider
+  Divider,
+  Chip,
+  Button
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -22,14 +25,19 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
-  Home as HomeIcon
+  Home as HomeIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
 
 const FloatingNavigationPanel = ({ 
   currentPath, 
   onNavigate, 
   rootPath,
-  isVisible: propIsVisible = true 
+  isVisible: propIsVisible = true,
+  browsingPath = null,
+  onReturnToRoot = null,
+  onGoToParent = null
 }) => {
   const theme = useTheme();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -248,21 +256,67 @@ const FloatingNavigationPanel = ({
           border: `1px solid ${theme.palette.divider}`,
         }}
       >
-        {/* 头部 */}
+        {/* 头部 - 浏览路径和导航控制 */}
         <Box sx={{ 
           p: 1.5, 
           borderBottom: `1px solid ${theme.palette.divider}`,
           display: 'flex',
-          alignItems: 'center',
+          flexDirection: 'column',
           gap: 1
         }}>
-          <HomeIcon fontSize="small" color="primary" />
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            文件夹导航
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <HomeIcon fontSize="small" color="primary" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              文件夹导航
+            </Typography>
+          </Box>
+          
+          {/* 浏览路径显示和导航控制 */}
+          {browsingPath && browsingPath !== rootPath && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip 
+                  label={
+                    <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                      {getRelativePath(rootPath, browsingPath) || browsingPath}
+                    </Typography>
+                  }
+                  size="small"
+                  color="primary"
+                  sx={{ height: 24 }}
+                />
+              </Box>
+              
+              {/* 导航按钮组 */}
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                {onReturnToRoot && (
+                  <Tooltip title="返回根目录">
+                    <IconButton 
+                      size="small" 
+                      onClick={onReturnToRoot}
+                      sx={{ p: 0.5 }}
+                    >
+                      <HomeIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {onGoToParent && (
+                  <Tooltip title="返回上级目录">
+                    <IconButton 
+                      size="small" 
+                      onClick={onGoToParent}
+                      sx={{ p: 0.5 }}
+                    >
+                      <ArrowUpwardIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            </Box>
+          )}
         </Box>
 
-        {/* 当前路径显示 */}
+        {/* 根路径显示 */}
         {rootPath && (
           <Box sx={{ 
             px: 1.5, 
@@ -270,7 +324,7 @@ const FloatingNavigationPanel = ({
             bgcolor: theme.palette.grey[theme.palette.mode === 'dark' ? 800 : 100],
             borderBottom: `1px solid ${theme.palette.divider}`
           }}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
               根目录:
             </Typography>
             <Typography 
@@ -281,7 +335,7 @@ const FloatingNavigationPanel = ({
                 lineHeight: 1.2
               }}
             >
-              {rootPath}
+              {getBasename(rootPath)}
             </Typography>
           </Box>
         )}

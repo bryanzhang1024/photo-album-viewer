@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
+import { getBasename, getDirname, getRelativePath } from '../utils/pathUtils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, 
@@ -66,6 +67,7 @@ function HomePage({ colorMode }) {
   const scrollContainerRef = useRef(null);
   const [forceUpdate, setForceUpdate] = useState(0);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
+  const [browsingPath, setBrowsingPath] = useState(null); // 当前浏览路径
   
   // 为当前窗口生成唯一的存储键
   const getWindowStorageKey = () => {
@@ -229,7 +231,7 @@ function HomePage({ colorMode }) {
     }
   };
   
-  // 扫描文件夹
+  // 扫描文件夹 - 支持层级浏览
   const scanDirectory = async (path) => {
     try {
       if (!ipcRenderer) {
@@ -239,6 +241,9 @@ function HomePage({ colorMode }) {
       
       setLoading(true);
       setError('');
+      
+      // 更新浏览路径
+      setBrowsingPath(path);
       
       // 检查是否有缓存
       const cacheKey = `albums_cache_${path}`;
@@ -399,12 +404,33 @@ function HomePage({ colorMode }) {
     // 用encodeURIComponent处理路径中的特殊字符
     navigate(`/album/${encodeURIComponent(albumPath)}`);
   };
+
+  // 获取当前显示的路径信息
+  const getCurrentPathInfo = () => {
+    if (!rootPath) return null;
+    
+    if (browsingPath && browsingPath !== rootPath) {
+      // 显示相对路径
+      const relativePath = getRelativePath(rootPath, browsingPath);
+      return {
+        type: 'browsing',
+        displayPath: relativePath || browsingPath,
+        fullPath: browsingPath
+      };
+    }
+    
+    return {
+      type: 'root',
+      displayPath: getBasename(rootPath),
+      fullPath: rootPath
+    };
+  };
   
   // 计算相簿的路径显示方式
   const getAlbumDisplayPath = (album) => {
-    if (!rootPath) return album.name;
+    if (!browsingPath) return album.name;
     
-    const relativePath = album.path.replace(rootPath, '');
+    const relativePath = album.path.replace(browsingPath, '');
     return relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
   };
   
@@ -502,19 +528,39 @@ function HomePage({ colorMode }) {
     }
   };
 
-  // 处理导航面板的文件夹导航
+  // 处理导航面板的文件夹导航 - 真正的层级浏览
   const handleNavigationPanelNavigate = (folderPath) => {
     // 保存当前滚动位置
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
     
-    // 检查是否是当前已经扫描的路径的子目录
-    if (folderPath && folderPath !== rootPath) {
-      // 导航到新的文件夹 - 设置为新的根路径并重新扫描
-      setRootPath(folderPath);
-      localStorage.setItem(windowStorageKey, folderPath);
+    // 导航逻辑：只重新扫描当前浏览路径，不改变根路径
+    if (folderPath && folderPath !== browsingPath) {
+      // 扫描新的浏览路径，但保持根路径不变
       scanDirectory(folderPath);
+      console.log('浏览路径:', folderPath, '根路径:', rootPath);
+    }
+  };
+
+  // 返回根目录
+  const handleReturnToRoot = () => {
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+    scanDirectory(rootPath);
+  };
+
+  // 返回上级目录
+  const handleGoToParent = () => {
+    if (!browsingPath) return;
+    
+    // 获取当前浏览路径的上级目录
+    const parentPath = getDirname(browsingPath);
+    
+    // 如果上级目录存在且不是根目录本身，则导航到上级
+    if (parentPath && parentPath !== browsingPath && parentPath !== getDirname(parentPath)) {
+      scanDirectory(parentPath);
     }
   };
   
@@ -697,9 +743,30 @@ function HomePage({ colorMode }) {
               <Typography variant="subtitle1">
                 找到 {albums.length} 个相簿
               </Typography>
-              <Typography variant="caption" color="text.secondary" display="block">
-                根目录: {rootPath}
-              </Typography>
+              {(() => {
+                const pathInfo = getCurrentPathInfo();
+                if (pathInfo) {
+                  if (pathInfo.type === 'browsing') {
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          根目录: {getBasename(rootPath)}
+                        </Typography>
+                        <Typography variant="caption" color="primary" sx={{ fontWeight: 500 }}>
+                          当前浏览: {pathInfo.displayPath}
+                        </Typography>
+                      </Box>
+                    );
+                  } else {
+                    return (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        根目录: {getBasename(rootPath)}
+                      </Typography>
+                    );
+                  }
+                }
+                return null;
+              })()}
             </Box>
             
             <Masonry
@@ -726,9 +793,12 @@ function HomePage({ colorMode }) {
 
       {/* 浮动导航面板 */}
       <FloatingNavigationPanel
-        currentPath={rootPath}
+        currentPath={browsingPath || rootPath}
         onNavigate={handleNavigationPanelNavigate}
         rootPath={rootPath}
+        browsingPath={browsingPath}
+        onReturnToRoot={handleReturnToRoot}
+        onGoToParent={handleGoToParent}
         isVisible={!!rootPath} // 只有选择了根路径后才显示
       />
       
