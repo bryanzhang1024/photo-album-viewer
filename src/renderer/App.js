@@ -116,6 +116,7 @@ function App() {
               <Route path="/" element={<HomePage colorMode={colorMode} />} />
               <Route path="/test" element={<TestPage colorMode={colorMode} />} />
               <Route path="/album/:albumPath" element={<AlbumPage colorMode={colorMode} />} />
+              <Route path="/album" element={<AlbumPage colorMode={colorMode} />} />
               <Route path="/favorites" element={<FavoritesPage colorMode={colorMode} />} />
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
             </Routes>

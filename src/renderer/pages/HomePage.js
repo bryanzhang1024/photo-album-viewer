@@ -127,6 +127,28 @@ function HomePage({ colorMode }) {
   }, []);
   
   
+  // 处理从AlbumPage返回的导航请求
+  useEffect(() => {
+    if (location.state?.navigateToPath) {
+      const targetPath = location.state.navigateToPath;
+      console.log(`从相册页面返回，导航到: ${targetPath}`);
+      
+      // 设置根路径并扫描目标路径
+      const parentPath = getDirname(targetPath);
+      setRootPath(parentPath);
+      
+      if (useNewArchitecture) {
+        scanNavigationLevel(targetPath);
+      } else {
+        scanDirectory(targetPath);
+      }
+      
+      // 清除state以避免重复处理
+      navigate(location.pathname, { replace: true, state: null });
+      return;
+    }
+  }, [location.state]);
+
   // 从localStorage中读取上次的路径，并处理URL参数
   useEffect(() => {
     if (urlPathProcessed) {

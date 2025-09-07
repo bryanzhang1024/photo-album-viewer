@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -81,8 +81,18 @@ function AlbumPage({ colorMode }) {
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
 
-  // 解码路径
-  const decodedAlbumPath = decodeURIComponent(albumPath);
+  // 解码路径 - 支持新架构的state传递
+  const decodedAlbumPath = useMemo(() => {
+    // 新架构：优先使用location.state
+    if (location.state?.albumPath) {
+      return location.state.albumPath;
+    }
+    // 旧架构：回退到URL参数
+    if (albumPath) {
+      return decodeURIComponent(albumPath);
+    }
+    return '';
+  }, [albumPath, location.state]);
 
   // 获取收藏上下文
   const { favorites, isAlbumFavorited, toggleAlbumFavorite } = useFavorites();
@@ -337,7 +347,18 @@ function AlbumPage({ colorMode }) {
       scrollContext.savePosition('/album/' + albumPath, scrollContainerRef.current.scrollTop);
     }
 
-    navigate(-1);
+    // 新架构：如果有fromHomePage标志，直接返回首页并导航到正确路径
+    if (location.state?.fromHomePage && location.state?.browsingPath) {
+      // 返回首页并设置浏览路径
+      navigate('/', { 
+        state: { 
+          navigateToPath: location.state.browsingPath 
+        }
+      });
+    } else {
+      // 旧架构：直接返回上一页
+      navigate(-1);
+    }
   };
 
   // 处理返回首页
@@ -442,6 +463,11 @@ function AlbumPage({ colorMode }) {
 
   // 获取相簿名称
   const getAlbumName = () => {
+    // 新架构：优先使用state中的albumName
+    if (location.state?.albumName) {
+      return location.state.albumName;
+    }
+    // 旧架构：从路径解析
     if (!decodedAlbumPath) return '';
     const parts = decodedAlbumPath.split('/');
     return parts[parts.length - 1];
