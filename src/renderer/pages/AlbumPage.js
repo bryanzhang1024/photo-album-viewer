@@ -36,13 +36,11 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ImageViewer from '../components/ImageViewer';
-import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
-import { getBreadcrumbPaths } from '../utils/pathUtils';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -76,7 +74,6 @@ function AlbumPage({ colorMode }) {
     currentIndex: -1,
     total: 0
   });
-  const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [rootPath, setRootPath] = useState('');
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
@@ -117,7 +114,7 @@ function AlbumPage({ colorMode }) {
   useEffect(() => {
     loadAlbumImages();
     loadNeighboringAlbums();
-    loadBreadcrumbs();
+    loadRootPath();
   }, [decodedAlbumPath]);
 
   // 监听窗口大小变化
@@ -265,8 +262,8 @@ function AlbumPage({ colorMode }) {
     }
   };
 
-  // 加载面包屑导航信息
-  const loadBreadcrumbs = async () => {
+  // 加载根路径信息
+  const loadRootPath = async () => {
     try {
       // 获取根路径
       const getWindowStorageKey = () => {
@@ -294,14 +291,11 @@ function AlbumPage({ colorMode }) {
       const windowStorageKey = getWindowStorageKey();
       const rootPathValue = localStorage.getItem(windowStorageKey);
       
-      if (rootPathValue && decodedAlbumPath) {
+      if (rootPathValue) {
         setRootPath(rootPathValue);
-        // 生成面包屑路径
-        const breadcrumbPaths = getBreadcrumbPaths(rootPathValue, decodedAlbumPath);
-        setBreadcrumbs(breadcrumbPaths);
       }
     } catch (err) {
-      console.error('加载面包屑导航失败:', err);
+      console.error('加载根路径失败:', err);
     }
   };
 
@@ -390,19 +384,29 @@ function AlbumPage({ colorMode }) {
   const handleBack = () => {
     // 保存当前路径到上下文
     if (scrollContainerRef.current) {
-      scrollContext.savePosition('/album/' + albumPath, scrollContainerRef.current.scrollTop);
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
 
-    // 新架构：如果有fromHomePage标志，直接返回首页并导航到正确路径
-    if (location.state?.fromHomePage && location.state?.browsingPath) {
-      // 返回首页并设置浏览路径
+    // 优先计算父目录路径
+    const parentPath = decodedAlbumPath.substring(0, decodedAlbumPath.lastIndexOf('/'));
+    
+    // 首先尝试返回到父目录
+    if (parentPath && parentPath !== decodedAlbumPath && rootPath && parentPath.startsWith(rootPath)) {
+      navigate('/', {
+        state: {
+          navigateToPath: parentPath
+        }
+      });
+    } 
+    // 如果父目录不可用，且有新架构的浏览路径，使用浏览路径
+    else if (location.state?.fromHomePage && location.state?.browsingPath) {
       navigate('/', { 
         state: { 
           navigateToPath: location.state.browsingPath 
         }
       });
     } else {
-      // 旧架构：直接返回上一页
+      // 直接返回上一页
       navigate(-1);
     }
   };
@@ -600,35 +604,41 @@ function AlbumPage({ colorMode }) {
     });
   }, [navigate, location.pathname, scrollContext, decodedAlbumPath, rootPath]);
 
-  // 处理面包屑导航
-  const handleBreadcrumbNavigate = useCallback((targetPath) => {
-    // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-    
-    // 导航到首页，并设置浏览路径
-    navigate('/', {
-      state: {
-        navigateToPath: targetPath
-      }
-    });
-  }, [navigate, location.pathname, scrollContext]);
-
   // 处理返回到根目录
   const handleReturnToRoot = useCallback(() => {
     if (rootPath) {
-      handleBreadcrumbNavigate(rootPath);
+      // 保存当前滚动位置
+      if (scrollContainerRef.current) {
+        scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+      }
+      
+      // 导航到首页，并设置浏览路径
+      navigate('/', {
+        state: {
+          navigateToPath: rootPath
+        }
+      });
     }
-  }, [rootPath, handleBreadcrumbNavigate]);
+  }, [rootPath, navigate, location.pathname, scrollContext]);
 
   // 处理返回到父目录
   const handleGoToParent = useCallback(() => {
-    if (breadcrumbs.length > 1) {
-      const parentPath = breadcrumbs[breadcrumbs.length - 2].path;
-      handleBreadcrumbNavigate(parentPath);
+    // 计算父目录路径
+    const parentPath = decodedAlbumPath.substring(0, decodedAlbumPath.lastIndexOf('/'));
+    if (parentPath && parentPath !== decodedAlbumPath) {
+      // 保存当前滚动位置
+      if (scrollContainerRef.current) {
+        scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+      }
+      
+      // 导航到首页，并设置浏览路径
+      navigate('/', {
+        state: {
+          navigateToPath: parentPath
+        }
+      });
     }
-  }, [breadcrumbs, handleBreadcrumbNavigate]);
+  }, [decodedAlbumPath, navigate, location.pathname, scrollContext]);
 
   // 处理随机选择相簿
   const handleRandomAlbum = async () => {
@@ -884,16 +894,6 @@ function AlbumPage({ colorMode }) {
         </Toolbar>
       </AppBar>
 
-      {/* 面包屑导航 */}
-      {breadcrumbs.length > 0 && (
-        <BreadcrumbNavigation
-          breadcrumbs={breadcrumbs}
-          currentPath={decodedAlbumPath}
-          onNavigate={handleBreadcrumbNavigate}
-          compact={isSmallScreen}
-          showStats={false}
-        />
-      )}
 
       <Box
         ref={scrollContainerRef}

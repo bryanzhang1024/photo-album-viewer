@@ -27,7 +27,9 @@ import {
   ExpandLess as ExpandLessIcon,
   Home as HomeIcon,
   ArrowUpward as ArrowUpwardIcon,
-  ArrowBack as ArrowBackIcon
+  ArrowBack as ArrowBackIcon,
+  Refresh as RefreshIcon,
+  PhotoLibrary as PhotoLibraryIcon
 } from '@mui/icons-material';
 
 const FloatingNavigationPanel = ({ 
@@ -60,13 +62,47 @@ const FloatingNavigationPanel = ({
   // 面板可见性逻辑
   const shouldShowPanel = isExpanded || isHovered;
 
-  // 构建目录树
+  // 构建目录树（带缓存）
   const buildDirectoryTree = useCallback(async (path) => {
     if (!ipcRenderer || !path) return [];
     
     try {
       setLoading(true);
+      
+      // 检查缓存
+      const cacheKey = `directory_tree_${path}`;
+      const cachedData = sessionStorage.getItem(cacheKey);
+      const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
+      
+      if (cachedData) {
+        const cached = JSON.parse(cachedData);
+        const now = Date.now();
+        
+        // 检查缓存是否还有效
+        if (now - cached.timestamp < CACHE_DURATION) {
+          console.log('使用缓存的目录树数据:', path);
+          setLoading(false);
+          return cached.data || [];
+        } else {
+          // 缓存过期，删除
+          sessionStorage.removeItem(cacheKey);
+        }
+      }
+      
+      console.log('重新扫描目录树:', path);
       const result = await ipcRenderer.invoke('scan-directory-tree', path);
+      
+      // 缓存结果
+      try {
+        const cacheData = {
+          timestamp: Date.now(),
+          data: result || []
+        };
+        sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      } catch (e) {
+        console.warn('缓存目录树数据失败:', e);
+      }
+      
       setLoading(false);
       return result || [];
     } catch (error) {
@@ -80,6 +116,19 @@ const FloatingNavigationPanel = ({
   useEffect(() => {
     if (rootPath) {
       buildDirectoryTree(rootPath).then(setDirectoryTree);
+    }
+  }, [rootPath, buildDirectoryTree]);
+
+  // 强制刷新目录树（清除缓存）
+  const refreshDirectoryTree = useCallback(async () => {
+    if (rootPath) {
+      // 清除缓存
+      const cacheKey = `directory_tree_${rootPath}`;
+      sessionStorage.removeItem(cacheKey);
+      
+      // 重新构建
+      const result = await buildDirectoryTree(rootPath);
+      setDirectoryTree(result);
     }
   }, [rootPath, buildDirectoryTree]);
 
@@ -149,6 +198,7 @@ const FloatingNavigationPanel = ({
     const isCurrentPath = currentPath === item.path;
     const hasChildren = item.children && item.children.length > 0;
     const isAlbum = isFolder && item.hasImages && !hasChildren; // 纯相册：有图片但无子目录
+    const isMixed = isFolder && item.hasImages && hasChildren; // 混合文件夹：既有图片又有子目录
 
     return (
       <React.Fragment key={item.path}>
@@ -156,13 +206,17 @@ const FloatingNavigationPanel = ({
           onClick={() => {
             if (isFolder) {
               if (hasChildren) {
+                // 有子目录时总是切换展开状态
                 toggleFolderExpanded(item.path);
               }
               
-              // 判断是相册还是文件夹
+              // 判断是相册、混合文件夹还是普通文件夹
               if (isAlbum) {
                 // 纯相册：直接打开相册页面
                 handleAlbumClick(item.path, item.name);
+              } else if (isMixed) {
+                // 混合文件夹：只展开/收起，不导航（用户需要点击查看图片按钮来查看图片）
+                // 展开逻辑已在上面的hasChildren中处理
               } else {
                 // 普通文件夹：导航到文件夹视图
                 handleFolderClick(item.path);
@@ -188,6 +242,13 @@ const FloatingNavigationPanel = ({
             {isAlbum ? (
               // 纯相册：使用图片图标
               <ImageIcon fontSize="small" color="primary" />
+            ) : isMixed ? (
+              // 混合文件夹：使用特殊样式的文件夹图标
+              isExpanded ? (
+                <FolderOpenIcon fontSize="small" sx={{ color: 'warning.main' }} />
+              ) : (
+                <FolderIcon fontSize="small" sx={{ color: 'warning.main' }} />
+              )
             ) : isFolder ? (
               hasChildren ? (
                 isExpanded ? <FolderOpenIcon fontSize="small" /> : <FolderIcon fontSize="small" />
@@ -210,6 +271,22 @@ const FloatingNavigationPanel = ({
               }
             }}
           />
+          {/* 混合文件夹：显示查看图片按钮 */}
+          {isMixed && (
+            <Tooltip title="查看图片">
+              <IconButton 
+                size="small" 
+                sx={{ p: 0.25, mr: 0.5 }}
+                onClick={(e) => {
+                  e.stopPropagation(); // 阻止触发文件夹展开
+                  handleAlbumClick(item.path, item.name);
+                }}
+              >
+                <PhotoLibraryIcon fontSize="small" color="primary" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {/* 文件夹展开/收起按钮 */}
           {isFolder && hasChildren && (
             <IconButton size="small" sx={{ p: 0.25 }}>
               {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
@@ -400,16 +477,35 @@ const FloatingNavigationPanel = ({
           )}
         </Box>
 
-        {/* 底部提示 */}
+        {/* 底部提示和操作 */}
         <Divider />
         <Box sx={{ 
           px: 1.5, 
           py: 1,
-          bgcolor: theme.palette.grey[theme.palette.mode === 'dark' ? 900 : 50]
+          bgcolor: theme.palette.grey[theme.palette.mode === 'dark' ? 900 : 50],
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
         }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', flex: 1 }}>
             提示: 鼠标悬停自动展开，点击文件夹可导航
           </Typography>
+          <Tooltip title="刷新目录树">
+            <IconButton 
+              size="small" 
+              onClick={refreshDirectoryTree}
+              disabled={loading}
+              sx={{ 
+                p: 0.5,
+                color: 'text.secondary',
+                '&:hover': {
+                  color: 'primary.main'
+                }
+              }}
+            >
+              <RefreshIcon sx={{ fontSize: '1rem' }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Paper>
 
