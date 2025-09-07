@@ -379,6 +379,16 @@ function HomePage({ colorMode }) {
       }});
     }
   };
+
+  // 处理浮动导航面板的相册点击
+  const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
+    navigate(`/album`, { state: { 
+      albumPath: albumPath,
+      albumName: albumName,
+      fromHomePage: true,
+      browsingPath: currentPath || rootPath
+    }});
+  }, [navigate, currentPath, rootPath]);
   
   // 清理旧缓存
   const clearOldCaches = () => {
@@ -959,6 +969,7 @@ function HomePage({ colorMode }) {
         browsingPath={browsingPath}
         onReturnToRoot={handleReturnToRoot}
         onGoToParent={handleGoToParent}
+        onOpenAlbum={handleFloatingPanelAlbumClick}
         isVisible={!!rootPath} // 只有选择了根路径后才显示
       />
       

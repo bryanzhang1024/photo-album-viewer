@@ -37,7 +37,8 @@ const FloatingNavigationPanel = ({
   isVisible: propIsVisible = true,
   browsingPath = null,
   onReturnToRoot = null,
-  onGoToParent = null
+  onGoToParent = null,
+  onOpenAlbum = null // 新增：处理相册打开的回调
 }) => {
   const theme = useTheme();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -131,12 +132,23 @@ const FloatingNavigationPanel = ({
     }
   }, [onNavigate]);
 
+  // 处理相册点击 - 直接打开相册页面
+  const handleAlbumClick = useCallback((albumPath, albumName) => {
+    if (onOpenAlbum) {
+      onOpenAlbum(albumPath, albumName);
+    } else {
+      // 回退到导航模式
+      handleFolderClick(albumPath);
+    }
+  }, [onOpenAlbum, handleFolderClick]);
+
   // 渲染目录树项
   const renderTreeItem = useCallback((item, depth = 0) => {
     const isFolder = item.type === 'folder';
     const isExpanded = expandedFolders.has(item.path);
     const isCurrentPath = currentPath === item.path;
     const hasChildren = item.children && item.children.length > 0;
+    const isAlbum = isFolder && item.hasImages && !hasChildren; // 纯相册：有图片但无子目录
 
     return (
       <React.Fragment key={item.path}>
@@ -146,7 +158,15 @@ const FloatingNavigationPanel = ({
               if (hasChildren) {
                 toggleFolderExpanded(item.path);
               }
-              handleFolderClick(item.path);
+              
+              // 判断是相册还是文件夹
+              if (isAlbum) {
+                // 纯相册：直接打开相册页面
+                handleAlbumClick(item.path, item.name);
+              } else {
+                // 普通文件夹：导航到文件夹视图
+                handleFolderClick(item.path);
+              }
             }
           }}
           selected={isCurrentPath}
@@ -165,7 +185,10 @@ const FloatingNavigationPanel = ({
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            {isFolder ? (
+            {isAlbum ? (
+              // 纯相册：使用图片图标
+              <ImageIcon fontSize="small" color="primary" />
+            ) : isFolder ? (
               hasChildren ? (
                 isExpanded ? <FolderOpenIcon fontSize="small" /> : <FolderIcon fontSize="small" />
               ) : (

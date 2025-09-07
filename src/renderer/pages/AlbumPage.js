@@ -36,10 +36,13 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ImageViewer from '../components/ImageViewer';
+import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
+import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { getBreadcrumbPaths } from '../utils/pathUtils';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -73,6 +76,8 @@ function AlbumPage({ colorMode }) {
     currentIndex: -1,
     total: 0
   });
+  const [breadcrumbs, setBreadcrumbs] = useState([]);
+  const [rootPath, setRootPath] = useState('');
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
@@ -112,6 +117,7 @@ function AlbumPage({ colorMode }) {
   useEffect(() => {
     loadAlbumImages();
     loadNeighboringAlbums();
+    loadBreadcrumbs();
   }, [decodedAlbumPath]);
 
   // 监听窗口大小变化
@@ -256,6 +262,46 @@ function AlbumPage({ colorMode }) {
     } catch (err) {
       setError('加载相簿图片时出错: ' + err.message);
       setLoading(false);
+    }
+  };
+
+  // 加载面包屑导航信息
+  const loadBreadcrumbs = async () => {
+    try {
+      // 获取根路径
+      const getWindowStorageKey = () => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const initialPath = searchParams.get('initialPath');
+        if (initialPath) {
+          try {
+            const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
+            return `lastRootPath_${pathHash}`;
+          } catch (e) {
+            let hash = 0;
+            const str = decodeURIComponent(initialPath);
+            for (let i = 0; i < str.length; i++) {
+              const char = str.charCodeAt(i);
+              hash = ((hash << 5) - hash) + char;
+              hash = hash & hash;
+            }
+            return `lastRootPath_${Math.abs(hash)}`;
+          }
+        } else {
+          return 'lastRootPath_default';
+        }
+      };
+      
+      const windowStorageKey = getWindowStorageKey();
+      const rootPathValue = localStorage.getItem(windowStorageKey);
+      
+      if (rootPathValue && decodedAlbumPath) {
+        setRootPath(rootPathValue);
+        // 生成面包屑路径
+        const breadcrumbPaths = getBreadcrumbPaths(rootPathValue, decodedAlbumPath);
+        setBreadcrumbs(breadcrumbPaths);
+      }
+    } catch (err) {
+      console.error('加载面包屑导航失败:', err);
     }
   };
 
@@ -519,6 +565,71 @@ function AlbumPage({ colorMode }) {
     }
   };
 
+  // 处理浮动面板导航
+  const handleFloatingPanelNavigate = useCallback((targetPath) => {
+    // 保存当前滚动位置
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+    
+    // 导航到首页，并设置浏览路径
+    navigate('/', {
+      state: {
+        navigateToPath: targetPath
+      }
+    });
+  }, [navigate, location.pathname, scrollContext]);
+
+  // 处理浮动面板相册打开
+  const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
+    // 保存当前滚动位置
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+    
+    // 直接导航到相册页面，传递完整的导航状态
+    navigate(`/album`, {
+      state: {
+        albumPath: albumPath,
+        albumName: albumName,
+        fromHomePage: true,
+        browsingPath: decodedAlbumPath.includes(albumPath) ? 
+          decodedAlbumPath.substring(0, decodedAlbumPath.lastIndexOf('/')) : 
+          rootPath
+      }
+    });
+  }, [navigate, location.pathname, scrollContext, decodedAlbumPath, rootPath]);
+
+  // 处理面包屑导航
+  const handleBreadcrumbNavigate = useCallback((targetPath) => {
+    // 保存当前滚动位置
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+    
+    // 导航到首页，并设置浏览路径
+    navigate('/', {
+      state: {
+        navigateToPath: targetPath
+      }
+    });
+  }, [navigate, location.pathname, scrollContext]);
+
+  // 处理返回到根目录
+  const handleReturnToRoot = useCallback(() => {
+    if (rootPath) {
+      handleBreadcrumbNavigate(rootPath);
+    }
+  }, [rootPath, handleBreadcrumbNavigate]);
+
+  // 处理返回到父目录
+  const handleGoToParent = useCallback(() => {
+    if (breadcrumbs.length > 1) {
+      const parentPath = breadcrumbs[breadcrumbs.length - 2].path;
+      handleBreadcrumbNavigate(parentPath);
+    }
+  }, [breadcrumbs, handleBreadcrumbNavigate]);
+
   // 处理随机选择相簿
   const handleRandomAlbum = async () => {
     try {
@@ -773,6 +884,17 @@ function AlbumPage({ colorMode }) {
         </Toolbar>
       </AppBar>
 
+      {/* 面包屑导航 */}
+      {breadcrumbs.length > 0 && (
+        <BreadcrumbNavigation
+          breadcrumbs={breadcrumbs}
+          currentPath={decodedAlbumPath}
+          onNavigate={handleBreadcrumbNavigate}
+          compact={isSmallScreen}
+          showStats={false}
+        />
+      )}
+
       <Box
         ref={scrollContainerRef}
         sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
@@ -812,6 +934,7 @@ function AlbumPage({ colorMode }) {
                         onClick={() => handleImageClick(index)}
                         density={userDensity}
                         onLoad={handleImageLoad}
+                        albumPath={decodedAlbumPath}
                       />
                     </div>
                   ))}
@@ -847,12 +970,24 @@ function AlbumPage({ colorMode }) {
         </Alert>
       </Snackbar>
 
+      {/* 浮动导航面板 */}
+      <FloatingNavigationPanel
+        currentPath={decodedAlbumPath}
+        onNavigate={handleFloatingPanelNavigate}
+        rootPath={rootPath}
+        isVisible={true}
+        browsingPath={decodedAlbumPath}
+        onReturnToRoot={handleReturnToRoot}
+        onGoToParent={handleGoToParent}
+        onOpenAlbum={handleFloatingPanelAlbumClick}
+      />
+
     </Box>
   );
 }
 
 // 图片卡片组件
-function ImageCard({ image, onClick, density, onLoad }) {
+function ImageCard({ image, onClick, density, onLoad, albumPath }) {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [aspectRatio, setAspectRatio] = useState(1); // 默认为1:1
@@ -863,8 +998,6 @@ function ImageCard({ image, onClick, density, onLoad }) {
 
   // 使用收藏上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
-  const { albumPath } = useParams();
-  const decodedAlbumPath = decodeURIComponent(albumPath);
   const isFavorited = image ? isImageFavorited(image.path) : false;
 
   // 安全地获取electron对象
@@ -981,8 +1114,8 @@ function ImageCard({ image, onClick, density, onLoad }) {
     e.stopPropagation(); // 阻止事件冒泡，避免触发卡片点击
     if (image) {
       // 获取相簿名称
-      const albumName = decodedAlbumPath.split('/').pop();
-      toggleImageFavorite(image, decodedAlbumPath, albumName);
+      const albumName = albumPath.split('/').pop();
+      toggleImageFavorite(image, albumPath, albumName);
     }
   };
 
