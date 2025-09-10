@@ -18,12 +18,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: #fff;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #f0f0f0;
 }
 
 /* 优化大屏幕空间利用 */

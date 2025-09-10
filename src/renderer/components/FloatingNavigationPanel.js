@@ -451,11 +451,11 @@ const FloatingNavigationPanel = ({
             background: theme.palette.background.default,
           },
           '&::-webkit-scrollbar-thumb': {
-            background: theme.palette.grey[400],
+            background: '#fff',
             borderRadius: '3px',
           },
           '&::-webkit-scrollbar-thumb:hover': {
-            background: theme.palette.grey[600],
+            background: '#f0f0f0',
           },
         }}>
           {loading ? (
