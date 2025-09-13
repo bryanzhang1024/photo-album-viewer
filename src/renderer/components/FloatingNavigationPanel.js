@@ -33,15 +33,14 @@ import {
   PhotoLibrary as PhotoLibraryIcon
 } from '@mui/icons-material';
 
-const FloatingNavigationPanel = ({ 
-  currentPath, 
-  onNavigate, 
+const FloatingNavigationPanel = ({
+  currentPath,
+  onNavigate,
   rootPath,
   isVisible: propIsVisible = true,
-  browsingPath = null,
   onReturnToRoot = null,
   onGoToParent = null,
-  onOpenAlbum = null // 新增：处理相册打开的回调
+  onOpenAlbum = null // 处理相册打开的回调
 }) => {
   const theme = useTheme();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -351,47 +350,31 @@ const FloatingNavigationPanel = ({
             </Typography>
           </Box>
           
-          {/* 浏览路径显示和导航控制 */}
-          {browsingPath && browsingPath !== rootPath && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Chip 
-                  label={
-                    <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
-                      {getRelativePath(rootPath, browsingPath) || browsingPath}
-                    </Typography>
-                  }
-                  size="small"
-                  color="primary"
-                  sx={{ height: 24 }}
-                />
-              </Box>
-              
-              {/* 导航按钮组 */}
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                {onReturnToRoot && (
-                  <Tooltip title="返回根目录">
-                    <IconButton 
-                      size="small" 
-                      onClick={onReturnToRoot}
-                      sx={{ p: 0.5 }}
-                    >
-                      <HomeIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                {onGoToParent && (
-                  <Tooltip title="返回上级目录">
-                    <IconButton 
-                      size="small" 
-                      onClick={onGoToParent}
-                      sx={{ p: 0.5 }}
-                    >
-                      <ArrowUpwardIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </Box>
+          {/* 简化的导航控制 */}
+          {(onReturnToRoot || onGoToParent) && (
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              {onReturnToRoot && (
+                <Tooltip title="返回根目录">
+                  <IconButton
+                    size="small"
+                    onClick={onReturnToRoot}
+                    sx={{ p: 0.5 }}
+                  >
+                    <HomeIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {onGoToParent && (
+                <Tooltip title="返回上级目录">
+                  <IconButton
+                    size="small"
+                    onClick={onGoToParent}
+                    sx={{ p: 0.5 }}
+                  >
+                    <ArrowUpwardIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
           )}
         </Box>

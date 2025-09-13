@@ -37,11 +37,13 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ImageViewer from '../components/ImageViewer';
 import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
+import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
+import { getBreadcrumbPaths, getBasename, getDirname, isValidPath } from '../utils/pathUtils';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -76,26 +78,99 @@ function AlbumPage({ colorMode }) {
     total: 0
   });
   const [rootPath, setRootPath] = useState('');
+  const [breadcrumbs, setBreadcrumbs] = useState([]); // 面包屑导航数据
+  const [metadata, setMetadata] = useState(null); // 当前层级的元数据
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
+  const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
 
 
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
 
-  // 解码路径 - 支持新架构的state传递
+  // 解码路径 - 统一的路径解析逻辑
   const decodedAlbumPath = useMemo(() => {
-    // 新架构：优先使用location.state
+    // 优先使用state中的路径（最可靠）
     if (location.state?.albumPath) {
       return location.state.albumPath;
     }
-    // 旧架构：回退到URL参数
+    // 回退到URL参数 - 使用安全的路径解码
     if (albumPath) {
-      return decodeURIComponent(albumPath);
+      try {
+        // 先尝试标准的decodeURIComponent
+        return decodeURIComponent(albumPath);
+      } catch (e) {
+        // 如果失败，尝试手动解码%2F为/
+        const manualDecoded = albumPath.replace(/%2F/g, '/');
+        if (manualDecoded !== albumPath) {
+          return manualDecoded;
+        }
+        console.error('路径解码失败:', albumPath, e);
+        return '';
+      }
     }
     return '';
   }, [albumPath, location.state]);
+
+  // 检测路径类型（文件夹 vs 相簿）
+  const detectPathType = useCallback(async (path) => {
+    if (!path || !ipcRenderer) return 'unknown';
+
+    try {
+      // 扫描路径获取基本信息
+      const scanResult = await ipcRenderer.invoke('scan-directory', path);
+
+      if (!scanResult || !scanResult.nodes) {
+        return 'unknown';
+      }
+
+      // 检查是否是纯相簿（只有图片，没有子文件夹）
+      const hasImages = scanResult.nodes.some(node => node.type === 'album');
+      const hasFolders = scanResult.nodes.some(node => node.type === 'folder');
+
+      if (hasImages && !hasFolders) {
+        return 'album';
+      } else if (hasFolders || (!hasImages && !hasFolders)) {
+        return 'folder';
+      } else {
+        return 'mixed';
+      }
+    } catch (error) {
+      console.error('路径类型检测失败:', error);
+
+      // Fallback: 使用启发式规则判断
+      // 如果路径包含常见的关键图片扩展名，可能是相簿
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'];
+      const hasImageKeywords = imageExtensions.some(ext => path.toLowerCase().includes(ext));
+
+      // 如果路径名包含"相簿"、"album"、"photos"等关键词，可能是相簿
+      const albumKeywords = ['相簿', 'album', 'photos', 'pictures', 'images'];
+      const hasAlbumKeywords = albumKeywords.some(keyword =>
+        path.toLowerCase().includes(keyword)
+      );
+
+      if (hasImageKeywords && hasAlbumKeywords) {
+        return 'album';
+      } else {
+        return 'folder'; // 默认当作文件夹处理，更安全
+      }
+    }
+  }, [ipcRenderer]);
+
+  // 获取路径的实际图片数量
+  const getPathImageCount = useCallback(async (path) => {
+    if (!path || !ipcRenderer) return 0;
+
+    try {
+      // 获取该路径下的实际图片列表
+      const images = await ipcRenderer.invoke('get-album-images', path);
+      return images ? images.length : 0;
+    } catch (error) {
+      console.error('获取路径图片数量失败:', error);
+      return 0;
+    }
+  }, [ipcRenderer]);
 
   // 获取收藏上下文
   const { favorites, isAlbumFavorited, toggleAlbumFavorite } = useFavorites();
@@ -111,10 +186,11 @@ function AlbumPage({ colorMode }) {
     }
   }, [location.search]);
 
-  // 加载相簿图片和相邻相簿信息
+  // 加载相簿图片、相邻相簿信息和面包屑数据
   useEffect(() => {
     loadAlbumImages();
     loadNeighboringAlbums();
+    loadBreadcrumbData();
     loadRootPath();
   }, [decodedAlbumPath]);
 
@@ -294,6 +370,69 @@ function AlbumPage({ colorMode }) {
     }
   };
 
+  // 加载面包屑导航数据 - 与HomePage保持一致
+  const loadBreadcrumbData = async () => {
+    try {
+      if (!decodedAlbumPath || !rootPath) {
+        // 如果没有足够的路径信息，使用前端计算作为fallback
+        if (decodedAlbumPath) {
+          const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
+          setBreadcrumbs(fallbackBreadcrumbs);
+        }
+        return;
+      }
+
+      // 使用与HomePage相同的逻辑：扫描父目录获取面包屑信息
+      const parentPath = getDirname(decodedAlbumPath);
+      if (parentPath && parentPath !== decodedAlbumPath) {
+        // 使用统一缓存管理器
+        const cachedData = imageCache.get('navigation', parentPath);
+        if (cachedData && cachedData.breadcrumbs) {
+          setBreadcrumbs(cachedData.breadcrumbs);
+          setMetadata(cachedData.metadata);
+          return;
+        }
+
+        // 如果没有缓存，调用导航扫描API
+        if (ipcRenderer) {
+          try {
+            const response = await ipcRenderer.invoke('scan-navigation-level', parentPath);
+            if (response.success) {
+              // 缓存结果
+              imageCache.set('navigation', parentPath, response);
+              setBreadcrumbs(response.breadcrumbs);
+              setMetadata(response.metadata);
+            } else {
+              // fallback到前端计算
+              const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
+              setBreadcrumbs(fallbackBreadcrumbs);
+            }
+          } catch (error) {
+            console.error('加载面包屑数据失败:', error);
+            // fallback到前端计算
+            const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
+            setBreadcrumbs(fallbackBreadcrumbs);
+          }
+        } else {
+          // fallback到前端计算
+          const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
+          setBreadcrumbs(fallbackBreadcrumbs);
+        }
+      } else {
+        // 已经是根目录，使用前端计算
+        const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
+        setBreadcrumbs(fallbackBreadcrumbs);
+      }
+    } catch (error) {
+      console.error('加载面包屑数据失败:', error);
+      // 最终fallback到前端计算
+      if (decodedAlbumPath) {
+        const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
+        setBreadcrumbs(fallbackBreadcrumbs);
+      }
+    }
+  };
+
   // 加载相邻相簿信息
   const loadNeighboringAlbums = async () => {
     try {
@@ -378,6 +517,8 @@ function AlbumPage({ colorMode }) {
 
   // 处理返回
   const handleBack = () => {
+    if (isNavigating) return;
+
     // 保存当前路径到上下文
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
@@ -385,25 +526,27 @@ function AlbumPage({ colorMode }) {
 
     // 优先计算父目录路径
     const parentPath = decodedAlbumPath.substring(0, decodedAlbumPath.lastIndexOf('/'));
-    
-    // 首先尝试返回到父目录
-    if (parentPath && parentPath !== decodedAlbumPath && rootPath && parentPath.startsWith(rootPath)) {
-      navigate('/', {
-        state: {
-          navigateToPath: parentPath
-        }
-      });
-    } 
-    // 如果父目录不可用，且有新架构的浏览路径，使用浏览路径
-    else if (location.state?.fromHomePage && location.state?.browsingPath) {
-      navigate('/', { 
-        state: { 
-          navigateToPath: location.state.browsingPath 
-        }
-      });
+
+    setIsNavigating(true);
+    try {
+      // 首先尝试返回到父目录
+      if (parentPath && parentPath !== decodedAlbumPath && rootPath && parentPath.startsWith(rootPath)) {
+        navigate('/', {
+          state: {
+            navigateToPath: parentPath
+          }
+        });
+      }
+      // 如果父目录不可用，且从其他页面跳转而来，返回首页
+      else if (location.state?.fromHomePage || location.state?.fromAlbumPage) {
+        navigate('/');
     } else {
-      // 直接返回上一页
-      navigate(-1);
+        // 直接返回上一页
+        navigate(-1);
+      }
+    } finally {
+      // 重置导航状态（注意：这是异步的，所以用setTimeout）
+      setTimeout(() => setIsNavigating(false), 100);
     }
   };
 
@@ -422,8 +565,10 @@ function AlbumPage({ colorMode }) {
     // 清除缓存
     imageCache.clearType('album');
     imageCache.clearType('albums');
+    imageCache.clearType('navigation');
 
     loadAlbumImages();
+    loadBreadcrumbData();
   };
 
   // 处理排序方式变化
@@ -559,11 +704,104 @@ function AlbumPage({ colorMode }) {
       if (scrollContainerRef.current) {
         scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
       }
-      
+
       // 导航到相邻相簿
-      navigate(`/album/${encodeURIComponent(targetAlbum.path)}`);
+      navigate(`/album/${encodeURIComponent(targetAlbum.path)}`, {
+        state: {
+          albumPath: targetAlbum.path,
+          albumName: targetAlbum.name,
+          fromAlbumPage: true
+        }
+      });
     }
   };
+
+  // 处理面包屑导航点击
+  const handleBreadcrumbNavigate = useCallback(async (targetPath) => {
+    if (isNavigating) return;
+
+    // 验证路径有效性 - 放宽验证，让主进程决定路径是否真的无效
+    if (!isValidPath(targetPath)) {
+      console.warn(`面包屑路径验证失败: ${targetPath}`);
+      // 不直接阻止，而是记录警告并继续尝试
+    }
+
+    // 保存当前滚动位置
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+
+    // 如果点击的是当前路径，无需导航
+    if (targetPath === decodedAlbumPath) {
+      return;
+    }
+
+    setIsNavigating(true);
+    try {
+      // 如果目标是根路径，跳转到首页
+      if (targetPath === rootPath) {
+        navigate('/', {
+          state: {
+            navigateToPath: rootPath
+          }
+        });
+        return;
+      }
+
+      // 检测目标路径的类型
+      const pathType = await detectPathType(targetPath);
+      console.log(`面包屑导航: ${targetPath}, 类型: ${pathType}`);
+
+      // 如果检测为相簿类型，进一步验证是否真的有图片
+      if (pathType === 'album') {
+        const imageCount = await getPathImageCount(targetPath);
+        console.log(`路径 ${targetPath} 实际图片数量: ${imageCount}`);
+
+        // 如果没有图片，当作文件夹处理
+        if (imageCount === 0) {
+          console.log(`路径 ${targetPath} 检测为相簿但没有图片，当作文件夹处理`);
+          navigate('/', {
+            state: {
+              navigateToPath: targetPath,
+              fromAlbumPage: true
+            }
+          });
+          return;
+        }
+
+        // 有图片，正常导航到相簿页面
+        const safePath = targetPath.replace(/\//g, '%2F');
+        navigate(`/album/${safePath}`, {
+          state: {
+            albumPath: targetPath,
+            albumName: getBasename(targetPath),
+            fromAlbumPage: true
+          }
+        });
+      } else if (pathType === 'folder' || pathType === 'mixed') {
+        // 文件夹或混合类型：跳转到首页并导航到该文件夹
+        navigate('/', {
+          state: {
+            navigateToPath: targetPath,
+            fromAlbumPage: true
+          }
+        });
+      } else {
+        // 未知类型：直接跳转到首页文件夹视图
+        navigate('/', {
+          state: {
+            navigateToPath: targetPath,
+            fromAlbumPage: true
+          }
+        });
+      }
+    } catch (error) {
+      console.error('面包屑导航失败:', error);
+      setError(`导航失败: ${error.message || '无法访问该路径'}`);
+    } finally {
+      setTimeout(() => setIsNavigating(false), 100);
+    }
+  }, [navigate, location.pathname, scrollContext, decodedAlbumPath, rootPath, isNavigating, detectPathType, getPathImageCount]);
 
   // 处理浮动面板导航
   const handleFloatingPanelNavigate = useCallback((targetPath) => {
@@ -571,7 +809,7 @@ function AlbumPage({ colorMode }) {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    
+
     // 导航到首页，并设置浏览路径
     navigate('/', {
       state: {
@@ -586,19 +824,16 @@ function AlbumPage({ colorMode }) {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    
-    // 直接导航到相册页面，传递完整的导航状态
-    navigate(`/album`, {
+
+    // 直接导航到相册页面
+    navigate(`/album/${encodeURIComponent(albumPath)}`, {
       state: {
         albumPath: albumPath,
         albumName: albumName,
-        fromHomePage: true,
-        browsingPath: decodedAlbumPath.includes(albumPath) ? 
-          decodedAlbumPath.substring(0, decodedAlbumPath.lastIndexOf('/')) : 
-          rootPath
+        fromAlbumPage: true
       }
     });
-  }, [navigate, location.pathname, scrollContext, decodedAlbumPath, rootPath]);
+  }, [navigate, location.pathname, scrollContext]);
 
   // 处理返回到根目录
   const handleReturnToRoot = useCallback(() => {
@@ -705,7 +940,13 @@ function AlbumPage({ colorMode }) {
         }
 
         // 导航到随机选择的相簿
-        navigate(`/album/${encodeURIComponent(randomAlbum.path)}`);
+        navigate(`/album/${encodeURIComponent(randomAlbum.path)}`, {
+          state: {
+            albumPath: randomAlbum.path,
+            albumName: randomAlbum.name,
+            fromAlbumPage: true
+          }
+        });
       } else {
         setError('没有可用的相簿进行随机选择');
       }
@@ -891,6 +1132,19 @@ function AlbumPage({ colorMode }) {
       </AppBar>
 
 
+      {/* 面包屑导航 */}
+      <BreadcrumbNavigation
+        breadcrumbs={breadcrumbs.length > 0 ? breadcrumbs : getBreadcrumbPaths(decodedAlbumPath, rootPath)}
+        currentPath={decodedAlbumPath}
+        onNavigate={handleBreadcrumbNavigate}
+        metadata={metadata || {
+          folderCount: 0,
+          albumCount: 1,
+          totalImages: images.length
+        }}
+        compact={isSmallScreen}
+      />
+
       <Box
         ref={scrollContainerRef}
         sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
@@ -903,9 +1157,6 @@ function AlbumPage({ colorMode }) {
         ) : (
           <>
             <Box sx={{ mb: 1 }}>
-              <Typography variant="subtitle2" sx={{ fontSize: '0.8rem' }}>
-                相簿路径: {decodedAlbumPath}
-              </Typography>
               <Typography variant="caption" color="text.secondary">
                 共 {images.length} 张照片 | {userDensity === 'compact' ? '紧凑密度' : userDensity === 'standard' ? '标准密度' : '宽松密度'}
               </Typography>
@@ -972,7 +1223,6 @@ function AlbumPage({ colorMode }) {
         onNavigate={handleFloatingPanelNavigate}
         rootPath={rootPath}
         isVisible={true}
-        browsingPath={decodedAlbumPath}
         onReturnToRoot={handleReturnToRoot}
         onGoToParent={handleGoToParent}
         onOpenAlbum={handleFloatingPanelAlbumClick}

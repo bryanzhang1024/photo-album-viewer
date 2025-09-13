@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
-import { getBasename, getDirname, getRelativePath } from '../utils/pathUtils';
+import { getBasename, getDirname, getRelativePath, getBreadcrumbPaths, isValidPath } from '../utils/pathUtils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, 
@@ -23,6 +23,8 @@ import {
   Tooltip,
   Badge
 } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import HomeIcon from '@mui/icons-material/Home';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -32,6 +34,8 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import CasinoIcon from '@mui/icons-material/Casino';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AlbumCard from '../components/AlbumCard';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
@@ -75,6 +79,7 @@ function HomePage({ colorMode }) {
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
   const [browsingPath, setBrowsingPath] = useState(null); // 当前浏览路径（兼容性保留）
   const [useNewArchitecture, setUseNewArchitecture] = useState(true); // 是否使用新架构
+  const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
   
   // 为当前窗口生成唯一的存储键
   const getWindowStorageKey = () => {
@@ -133,19 +138,26 @@ function HomePage({ colorMode }) {
     if (location.state?.navigateToPath) {
       const targetPath = location.state.navigateToPath;
       console.log(`从相册页面返回，导航到: ${targetPath}`);
-      
-      // 设置根路径并扫描目标路径
+
+      // 异步处理：设置根路径，等待完成后扫描目标路径
       const parentPath = getDirname(targetPath);
       setRootPath(parentPath);
-      
-      if (useNewArchitecture) {
-        scanNavigationLevel(targetPath);
-      } else {
-        scanDirectory(targetPath);
-      }
-      
-      // 清除state以避免重复处理
-      navigate(location.pathname, { replace: true, state: null });
+
+      // 使用setTimeout确保状态更新后再执行导航
+      setTimeout(async () => {
+        try {
+          if (useNewArchitecture) {
+            await scanNavigationLevel(targetPath);
+          } else {
+            await scanDirectory(targetPath);
+          }
+          // 只有在导航成功后才清除state
+          navigate(location.pathname, { replace: true, state: null });
+        } catch (error) {
+          console.error('从相册返回导航失败:', error);
+          setError(`导航失败: ${error.message}`);
+        }
+      }, 100);
       return;
     }
   }, [location.state]);
@@ -364,10 +376,25 @@ function HomePage({ colorMode }) {
 
   // 处理导航点击 - 新架构
   const handleNavigate = async (targetPath) => {
-    if (targetPath === currentPath) return; // 避免重复导航
-    
+    if (targetPath === currentPath || isNavigating) return; // 避免重复导航和并发操作
+
+    // 验证路径有效性
+    if (!isValidPath(targetPath)) {
+      console.warn(`路径验证失败: ${targetPath}`);
+      // 对于导航操作，即使路径验证失败也尝试继续，让主进程处理
+      console.log(`继续尝试导航到: ${targetPath}`);
+    }
+
     console.log(`导航到: ${targetPath}`);
-    await scanNavigationLevel(targetPath);
+    setIsNavigating(true);
+    try {
+      await scanNavigationLevel(targetPath);
+    } catch (error) {
+      console.error('导航失败:', error);
+      setError(`导航失败: ${error.message || '未知错误'}`);
+    } finally {
+      setIsNavigating(false);
+    }
   };
 
   // 处理节点点击 - 支持文件夹和相册 - 使用 useCallback 缓存
@@ -574,8 +601,9 @@ function HomePage({ colorMode }) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
     
-    // 用encodeURIComponent处理路径中的特殊字符
-    navigate(`/album/${encodeURIComponent(albumPath)}`);
+    // 用安全的路径编码处理
+    const safePath = albumPath.replace(/\//g, '%2F');
+    navigate(`/album/${safePath}`);
   };
 
   // 获取当前显示的路径信息 - 使用 useMemo 缓存
@@ -707,12 +735,11 @@ function HomePage({ colorMode }) {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    
-    // 导航逻辑：只重新扫描当前浏览路径，不改变根路径
-    if (folderPath && folderPath !== browsingPath) {
-      // 扫描新的浏览路径，但保持根路径不变
+
+    // 导航逻辑：使用统一的currentPath
+    if (folderPath && folderPath !== currentPath) {
       scanDirectory(folderPath);
-      console.log('浏览路径:', folderPath, '根路径:', rootPath);
+      console.log('导航到:', folderPath, '根路径:', rootPath);
     }
   };
 
@@ -725,15 +752,23 @@ function HomePage({ colorMode }) {
   };
 
   // 返回上级目录
-  const handleGoToParent = () => {
-    if (!browsingPath) return;
-    
-    // 获取当前浏览路径的上级目录
-    const parentPath = getDirname(browsingPath);
-    
-    // 如果上级目录存在且不是根目录本身，则导航到上级
-    if (parentPath && parentPath !== browsingPath && parentPath !== getDirname(parentPath)) {
-      scanDirectory(parentPath);
+  const handleGoUp = async () => {
+    if (!currentPath || currentPath === rootPath || isNavigating) return;
+
+    // 获取当前路径的上级目录
+    const parentPath = getDirname(currentPath);
+
+    // 如果上级目录存在，则导航到上级
+    if (parentPath && parentPath !== currentPath) {
+      setIsNavigating(true);
+      try {
+        await scanDirectory(parentPath);
+      } catch (error) {
+        console.error('返回上级失败:', error);
+        setError(`返回上级失败: ${error.message}`);
+      } finally {
+        setIsNavigating(false);
+      }
     }
   };
   
@@ -741,35 +776,83 @@ function HomePage({ colorMode }) {
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" color="primary" elevation={0}>
         <Toolbar variant="dense">
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-            照片相簿浏览器
+          {/* 返回按钮 - 只有在子目录时显示 */}
+          {currentPath && currentPath !== rootPath && (
+            <Tooltip title="返回上级目录">
+              <IconButton
+                edge="start"
+                color="inherit"
+                onClick={handleGoUp}
+                sx={{ mr: 1 }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {/* 返回根目录按钮 - 只有在子目录时显示 */}
+          {currentPath && currentPath !== rootPath && (
+            <Tooltip title="返回根目录">
+              <IconButton
+                color="inherit"
+                onClick={handleReturnToRoot}
+                sx={{ mr: 1 }}
+              >
+                <HomeIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {/* 标题 - 根据当前路径显示 */}
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{
+              flexGrow: 1,
+              fontSize: { xs: '1rem', sm: '1.25rem' },
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+          >
+            {currentPath && currentPath !== rootPath
+              ? getBasename(currentPath)
+              : '照片相簿浏览器'}
           </Typography>
-          <Button 
-            color="inherit" 
-            startIcon={<FolderOpenIcon />}
-            onClick={handleSelectDirectory}
-            size="small"
-            sx={{ mr: 1 }}
-          >
-            选择文件夹
-          </Button>
-          
-          <Button 
-            color="inherit" 
-            startIcon={<OpenInNewIcon />}
-            onClick={handleOpenNewInstance}
-            size="small"
-            sx={{ mr: 1 }}
-          >
-            新实例选择文件夹
-          </Button>
-          
+
+          {/* 功能按钮组 */}
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <FormControl variant="outlined" size="small" sx={{ 
+            {/* 文件夹选择按钮 - 只在根目录显示 */}
+            {(!currentPath || currentPath === rootPath) && (
+              <>
+                <Button
+                  color="inherit"
+                  startIcon={<FolderOpenIcon />}
+                  onClick={handleSelectDirectory}
+                  size="small"
+                  sx={{ mr: 1 }}
+                >
+                  选择文件夹
+                </Button>
+
+                <Button
+                  color="inherit"
+                  startIcon={<OpenInNewIcon />}
+                  onClick={handleOpenNewInstance}
+                  size="small"
+                  sx={{ mr: 1 }}
+                >
+                  新实例选择
+                </Button>
+              </>
+            )}
+
+            {/* 排序控制 */}
+            <FormControl variant="outlined" size="small" sx={{
               minWidth: { xs: 80, sm: 120 },
               mr: 1,
-              bgcolor: 'rgba(255,255,255,0.1)', 
-              borderRadius: 1 
+              bgcolor: 'rgba(255,255,255,0.1)',
+              borderRadius: 1
             }}>
               <InputLabel id="sort-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>排序</InputLabel>
               <Select
@@ -784,19 +867,18 @@ function HomePage({ colorMode }) {
                 <MenuItem value="lastModified">修改时间</MenuItem>
               </Select>
             </FormControl>
-            
+
             <IconButton color="inherit" onClick={handleDirectionChange} size="small">
-              <SortIcon sx={{ 
+              <SortIcon sx={{
                 transform: sortDirection === 'desc' ? 'rotate(180deg)' : 'none',
                 transition: 'transform 0.3s',
                 fontSize: '1.2rem'
               }} />
             </IconButton>
-            
-            
-            {/* 添加随机选择相簿按钮 */}
+
+            {/* 随机选择相簿按钮 */}
             <Tooltip title="随机选择相簿 (R)">
-              <IconButton 
+              <IconButton
                 color="inherit"
                 onClick={handleRandomAlbum}
                 size="small"
@@ -806,10 +888,10 @@ function HomePage({ colorMode }) {
                 <CasinoIcon sx={{ fontSize: '1.2rem' }} />
               </IconButton>
             </Tooltip>
-            
+
             {/* 收藏按钮 */}
             <Tooltip title="我的收藏">
-              <IconButton 
+              <IconButton
                 color="inherit"
                 onClick={handleNavigateToFavorites}
                 size="small"
@@ -818,13 +900,13 @@ function HomePage({ colorMode }) {
                 <FavoriteIcon sx={{ fontSize: '1.2rem' }} />
               </IconButton>
             </Tooltip>
-            
+
             {/* 密度选择 */}
-            <FormControl variant="outlined" size="small" sx={{ 
+            <FormControl variant="outlined" size="small" sx={{
               minWidth: { xs: 80, sm: 100 },
               mr: 1,
-              bgcolor: 'rgba(255,255,255,0.1)', 
-              borderRadius: 1 
+              bgcolor: 'rgba(255,255,255,0.1)',
+              borderRadius: 1
             }}>
               <InputLabel id="density-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>密度</InputLabel>
               <Select
@@ -842,10 +924,10 @@ function HomePage({ colorMode }) {
                 <MenuItem value="comfortable">宽松</MenuItem>
               </Select>
             </FormControl>
-            
+
             {/* 深色模式切换按钮 */}
             <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
-              <IconButton 
+              <IconButton
                 color="inherit"
                 onClick={colorMode.toggleColorMode}
                 size="small"
@@ -854,19 +936,19 @@ function HomePage({ colorMode }) {
                 {colorMode.mode === 'dark' ? <Brightness7Icon sx={{ fontSize: '1.2rem' }} /> : <Brightness4Icon sx={{ fontSize: '1.2rem' }} />}
               </IconButton>
             </Tooltip>
-            
-            <IconButton 
-              color="inherit" 
-              onClick={handleRefresh} 
+
+            <IconButton
+              color="inherit"
+              onClick={handleRefresh}
               disabled={!rootPath || loading}
               size="small"
             >
               <RefreshIcon sx={{ fontSize: '1.2rem' }} />
             </IconButton>
-            
+
             <Tooltip title="设置">
-              <IconButton 
-                color="inherit" 
+              <IconButton
+                color="inherit"
                 onClick={() => navigate('/settings')}
                 size="small"
               >
@@ -889,18 +971,10 @@ function HomePage({ colorMode }) {
         />
       )}
 
-      <Box 
+      <Box
         ref={scrollContainerRef}
+        sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
         className="scroll-container"
-        sx={{ 
-          flexGrow: 1, 
-          overflow: 'auto', 
-          py: 2, 
-          px: { xs: 1, sm: 2, md: 3 },
-          bgcolor: theme => theme.palette.background.default,
-          width: '100%',
-          maxWidth: '100vw'
-        }}
       >
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -985,12 +1059,11 @@ function HomePage({ colorMode }) {
 
       {/* 浮动导航面板 */}
       <FloatingNavigationPanel
-        currentPath={browsingPath || rootPath}
+        currentPath={currentPath || rootPath}
         onNavigate={handleNavigationPanelNavigate}
         rootPath={rootPath}
-        browsingPath={browsingPath}
         onReturnToRoot={handleReturnToRoot}
-        onGoToParent={handleGoToParent}
+        onGoToParent={handleGoUp}
         onOpenAlbum={handleFloatingPanelAlbumClick}
         isVisible={!!rootPath} // 只有选择了根路径后才显示
       />

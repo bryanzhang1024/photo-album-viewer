@@ -215,6 +215,53 @@ export const isImageFile = (filePath) => {
 };
 
 /**
+ * 验证路径是否有效
+ * @param {string} path 路径
+ * @returns {boolean} 是否有效
+ */
+export const isValidPath = (path) => {
+  if (!path || typeof path !== 'string') return false;
+
+  const trimmedPath = path.trim();
+
+  // 检查是否为空路径
+  if (trimmedPath === '') return false;
+
+  // 检查路径长度
+  if (path.length > 4096) return false; // 大多数系统的路径长度限制
+
+  // 检查是否包含非法字符（根据操作系统）
+  const illegalChars = /[<>:"|?*]/;
+  if (illegalChars.test(trimmedPath)) return false;
+
+  // 允许的路径格式：
+  // 1. Windows绝对路径: C:\path, C:/path
+  // 2. Unix绝对路径: /path/to/somewhere
+  // 3. 网络路径: \\server\share
+  // 4. 相对路径: ./path, ../path, path/to/somewhere
+  // 5. 单个文件名或目录名: filename, dirname
+
+  // 检查路径格式 - 更宽松的验证
+  const windowsPathPattern = /^[a-zA-Z]:(\\|\/|$)/; // C:\ or C:/
+  const unixAbsolutePathPattern = /^\//; // /path
+  const networkPathPattern = /^\\\\[^\\]/; // \\server\share
+  const relativePathPattern = /^\.\\.?|^~\//; // ./, ../, ~/
+
+  // 如果匹配特殊格式，直接通过
+  if (windowsPathPattern.test(trimmedPath) ||
+      unixAbsolutePathPattern.test(trimmedPath) ||
+      networkPathPattern.test(trimmedPath) ||
+      relativePathPattern.test(trimmedPath)) {
+    return true;
+  }
+
+  // 对于普通路径，只检查不包含非法字符且不以空格开头/结尾
+  // 允许包含斜杠、点、连字符、下划线、字母、数字、汉字等
+  const validCharsPattern = /^[^<>:"|?*]*[^<>:"|?*\s]$/;
+  return validCharsPattern.test(trimmedPath);
+};
+
+/**
  * 生成显示路径（截断长路径）
  * @param {string} fullPath 完整路径
  * @param {number} maxLength 最大长度
@@ -224,12 +271,12 @@ export const getDisplayPath = (fullPath, maxLength = 50) => {
   if (!fullPath || fullPath.length <= maxLength) {
     return fullPath;
   }
-  
+
   const parts = fullPath.split(/[\\\/]/).filter(Boolean);
   if (parts.length <= 2) {
     return fullPath;
   }
-  
+
   // 保留开头和结尾，中间用...替代
   const start = parts.slice(0, 2).join('/');
   const end = parts.slice(-2).join('/');
