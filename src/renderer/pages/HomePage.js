@@ -986,7 +986,7 @@ function HomePage({ colorMode }) {
                     <AlbumCard
                       node={node}
                       displayPath={getNodeDisplayPath(node)}
-                      onClick={handleNodeClick}
+                      onClick={() => handleNodeClick(node)}
                       isCompactMode={userDensity === 'compact'}
                       isVisible={true}
                     />
