@@ -41,6 +41,7 @@ import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
+import imageCache from '../utils/ImageCacheManager';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -220,24 +221,18 @@ function AlbumPage({ colorMode }) {
       setLoading(true);
       setError('');
 
-      // 检查是否有缓存
-      const cacheKey = `album_images_${decodedAlbumPath}`;
-      const cachedData = sessionStorage.getItem(cacheKey);
-
+      // 使用统一缓存管理器
+      const cachedData = imageCache.get('album', decodedAlbumPath);
       if (cachedData) {
-        setImages(JSON.parse(cachedData));
+        setImages(cachedData);
         setLoading(false);
         return;
       }
 
       const result = await ipcRenderer.invoke('get-album-images', decodedAlbumPath);
 
-      // 缓存结果到sessionStorage（会话级别）
-      try {
-        sessionStorage.setItem(cacheKey, JSON.stringify(result));
-      } catch (e) {
-        console.warn('缓存存储失败', e);
-      }
+      // 缓存结果
+      imageCache.set('album', decodedAlbumPath, result);
 
       setImages(result);
 
@@ -331,15 +326,16 @@ function AlbumPage({ colorMode }) {
       const rootPath = localStorage.getItem(windowStorageKey);
       if (!rootPath) return;
 
-      // 获取相簿列表
+      // 获取相簿列表 - 使用统一缓存管理器
       let albums = [];
-      const cacheKey = `albums_cache_${rootPath}`;
-      const cachedData = localStorage.getItem(cacheKey);
-      
+      const cachedData = imageCache.get('albums', rootPath);
+
       if (cachedData) {
-        albums = JSON.parse(cachedData);
+        albums = cachedData;
       } else {
         albums = await ipcRenderer.invoke('scan-directory', rootPath);
+        // 缓存相簿列表
+        imageCache.set('albums', rootPath, albums);
       }
 
       if (albums.length === 0) return;
@@ -424,8 +420,8 @@ function AlbumPage({ colorMode }) {
   // 处理刷新
   const handleRefresh = () => {
     // 清除缓存
-    const cacheKey = `album_images_${decodedAlbumPath}`;
-    sessionStorage.removeItem(cacheKey);
+    imageCache.clearType('album');
+    imageCache.clearType('albums');
 
     loadAlbumImages();
   };
@@ -678,16 +674,15 @@ function AlbumPage({ colorMode }) {
         return;
       }
 
-      // 检查是否有缓存的相簿列表
-      const cacheKey = `albums_cache_${rootPath}`;
-      let albums = [];
-
-      const cachedData = localStorage.getItem(cacheKey);
+      // 检查是否有缓存的相簿列表 - 使用统一缓存管理器
+      const cachedData = imageCache.get('albums', rootPath);
       if (cachedData) {
-        albums = JSON.parse(cachedData);
+        albums = cachedData;
       } else {
         // 如果没有缓存，重新扫描目录
         albums = await ipcRenderer.invoke('scan-directory', rootPath);
+        // 缓存相簿列表
+        imageCache.set('albums', rootPath, albums);
       }
 
       if (albums.length > 0) {
@@ -1013,10 +1008,8 @@ function ImageCard({ image, onClick, density, onLoad, albumPath }) {
         setImageLoaded(false);
         setImageError(false);
 
-        // 检查会话缓存中是否有图片URL
-        const cacheKey = `image_thumbnail_${image.path}`;
-        const cachedUrl = sessionStorage.getItem(cacheKey);
-
+        // 使用统一缓存管理器
+        const cachedUrl = imageCache.get('thumbnail', image.path);
         if (cachedUrl) {
           setImageUrl(cachedUrl);
           setLoading(false);
@@ -1044,12 +1037,8 @@ function ImageCard({ image, onClick, density, onLoad, albumPath }) {
           return;
         }
 
-        // 缓存到会话存储
-        try {
-          sessionStorage.setItem(cacheKey, url);
-        } catch (e) {
-          console.warn('缓存缩略图失败', e);
-        }
+        // 缓存到统一缓存管理器
+        imageCache.set('thumbnail', image.path, url);
 
         setImageUrl(url);
       } catch (err) {
@@ -1090,8 +1079,7 @@ function ImageCard({ image, onClick, density, onLoad, albumPath }) {
     if (retryCount < maxRetries) {
       console.log(`重试加载图片(${retryCount + 1}/${maxRetries}): ${image.path}`);
       // 清除缓存
-      const cacheKey = `image_thumbnail_${image.path}`;
-      sessionStorage.removeItem(cacheKey);
+      imageCache.clearType('thumbnail');
       // 增加重试计数并触发重新加载
       setRetryCount(prev => prev + 1);
     } else {

@@ -83,6 +83,15 @@ export const PERFORMANCE_CONFIG = {
     HIGH: 0,     // 当前可见内容
     NORMAL: 1,   // 即将显示的内容
     LOW: 2       // 背景预加载
+  },
+  // 统一缓存管理器配置映射
+  CACHE_TYPES: {
+    NAVIGATION: 'navigation',    // 导航缓存
+    DIRECTORY: 'directory',      // 目录树缓存
+    ALBUM: 'album',             // 相册缓存
+    ALBUMS: 'albums',           // 相簿列表缓存
+    THUMBNAIL: 'thumbnail',     // 缩略图缓存
+    PREVIEW: 'preview'          // 预览图缓存
   }
 };
 

@@ -39,6 +39,7 @@ import Masonry from 'react-masonry-css';
 import './AlbumPage.css';
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
+import imageCache from '../utils/ImageCacheManager';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -263,7 +264,7 @@ function HomePage({ colorMode }) {
     }
   };
   
-  // 智能导航扫描 - 新架构（添加缓存）
+  // 智能导航扫描 - 新架构（使用统一缓存）
   const scanNavigationLevel = async (targetPath) => {
     try {
       if (!ipcRenderer) {
@@ -271,32 +272,22 @@ function HomePage({ colorMode }) {
         return;
       }
 
-      // 检查缓存 - 复用旧架构的缓存逻辑
-      const cacheKey = `navigation_cache_${targetPath}`;
-      const cacheTimestampKey = `navigation_cache_timestamp_${targetPath}`;
-      const cachedData = localStorage.getItem(cacheKey);
-      const cacheTimestamp = localStorage.getItem(cacheTimestampKey);
+      // 使用统一缓存管理器
+      const cachedData = imageCache.get('navigation', targetPath);
+      if (cachedData) {
+        console.log(`使用缓存数据: ${targetPath}`);
+        setNavigationNodes(cachedData.nodes);
+        setCurrentPath(cachedData.currentPath);
+        setBreadcrumbs(cachedData.breadcrumbs);
+        setMetadata(cachedData.metadata);
 
-      // 如果缓存不超过1小时，使用缓存
-      if (cachedData && cacheTimestamp) {
-        const now = Date.now();
-        const timestamp = parseInt(cacheTimestamp, 10);
-        if (now - timestamp < 60 * 60 * 1000) { // 1小时
-          console.log(`使用缓存数据: ${targetPath}`);
-          const response = JSON.parse(cachedData);
-          setNavigationNodes(response.nodes);
-          setCurrentPath(response.currentPath);
-          setBreadcrumbs(response.breadcrumbs);
-          setMetadata(response.metadata);
+        // 兼容性数据
+        const albumNodes = cachedData.nodes.filter(node => node.type === 'album');
+        setAlbums(albumNodes);
+        setBrowsingPath(targetPath);
 
-          // 兼容性数据
-          const albumNodes = response.nodes.filter(node => node.type === 'album');
-          setAlbums(albumNodes);
-          setBrowsingPath(targetPath);
-
-          console.log(`从缓存加载: ${response.metadata.totalNodes} 个节点`);
-          return;
-        }
+        console.log(`从缓存加载: ${cachedData.metadata.totalNodes} 个节点`);
+        return;
       }
 
       setLoading(true);
@@ -307,14 +298,7 @@ function HomePage({ colorMode }) {
 
       if (response.success) {
         // 缓存结果
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(response));
-          localStorage.setItem(cacheTimestampKey, Date.now().toString());
-        } catch (e) {
-          console.warn('缓存存储失败', e);
-          // 清理旧缓存
-          clearOldCaches();
-        }
+        imageCache.set('navigation', targetPath, response);
 
         setNavigationNodes(response.nodes);
         setCurrentPath(response.currentPath);
@@ -338,54 +322,38 @@ function HomePage({ colorMode }) {
     }
   };
 
-  // 扫描文件夹 - 兼容性保留  
+  // 扫描文件夹 - 兼容性保留
   const scanDirectory = async (path) => {
     if (useNewArchitecture) {
       return await scanNavigationLevel(path);
     }
-    
+
     // 原有的扫描逻辑（兼容性保留）
     try {
       if (!ipcRenderer) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
         return;
       }
-      
+
       setLoading(true);
       setError('');
-      
+
       // 更新浏览路径
       setBrowsingPath(path);
-      
-      // 检查是否有缓存
-      const cacheKey = `albums_cache_${path}`;
-      const cachedData = localStorage.getItem(cacheKey);
-      const cacheTimestampKey = `albums_cache_timestamp_${path}`;
-      const cacheTimestamp = localStorage.getItem(cacheTimestampKey);
-      
-      // 如果缓存不超过1小时，则使用缓存
-      if (cachedData && cacheTimestamp) {
-        const now = Date.now();
-        const timestamp = parseInt(cacheTimestamp, 10);
-        if (now - timestamp < 60 * 60 * 1000) { // 1小时
-          setAlbums(JSON.parse(cachedData));
-          setLoading(false);
-          return;
-        }
+
+      // 使用统一缓存管理器
+      const cachedData = imageCache.get('albums', path);
+      if (cachedData) {
+        setAlbums(cachedData);
+        setLoading(false);
+        return;
       }
-      
+
       const result = await ipcRenderer.invoke('scan-directory', path);
-      
+
       // 缓存结果
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify(result));
-        localStorage.setItem(cacheTimestampKey, Date.now().toString());
-      } catch (e) {
-        // localStorage可能已满，清理旧缓存
-        console.warn('缓存存储失败，尝试清理旧缓存', e);
-        clearOldCaches();
-      }
-      
+      imageCache.set('albums', path, result);
+
       setAlbums(result);
       setLoading(false);
     } catch (err) {
@@ -428,12 +396,12 @@ function HomePage({ colorMode }) {
     }});
   }, [navigate, currentPath, rootPath]);
   
-  // 清理旧缓存
+  // 清理旧缓存（兼容性保留）
   const clearOldCaches = () => {
     // 遍历localStorage，删除超过1周的缓存
     const now = Date.now();
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('albums_cache_timestamp_')) {
@@ -449,17 +417,20 @@ function HomePage({ colorMode }) {
   
   // 清空所有缓存
   const clearAllCache = () => {
-    // 清空localStorage中的相册缓存
+    // 清空统一缓存
+    imageCache.clearAll();
+
+    // 清空localStorage中的旧缓存（兼容性）
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && (key.startsWith('albums_cache_') || key.startsWith('album_images_'))) {
+      if (key && (key.startsWith('albums_cache_') || key.startsWith('album_images_') || key.startsWith('navigation_cache_'))) {
         keysToRemove.push(key);
       }
     }
     keysToRemove.forEach(key => localStorage.removeItem(key));
-    
-    // 清空sessionStorage中的预览图缓存
+
+    // 清空sessionStorage中的预览图缓存（兼容性）
     const sessionKeysToRemove = [];
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
@@ -468,7 +439,7 @@ function HomePage({ colorMode }) {
       }
     }
     sessionKeysToRemove.forEach(key => sessionStorage.removeItem(key));
-    
+
     // 通过IPC通知主进程清空缩略图缓存
     if (ipcRenderer) {
       ipcRenderer.invoke('clear-thumbnail-cache')
@@ -490,13 +461,16 @@ function HomePage({ colorMode }) {
   // 重新扫描
   const handleRefresh = () => {
     if (rootPath) {
-      // 清除新架构缓存
+      // 清除统一缓存
+      imageCache.clearType('navigation');
+      imageCache.clearType('albums');
+
+      // 清除旧架构缓存（兼容性）
       const navCacheKey = `navigation_cache_${rootPath}`;
       const navCacheTimestampKey = `navigation_cache_timestamp_${rootPath}`;
       localStorage.removeItem(navCacheKey);
       localStorage.removeItem(navCacheTimestampKey);
 
-      // 清除旧架构缓存（兼容性）
       const cacheKey = `albums_cache_${rootPath}`;
       const cacheTimestampKey = `albums_cache_timestamp_${rootPath}`;
       localStorage.removeItem(cacheKey);

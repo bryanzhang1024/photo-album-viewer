@@ -16,6 +16,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useFavorites } from '../contexts/FavoritesContext';
+import imageCache from '../utils/ImageCacheManager';
 // import LazyLoad from 'react-lazyload'; // 注释掉懒加载导入
 
 // 安全地获取electron对象
@@ -78,10 +79,10 @@ function AlbumCard({
     return null;
   }, [node, album]);
   
-  // 使用记忆化来缓存图片URLs
+  // 使用统一缓存管理器的缓存键
   const cacheKey = useMemo(() => {
     if (!cardData?.path) return '';
-    return `card_preview_${cardData.path}`;
+    return cardData.path;
   }, [cardData?.path]);
   
   // 使用收藏上下文
@@ -100,10 +101,10 @@ function AlbumCard({
       return;
     }
     
-    // 先检查会话缓存
-    const cachedUrls = sessionStorage.getItem(cacheKey);
+    // 使用统一缓存管理器
+    const cachedUrls = imageCache.get('preview', cacheKey);
     if (cachedUrls) {
-      setPreviewUrls(JSON.parse(cachedUrls));
+      setPreviewUrls(cachedUrls);
       setLoading(false);
       return;
     }
@@ -145,22 +146,8 @@ function AlbumCard({
           .map(path => results[path])
           .filter(Boolean);
         
-        // 缓存到会话存储
-        try {
-          sessionStorage.setItem(cacheKey, JSON.stringify(validUrls));
-        } catch (e) {
-          console.warn('缓存预览图失败', e);
-          
-          // 如果存储失败，尝试清理会话存储中的旧数据
-          clearOldSessionCache();
-          
-          // 重试保存
-          try {
-            sessionStorage.setItem(cacheKey, JSON.stringify(validUrls));
-          } catch (e2) {
-            console.error('清理后仍无法保存缓存', e2);
-          }
-        }
+        // 缓存到统一缓存管理器
+        imageCache.set('preview', cacheKey, validUrls);
         
         setPreviewUrls(validUrls);
       } catch (err) {
@@ -176,20 +163,10 @@ function AlbumCard({
     loadPreviewImages();
   }, [cardData, cacheKey, isVisible]);
   
-  // 清理旧的会话缓存
+  // 清理旧的会话缓存（兼容性保留）
   const clearOldSessionCache = () => {
-    // 移除50%的缓存项目
-    const keys = [];
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (key && key.startsWith('album_preview_')) {
-        keys.push(key);
-      }
-    }
-    
-    // 按顺序删除一半的缓存
-    const keysToRemove = keys.slice(0, Math.ceil(keys.length / 2));
-    keysToRemove.forEach(key => sessionStorage.removeItem(key));
+    // 统一缓存管理器会自动处理LRU淘汰
+    console.log('使用统一缓存管理器，无需手动清理');
   };
   
   // 占位符组件

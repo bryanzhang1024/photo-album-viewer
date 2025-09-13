@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getBasename, getRelativePath } from '../utils/pathUtils';
+import imageCache from '../utils/ImageCacheManager';
 import {
   Box,
   Paper,
@@ -62,47 +63,27 @@ const FloatingNavigationPanel = ({
   // 面板可见性逻辑
   const shouldShowPanel = isExpanded || isHovered;
 
-  // 构建目录树（带缓存）
+  // 构建目录树（使用统一缓存）
   const buildDirectoryTree = useCallback(async (path) => {
     if (!ipcRenderer || !path) return [];
-    
+
     try {
       setLoading(true);
-      
-      // 检查缓存
-      const cacheKey = `directory_tree_${path}`;
-      const cachedData = sessionStorage.getItem(cacheKey);
-      const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
-      
+
+      // 使用统一缓存管理器
+      const cachedData = imageCache.get('directory', path);
       if (cachedData) {
-        const cached = JSON.parse(cachedData);
-        const now = Date.now();
-        
-        // 检查缓存是否还有效
-        if (now - cached.timestamp < CACHE_DURATION) {
-          console.log('使用缓存的目录树数据:', path);
-          setLoading(false);
-          return cached.data || [];
-        } else {
-          // 缓存过期，删除
-          sessionStorage.removeItem(cacheKey);
-        }
+        console.log('使用缓存的目录树数据:', path);
+        setLoading(false);
+        return cachedData || [];
       }
-      
+
       console.log('重新扫描目录树:', path);
       const result = await ipcRenderer.invoke('scan-directory-tree', path);
-      
+
       // 缓存结果
-      try {
-        const cacheData = {
-          timestamp: Date.now(),
-          data: result || []
-        };
-        sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
-      } catch (e) {
-        console.warn('缓存目录树数据失败:', e);
-      }
-      
+      imageCache.set('directory', path, result || []);
+
       setLoading(false);
       return result || [];
     } catch (error) {
@@ -123,9 +104,8 @@ const FloatingNavigationPanel = ({
   const refreshDirectoryTree = useCallback(async () => {
     if (rootPath) {
       // 清除缓存
-      const cacheKey = `directory_tree_${rootPath}`;
-      sessionStorage.removeItem(cacheKey);
-      
+      imageCache.clearType('directory');
+
       // 重新构建
       const result = await buildDirectoryTree(rootPath);
       setDirectoryTree(result);
