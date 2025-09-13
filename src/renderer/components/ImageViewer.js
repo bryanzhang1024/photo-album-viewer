@@ -197,6 +197,10 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       if (mouseInactivityTimer.current) {
         clearTimeout(mouseInactivityTimer.current);
       }
+      // 清理滚轮定时器
+      if (wheelStateRef.current.resetTimer) {
+        clearTimeout(wheelStateRef.current.resetTimer);
+      }
     };
   }, []);
   
@@ -377,31 +381,52 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   };
   
   
-  // 用于滚轮缩放的引用
-  const lastWheelTimeRef = useRef(0);
+  // 滚轮导航状态
+  const wheelStateRef = useRef({
+    deltaSum: 0,
+    lastDirection: 0,
+    resetTimer: null
+  });
 
   // 处理鼠标滚轮：ctrl+滚轮缩放，普通滚轮翻页
   const handleWheel = (e) => {
     e.preventDefault();
-    
-    const now = Date.now();
-    const timeDiff = now - lastWheelTimeRef.current;
-    
+
     if (e.ctrlKey) {
-      // ctrl+滚轮：缩放
-      if (timeDiff > 50) { // 50ms防抖
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1; // 向下滚动缩小，向上滚动放大
-        handleZoom(zoomFactor);
-        lastWheelTimeRef.current = now;
-      }
-    } else {
-      // 普通滚轮：翻页
-      if (timeDiff > 100) { // 100ms防抖，防止翻页过快
-        const direction = e.deltaY > 0 ? 'next' : 'prev'; // 向下滚动下一张，向上滚动上一张
-        handleNavigate(direction);
-        lastWheelTimeRef.current = now;
-      }
+      // ctrl+滚轮：缩放，使用简单防抖
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      handleZoom(zoomFactor);
+      return;
     }
+
+    // 普通滚轮：翻页，使用累积防抖
+    const delta = e.deltaY;
+    const currentDirection = Math.sign(delta);
+    const wheelState = wheelStateRef.current;
+
+    // 方向改变时立即重置累积值
+    if (currentDirection !== 0 && currentDirection !== wheelState.lastDirection) {
+      wheelState.deltaSum = 0;
+      wheelState.lastDirection = currentDirection;
+    }
+
+    // 累积滚动量
+    wheelState.deltaSum += Math.abs(delta);
+
+    // 达到阈值时触发翻页
+    if (wheelState.deltaSum >= 100) {
+      const direction = currentDirection > 0 ? 'next' : 'prev';
+      handleNavigate(direction);
+      wheelState.deltaSum = 0; // 立即重置
+    }
+
+    // 设置重置定时器（150ms后自动清零，防止长时间累积）
+    if (wheelState.resetTimer) {
+      clearTimeout(wheelState.resetTimer);
+    }
+    wheelState.resetTimer = setTimeout(() => {
+      wheelState.deltaSum = 0;
+    }, 150);
   };
   
   // 在文件管理器中显示图片
