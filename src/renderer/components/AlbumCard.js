@@ -30,8 +30,7 @@ try {
   console.error('无法加载Electron模块:', error);
 }
 
-// 观察器实例 - 用于确定元素是否在可视区域内
-const observers = new Map();
+// 观察器已移除 - 使用isVisible属性替代
 
 // 全局请求映射 - 防止重复请求
 const thumbnailRequests = new Map();

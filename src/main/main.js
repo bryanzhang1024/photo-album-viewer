@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const isDev = require('electron-is-dev');
 const { promisify } = require('util');
 const http = require('http');
@@ -20,9 +21,9 @@ const THUMBNAIL_CACHE_DIR = path.join(app.getPath('userData'), 'thumbnail-cache'
 // 支持的图片格式
 const SUPPORTED_FORMATS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
 
-// 性能设置默认值
+// 性能设置默认值 - 基于 CPU 核心数优化
 const DEFAULT_PERFORMANCE_SETTINGS = {
-  concurrentTasks: 3, // 降低默认并发任务数量，减少冲突
+  concurrentTasks: Math.max(2, Math.min(6, os.cpus().length - 1)), // 动态设置并发数：2-6之间，基于CPU核心数
   preloadDistance: 5,
   cacheTimeout: 60, // 分钟
   cacheEnabled: true,
