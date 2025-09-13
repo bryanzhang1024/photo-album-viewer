@@ -676,6 +676,7 @@ function AlbumPage({ colorMode }) {
 
       // 检查是否有缓存的相簿列表 - 使用统一缓存管理器
       const cachedData = imageCache.get('albums', rootPath);
+      let albums;
       if (cachedData) {
         albums = cachedData;
       } else {
