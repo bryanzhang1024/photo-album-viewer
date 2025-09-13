@@ -263,31 +263,69 @@ function HomePage({ colorMode }) {
     }
   };
   
-  // 智能导航扫描 - 新架构
+  // 智能导航扫描 - 新架构（添加缓存）
   const scanNavigationLevel = async (targetPath) => {
     try {
       if (!ipcRenderer) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
         return;
       }
-      
+
+      // 检查缓存 - 复用旧架构的缓存逻辑
+      const cacheKey = `navigation_cache_${targetPath}`;
+      const cacheTimestampKey = `navigation_cache_timestamp_${targetPath}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTimestamp = localStorage.getItem(cacheTimestampKey);
+
+      // 如果缓存不超过1小时，使用缓存
+      if (cachedData && cacheTimestamp) {
+        const now = Date.now();
+        const timestamp = parseInt(cacheTimestamp, 10);
+        if (now - timestamp < 60 * 60 * 1000) { // 1小时
+          console.log(`使用缓存数据: ${targetPath}`);
+          const response = JSON.parse(cachedData);
+          setNavigationNodes(response.nodes);
+          setCurrentPath(response.currentPath);
+          setBreadcrumbs(response.breadcrumbs);
+          setMetadata(response.metadata);
+
+          // 兼容性数据
+          const albumNodes = response.nodes.filter(node => node.type === 'album');
+          setAlbums(albumNodes);
+          setBrowsingPath(targetPath);
+
+          console.log(`从缓存加载: ${response.metadata.totalNodes} 个节点`);
+          return;
+        }
+      }
+
       setLoading(true);
       setError('');
-      
+
       console.log(`开始扫描导航层级: ${targetPath}`);
       const response = await ipcRenderer.invoke('scan-navigation-level', targetPath);
-      
+
       if (response.success) {
+        // 缓存结果
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(response));
+          localStorage.setItem(cacheTimestampKey, Date.now().toString());
+        } catch (e) {
+          console.warn('缓存存储失败', e);
+          // 清理旧缓存
+          clearOldCaches();
+        }
+
         setNavigationNodes(response.nodes);
         setCurrentPath(response.currentPath);
         setBreadcrumbs(response.breadcrumbs);
         setMetadata(response.metadata);
-        
+
         // 同时更新旧数据以保持兼容性
         const albumNodes = response.nodes.filter(node => node.type === 'album');
         setAlbums(albumNodes);
         setBrowsingPath(targetPath);
-        
+
         console.log(`扫描完成: ${response.metadata.totalNodes} 个节点`);
       } else {
         setError(response.error?.message || '扫描失败');
@@ -452,12 +490,18 @@ function HomePage({ colorMode }) {
   // 重新扫描
   const handleRefresh = () => {
     if (rootPath) {
-      // 清除缓存
+      // 清除新架构缓存
+      const navCacheKey = `navigation_cache_${rootPath}`;
+      const navCacheTimestampKey = `navigation_cache_timestamp_${rootPath}`;
+      localStorage.removeItem(navCacheKey);
+      localStorage.removeItem(navCacheTimestampKey);
+
+      // 清除旧架构缓存（兼容性）
       const cacheKey = `albums_cache_${rootPath}`;
       const cacheTimestampKey = `albums_cache_timestamp_${rootPath}`;
       localStorage.removeItem(cacheKey);
       localStorage.removeItem(cacheTimestampKey);
-      
+
       // 清除会话缓存中的预览图缓存
       for (let i = 0; i < sessionStorage.length; i++) {
         const key = sessionStorage.key(i);
@@ -465,8 +509,12 @@ function HomePage({ colorMode }) {
           sessionStorage.removeItem(key);
         }
       }
-      
-      scanDirectory(rootPath);
+
+      if (useNewArchitecture) {
+        scanNavigationLevel(rootPath);
+      } else {
+        scanDirectory(rootPath);
+      }
     }
   };
   
