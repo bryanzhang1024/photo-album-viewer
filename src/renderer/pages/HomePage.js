@@ -38,7 +38,6 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AlbumCard from '../components/AlbumCard';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
-import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css';
 import { ScrollPositionContext } from '../App';
@@ -1057,16 +1056,6 @@ function HomePage({ colorMode }) {
         )}
       </Box>
 
-      {/* 浮动导航面板 */}
-      <FloatingNavigationPanel
-        currentPath={currentPath || rootPath}
-        onNavigate={handleNavigationPanelNavigate}
-        rootPath={rootPath}
-        onReturnToRoot={handleReturnToRoot}
-        onGoToParent={handleGoUp}
-        onOpenAlbum={handleFloatingPanelAlbumClick}
-        isVisible={!!rootPath} // 只有选择了根路径后才显示
-      />
       
       <Snackbar 
         open={!!error} 

@@ -36,7 +36,6 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ImageViewer from '../components/ImageViewer';
-import FloatingNavigationPanel from '../components/FloatingNavigationPanel';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import Masonry from 'react-masonry-css';
 import './AlbumPage.css'; // 我们将添加这个CSS文件
@@ -1217,16 +1216,6 @@ function AlbumPage({ colorMode }) {
         </Alert>
       </Snackbar>
 
-      {/* 浮动导航面板 */}
-      <FloatingNavigationPanel
-        currentPath={decodedAlbumPath}
-        onNavigate={handleFloatingPanelNavigate}
-        rootPath={rootPath}
-        isVisible={true}
-        onReturnToRoot={handleReturnToRoot}
-        onGoToParent={handleGoToParent}
-        onOpenAlbum={handleFloatingPanelAlbumClick}
-      />
 
     </Box>
   );

@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import HomePage from './pages/HomePage';
+import HomePageWithState from './pages/HomePageWithState';
 import AlbumPage from './pages/AlbumPage';
 import FavoritesPage from './pages/FavoritesPage';
 import TestPage from './pages/TestPage';
@@ -113,7 +114,7 @@ function App() {
         <FavoritesProvider>
           <ScrollPositionContext.Provider value={scrollContext}>
             <Routes>
-              <Route path="/" element={<HomePage colorMode={colorMode} />} />
+              <Route path="/" element={<HomePageWithState colorMode={colorMode} />} />
               <Route path="/test" element={<TestPage colorMode={colorMode} />} />
               <Route path="/album/:albumPath" element={<AlbumPage colorMode={colorMode} />} />
               <Route path="/album" element={<AlbumPage colorMode={colorMode} />} />
