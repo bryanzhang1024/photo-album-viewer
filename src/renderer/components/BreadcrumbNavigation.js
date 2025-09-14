@@ -44,41 +44,61 @@ function BreadcrumbNavigation({
     }
   };
 
-  // 渲染统计信息
+  // 渲染统计信息 - 紧凑版本
   const renderStats = () => {
     if (!showStats || !metadata) return null;
 
     const { folderCount, albumCount, totalImages } = metadata;
-    const items = [];
 
-    if (folderCount > 0) {
-      items.push(`${folderCount}个文件夹`);
-    }
-    if (albumCount > 0) {
-      items.push(`${albumCount}个相册`);
-    }
-    if (totalImages > 0) {
-      items.push(`${totalImages}张图片`);
-    }
-
-    if (items.length === 0) return null;
+    // 如果没有任何统计数据，不显示
+    if (folderCount === 0 && albumCount === 0 && totalImages === 0) return null;
 
     return (
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-        {items.map((item, index) => (
-          <Chip
-            key={index}
-            label={item}
-            size="small"
-            variant="outlined"
-            sx={{
-              fontSize: '0.75rem',
-              height: '24px',
-              color: 'text.secondary',
-              borderColor: 'divider'
-            }}
-          />
-        ))}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1,
+          py: 0.5,
+          bgcolor: 'action.hover',
+          borderRadius: 1,
+          minWidth: 0
+        }}
+      >
+        {/* 文件夹统计 */}
+        {folderCount > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <FolderIcon sx={{ fontSize: '0.875rem', color: 'text.secondary' }} />
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {folderCount}
+            </Typography>
+          </Box>
+        )}
+
+        {/* 相册统计 */}
+        {albumCount > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+              📷
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {albumCount}
+            </Typography>
+          </Box>
+        )}
+
+        {/* 图片统计 */}
+        {totalImages > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+              🖼️
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {totalImages}
+            </Typography>
+          </Box>
+        )}
       </Box>
     );
   };
@@ -117,12 +137,39 @@ function BreadcrumbNavigation({
           color="text.secondary"
           noWrap
           title={currentPath}
-          sx={{ flex: 1 }}
+          sx={{ flex: 1, minWidth: 0 }}
         >
           {getDisplayPath(currentPath, 40)}
         </Typography>
 
-        {renderStats()}
+        {/* 紧凑模式下的统计信息 - 更简洁 */}
+        {showStats && metadata && (metadata.folderCount > 0 || metadata.albumCount > 0 || metadata.totalImages > 0) && (
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            px: 0.75,
+            py: 0.25,
+            bgcolor: 'action.hover',
+            borderRadius: 0.75
+          }}>
+            {metadata.folderCount > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                📁{metadata.folderCount}
+              </Typography>
+            )}
+            {metadata.albumCount > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                📷{metadata.albumCount}
+              </Typography>
+            )}
+            {metadata.totalImages > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                🖼️{metadata.totalImages}
+              </Typography>
+            )}
+          </Box>
+        )}
       </Box>
     );
   }
@@ -132,18 +179,17 @@ function BreadcrumbNavigation({
     <Box sx={{
       display: 'flex',
       flexDirection: 'column',
-      gap: 1,
-      p: 2,
+      p: 1.5,
       bgcolor: 'background.paper',
       borderBottom: 1,
       borderColor: 'divider'
     }}>
-      {/* 主要导航行 */}
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 1,
-        minHeight: '32px'
+      {/* 整合导航和统计的单行布局 */}
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        minHeight: '40px'
       }}>
         {breadcrumbs.length > 1 && (
           <Tooltip title="返回上级">
@@ -163,12 +209,13 @@ function BreadcrumbNavigation({
           </Tooltip>
         )}
 
+        {/* 面包屑导航 - 主要内容 */}
         {breadcrumbs.length > 0 ? (
           <Breadcrumbs
             aria-label="路径导航"
             separator="›"
-            sx={{ flex: 1, overflow: 'hidden' }}
-            maxItems={5}
+            sx={{ flex: 1, overflow: 'hidden', minWidth: 0 }}
+            maxItems={4}
           >
             {breadcrumbs.map((breadcrumb, index) => {
               const isLast = index === breadcrumbs.length - 1;
@@ -177,14 +224,15 @@ function BreadcrumbNavigation({
               if (isLast) {
                 // 当前路径 - 不可点击
                 return (
-                  <Box key={breadcrumb.path} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <FolderIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                  <Box key={breadcrumb.path} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                    <FolderIcon sx={{ fontSize: '1rem', color: 'text.secondary', flexShrink: 0 }} />
                     <Typography
                       variant="body2"
                       color="text.primary"
                       fontWeight="medium"
                       noWrap
                       title={breadcrumb.name}
+                      sx={{ minWidth: 0 }}
                     >
                       {breadcrumb.name}
                     </Typography>
@@ -208,15 +256,16 @@ function BreadcrumbNavigation({
                     background: 'none',
                     cursor: 'pointer',
                     p: 0,
+                    minWidth: 0,
                     '&:hover': {
                       color: 'primary.main'
                     }
                   }}
                   title={breadcrumb.path}
                 >
-                  {isFirst && <HomeIcon sx={{ fontSize: '1rem' }} />}
-                  {!isFirst && <FolderIcon sx={{ fontSize: '1rem' }} />}
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {isFirst && <HomeIcon sx={{ fontSize: '1rem', flexShrink: 0 }} />}
+                  {!isFirst && <FolderIcon sx={{ fontSize: '1rem', flexShrink: 0 }} />}
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                     {breadcrumb.name}
                   </span>
                 </Link>
@@ -228,10 +277,10 @@ function BreadcrumbNavigation({
             请选择文件夹
           </Typography>
         )}
-      </Box>
 
-      {/* 统计信息行 */}
-      {renderStats()}
+        {/* 统计信息 - 紧凑显示 */}
+        {renderStats()}
+      </Box>
     </Box>
   );
 }

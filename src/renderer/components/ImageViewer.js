@@ -60,7 +60,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
 
     setIsTransitioning(true);
     setImageLoaded(false);
-    
+
     // 创建新的图片对象进行预加载
     const img = new Image();
     img.onload = () => {
@@ -68,11 +68,14 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       setIsTransitioning(false);
     };
     img.onerror = () => {
+      console.error('图片加载失败:', currentImage.path);
       setImageLoaded(true);
       setIsTransitioning(false);
     };
-    img.src = `file://${currentImage.path}`;
-    
+    // 确保路径格式正确
+    const imagePath = currentImage.path.startsWith('/') ? currentImage.path : `/${currentImage.path}`;
+    img.src = `file://${imagePath}`;
+
     return () => {
       img.onload = null;
       img.onerror = null;
@@ -612,12 +615,16 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       onClick={handleClick}
       >
         {currentImage && (
-          <img 
+          <img
             ref={imgRef}
-            src={`file://${currentImage.path}`}
+            src={currentImage.path.startsWith('/') ? `file://${currentImage.path}` : `file:///${currentImage.path}`}
             alt={currentImage.name}
             onLoad={(e) => detectImageOrientation(e.target)}
-            style={{ 
+            onError={(e) => {
+              console.error('图片加载失败:', currentImage.path);
+              setImageLoaded(true);
+            }}
+            style={{
               ...calculateRotatedDimensions(),
               transition: 'none',
               cursor: zoomLevel > 1 ? 'move' : 'default',
@@ -640,14 +647,40 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
             color: 'rgba(255, 255, 255, 0.7)',
             gap: 2
           }}>
-            <CircularProgress size={40} thickness={4} sx={{ color: 'rgba(255, 255, 255, 0.5)' }} />
-            <Typography variant="body2" sx={{ 
-              fontSize: '0.9rem',
-              color: 'rgba(255, 255, 255, 0.6)',
-              fontWeight: 300
-            }}>
-              正在加载...
-            </Typography>
+            {!imageLoaded && !isTransitioning ? (
+              <>
+                <Typography variant="h6" sx={{ color: 'error.main', fontSize: '1.2rem' }}>
+                  ✕
+                </Typography>
+                <Typography variant="body2" sx={{
+                  fontSize: '0.9rem',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontWeight: 300,
+                  textAlign: 'center'
+                }}>
+                  图片加载失败
+                </Typography>
+                <Typography variant="caption" sx={{
+                  fontSize: '0.8rem',
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  textAlign: 'center',
+                  maxWidth: '300px'
+                }}>
+                  {currentImage.name}
+                </Typography>
+              </>
+            ) : (
+              <>
+                <CircularProgress size={40} thickness={4} sx={{ color: 'rgba(255, 255, 255, 0.5)' }} />
+                <Typography variant="body2" sx={{
+                  fontSize: '0.9rem',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontWeight: 300
+                }}>
+                  正在加载...
+                </Typography>
+              </>
+            )}
           </Box>
         )}
       </Box>
