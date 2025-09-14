@@ -70,7 +70,10 @@ function HomePage({ colorMode }) {
   const [error, setError] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortDirection, setSortDirection] = useState('asc');
-  const [userDensity, setUserDensity] = useState(() => localStorage.getItem('userDensity') || 'standard');
+  const [userDensity, setUserDensity] = useState(() => {
+  const savedDensity = localStorage.getItem('userDensity');
+  return (savedDensity && DENSITY_CONFIG[savedDensity]) ? savedDensity : 'standard';
+});
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
@@ -636,14 +639,14 @@ function HomePage({ colorMode }) {
   
   // 优化的响应式瀑布流布局 - 采用收藏页面的断点式设计
   const getMasonryBreakpoints = useCallback(() => {
-    const config = DENSITY_CONFIG[userDensity];
+    const config = DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard;
     const containerPadding = isSmallScreen ? 8 : 12;
     const scrollbarWidth = 2;
     const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
-    
+
     const columnWidth = config.baseWidth + config.spacing;
     const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
-    
+
     return columns;
   }, [windowWidth, isSmallScreen, userDensity]);
   
@@ -1029,7 +1032,7 @@ function HomePage({ colorMode }) {
             >
               {(useNewArchitecture ?
                 sortedNodesData.map((node) => (
-                  <div key={node.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
+                  <div key={node.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
                     <AlbumCard
                       node={node}
                       displayPath={getNodeDisplayPath(node)}
@@ -1040,7 +1043,7 @@ function HomePage({ colorMode }) {
                   </div>
                 )) :
                 sortedAlbumsData.map((album) => (
-                  <div key={album.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
+                  <div key={album.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
                     <AlbumCard
                       album={album}
                       displayPath={getAlbumDisplayPath(album)}

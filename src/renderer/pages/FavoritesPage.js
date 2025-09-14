@@ -56,7 +56,10 @@ function FavoritesPage({ colorMode }) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [viewerImages, setViewerImages] = useState([]);
-  const [userDensity, setUserDensity] = useState('standard');
+  const [userDensity, setUserDensity] = useState(() => {
+  const savedDensity = localStorage.getItem('userDensity');
+  return (savedDensity && DENSITY_CONFIG[savedDensity]) ? savedDensity : 'standard';
+});
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [refreshCounter, setRefreshCounter] = useState(0);
   const scrollContainerRef = useRef(null);
@@ -210,14 +213,14 @@ function FavoritesPage({ colorMode }) {
 
   // 优化的响应式瀑布流布局 - 更精确的空间计算
   const getMasonryBreakpoints = useCallback(() => {
-    const config = DENSITY_CONFIG[userDensity];
+    const config = DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard;
     const containerPadding = isSmallScreen ? 8 : 12;
     const scrollbarWidth = 2;
     const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
-    
+
     const columnWidth = config.baseWidth + config.spacing;
     const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
-    
+
     return columns;
   }, [windowWidth, isSmallScreen, userDensity]);
 
@@ -246,7 +249,7 @@ function FavoritesPage({ colorMode }) {
         columnClassName="masonry-grid_column"
       >
         {albums.map((album) => (
-          <div key={album.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
+          <div key={album.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
             <AlbumCard
               album={album}
               displayPath={album.path}
@@ -286,7 +289,7 @@ function FavoritesPage({ colorMode }) {
         columnClassName="masonry-grid_column"
       >
         {images.map((image, index) => (
-          <div key={image.path} style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}>
+          <div key={image.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
             <ImageCard
               image={image}
               onClick={() => handleImageClick(image, index)}

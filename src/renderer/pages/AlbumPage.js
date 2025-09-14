@@ -67,7 +67,10 @@ function AlbumPage({ colorMode }) {
   const [sortDirection, setSortDirection] = useState('asc');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [userDensity, setUserDensity] = useState('standard'); // 'standard' | 'comfortable'
+  const [userDensity, setUserDensity] = useState(() => {
+  const savedDensity = localStorage.getItem('userDensity');
+  return (savedDensity && DENSITY_CONFIG[savedDensity]) ? savedDensity : 'standard';
+});
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [imageHeights, setImageHeights] = useState({}); // 存储图片高度信息
   const [neighboringAlbums, setNeighboringAlbums] = useState({
@@ -639,15 +642,15 @@ function AlbumPage({ colorMode }) {
 
   // 优化的响应式瀑布流布局 - 更精确的空间计算
   const getMasonryBreakpoints = useCallback(() => {
-    const config = DENSITY_CONFIG[userDensity];
+    const config = DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard;
     const containerPadding = isSmallScreen ? 8 : 12; // 进一步减少内边距
     const scrollbarWidth = 2; // 最小化滚动条估算
     const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
-    
+
     // 更精确的空间计算，确保充分利用可用宽度
     const columnWidth = config.baseWidth + config.spacing;
     const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
-    
+
     return columns;
   }, [windowWidth, isSmallScreen, userDensity]);
 
@@ -1173,7 +1176,7 @@ function AlbumPage({ colorMode }) {
                     <div
                       key={`${image.path}-${index}`}
                       className="masonry-item"
-                      style={{ marginBottom: `${DENSITY_CONFIG[userDensity].spacing}px` }}
+                      style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}
                     >
                       <ImageCard
                         image={image}
