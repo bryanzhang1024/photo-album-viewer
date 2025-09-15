@@ -177,6 +177,75 @@ class ImageCacheManager {
         this.memoryCache.clear();
         this.lruQueue = [];
     }
+
+    /**
+     * 预加载缓存项 - 后台异步加载，不阻塞UI
+     */
+    async prefetch(type, identifier, options = {}) {
+        const config = this.cacheConfig[type];
+        if (!config) {
+            console.warn(`Unknown cache type for prefetch: ${type}`);
+            return;
+        }
+
+        // 如果已经有缓存，跳过预加载
+        const existingKey = this.generateCacheKey(type, identifier, options);
+        if (this.memoryCache.has(existingKey)) {
+            return;
+        }
+
+        // 预加载只针对navigation类型
+        if (type === 'navigation' && window.electronAPI) {
+            try {
+                // 使用较低的优先级进行后台加载
+                const response = await window.electronAPI.invoke('scan-navigation-level', identifier);
+                if (response.success) {
+                    // 使用较短的TTL进行预加载，避免占用过多缓存
+                    const prefetchTTL = config.ttl * 0.5; // 预加载缓存时间减半
+                    this.memoryCache.set(existingKey, {
+                        data: response,
+                        expiry: Date.now() + prefetchTTL,
+                        type,
+                        accessTime: Date.now(),
+                        isPrefetch: true // 标记为预加载
+                    });
+
+                    // 不更新LRU队列，预加载项优先级较低
+                    console.log(`预加载完成: ${type}/${identifier}`);
+                }
+            } catch (error) {
+                console.warn(`预加载失败: ${type}/${identifier}`, error);
+                // 静默失败，不影响用户体验
+            }
+        }
+    }
+
+    /**
+     * 获取缓存项 - 优化预加载项的处理
+     */
+    get(type, identifier, options = {}) {
+        const key = this.generateCacheKey(type, identifier, options);
+        const item = this.memoryCache.get(key);
+
+        if (!item) return null;
+
+        // 检查是否过期
+        if (Date.now() > item.expiry) {
+            this.delete(key);
+            return null;
+        }
+
+        // 如果是预加载项，提升其优先级
+        if (item.isPrefetch) {
+            item.isPrefetch = false;
+            item.expiry = Date.now() + this.cacheConfig[type].ttl; // 恢复正常TTL
+            this.updateLRU(key); // 加入LRU队列
+        } else {
+            this.updateLRU(key);
+        }
+
+        return item.data;
+    }
 }
 
 // 创建全局实例

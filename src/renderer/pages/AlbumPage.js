@@ -194,6 +194,7 @@ function AlbumPage({ colorMode }) {
     loadNeighboringAlbums();
     loadBreadcrumbData();
     loadRootPath();
+    preloadParentDirectory(); // 新增：预加载父目录
   }, [decodedAlbumPath]);
 
   // 监听窗口大小变化
@@ -360,15 +361,46 @@ function AlbumPage({ colorMode }) {
           return 'lastRootPath_default';
         }
       };
-      
+
       const windowStorageKey = getWindowStorageKey();
       const rootPathValue = localStorage.getItem(windowStorageKey);
-      
+
       if (rootPathValue) {
         setRootPath(rootPathValue);
       }
     } catch (err) {
       console.error('加载根路径失败:', err);
+    }
+  };
+
+  // 预加载父目录 - 性能优化
+  const preloadParentDirectory = async () => {
+    try {
+      if (!decodedAlbumPath || !rootPath) {
+        return;
+      }
+
+      // 计算父目录路径
+      const parentPath = getDirname(decodedAlbumPath);
+
+      // 检查是否需要预加载
+      if (!parentPath || parentPath === decodedAlbumPath || !parentPath.startsWith(rootPath)) {
+        return; // 已经是根目录或超出根目录范围，不需要预加载
+      }
+
+      // 延迟预加载，等待主要内容加载完成
+      setTimeout(async () => {
+        try {
+          // 使用缓存管理器的预加载功能
+          await imageCache.prefetch('navigation', parentPath);
+          console.log(`父目录预加载已启动: ${parentPath}`);
+        } catch (error) {
+          console.warn('父目录预加载失败:', error);
+          // 静默失败，不影响用户体验
+        }
+      }, 1000); // 1秒后开始预加载
+    } catch (error) {
+      console.warn('预加载父目录时出错:', error);
     }
   };
 
