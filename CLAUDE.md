@@ -177,3 +177,5 @@ claude mcp add --transport http grep https://mcp.grep.app
 ```bash
 claude mcp add spec-workflow-mcp -s user -- npx -y spec-workflow-mcp@latest
 ```
+
+如果需要编译，使用npm run build
