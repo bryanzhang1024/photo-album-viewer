@@ -43,6 +43,10 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [prevImageDimensions, setPrevImageDimensions] = useState({ width: 0, height: 0 });
   const [prevRotation, setPrevRotation] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // 双缓冲预加载状态
+  const [preloadCache, setPreloadCache] = useState(new Map());
+  const [pendingNavigation, setPendingNavigation] = useState(null);
   
   const toolbarRef = useRef(null);
   const mouseInactivityTimer = useRef(null);
@@ -58,6 +62,14 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   useEffect(() => {
     if (!currentImage) return;
 
+    // 检查是否已在预加载缓存中
+    const cachedImage = preloadCache.get(currentIndex);
+    if (cachedImage && cachedImage.loaded) {
+      setImageLoaded(true);
+      setIsTransitioning(false);
+      return;
+    }
+
     setIsTransitioning(true);
     setImageLoaded(false);
 
@@ -66,11 +78,25 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     img.onload = () => {
       detectImageOrientation(img);
       setIsTransitioning(false);
+
+      // 更新预加载缓存
+      setPreloadCache(prev => {
+        const newCache = new Map(prev);
+        newCache.set(currentIndex, { loaded: true, img, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight });
+        return newCache;
+      });
     };
     img.onerror = () => {
       console.error('图片加载失败:', currentImage.path);
       setImageLoaded(true);
       setIsTransitioning(false);
+
+      // 标记为加载失败但仍缓存
+      setPreloadCache(prev => {
+        const newCache = new Map(prev);
+        newCache.set(currentIndex, { loaded: true, error: true });
+        return newCache;
+      });
     };
     // 确保路径格式正确
     const imagePath = currentImage.path.startsWith('/') ? currentImage.path : `/${currentImage.path}`;
@@ -80,9 +106,9 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       img.onload = null;
       img.onerror = null;
     };
-  }, [currentImage]);
+  }, [currentImage, currentIndex, preloadCache]);
 
-  // 预加载相邻图片
+  // 预加载相邻图片 - 增强版双缓冲
   useEffect(() => {
     if (!currentImage || images.length <= 1) return;
 
@@ -93,15 +119,40 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       ];
 
       preloadIndices.forEach(index => {
-        if (images[index]) {
+        if (images[index] && !preloadCache.has(index)) {
           const img = new Image();
+          img.onload = () => {
+            setPreloadCache(prev => {
+              const newCache = new Map(prev);
+              newCache.set(index, {
+                loaded: true,
+                img,
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight
+              });
+              return newCache;
+            });
+
+            // 如果有挂起的导航请求，现在可以执行
+            if (pendingNavigation === index) {
+              onIndexChange(index);
+              setPendingNavigation(null);
+            }
+          };
+          img.onerror = () => {
+            setPreloadCache(prev => {
+              const newCache = new Map(prev);
+              newCache.set(index, { loaded: true, error: true });
+              return newCache;
+            });
+          };
           img.src = `file://${images[index].path}`;
         }
       });
     };
 
     preloadImages();
-  }, [currentIndex, images]);
+  }, [currentIndex, images, preloadCache, pendingNavigation]);
 
   // 添加键盘导航支持
   useEffect(() => {
@@ -284,7 +335,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     return rotation;
   };
 
-  // 导航到上一张/下一张图片
+  // 导航到上一张/下一张图片 - 双缓冲优化版
   const handleNavigate = (direction) => {
     let newIndex;
     if (direction === 'prev') {
@@ -292,8 +343,50 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     } else {
       newIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
     }
-    
-    onIndexChange(newIndex);
+
+    // 检查目标图片是否已在预加载缓存中
+    const targetCache = preloadCache.get(newIndex);
+    if (targetCache && targetCache.loaded) {
+      // 已预加载完成，立即切换
+      onIndexChange(newIndex);
+    } else {
+      // 未预加载完成，显示加载状态并等待
+      setIsTransitioning(true);
+      setPendingNavigation(newIndex);
+
+      // 如果还没开始预加载，立即开始
+      if (!targetCache && images[newIndex]) {
+        const img = new Image();
+        img.onload = () => {
+          setPreloadCache(prev => {
+            const newCache = new Map(prev);
+            newCache.set(newIndex, {
+              loaded: true,
+              img,
+              naturalWidth: img.naturalWidth,
+              naturalHeight: img.naturalHeight
+            });
+            return newCache;
+          });
+
+          // 预加载完成后执行导航
+          onIndexChange(newIndex);
+          setPendingNavigation(null);
+        };
+        img.onerror = () => {
+          setPreloadCache(prev => {
+            const newCache = new Map(prev);
+            newCache.set(newIndex, { loaded: true, error: true });
+            return newCache;
+          });
+
+          // 即使加载失败也切换，保持原有行为
+          onIndexChange(newIndex);
+          setPendingNavigation(null);
+        };
+        img.src = `file://${images[newIndex].path}`;
+      }
+    }
   };
 
   // 手动旋转图片
@@ -302,16 +395,58 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     setManualRotation(prev => prev + rotationAmount);
   };
 
-  // 随机选择一张图片
+  // 随机选择一张图片 - 双缓冲优化版
   const handleRandomImage = () => {
     if (images.length <= 1) return;
-    
+
     let randomIndex;
     do {
       randomIndex = Math.floor(Math.random() * images.length);
     } while (randomIndex === currentIndex);
-    
-    onIndexChange(randomIndex);
+
+    // 检查目标图片是否已在预加载缓存中
+    const targetCache = preloadCache.get(randomIndex);
+    if (targetCache && targetCache.loaded) {
+      // 已预加载完成，立即切换
+      onIndexChange(randomIndex);
+    } else {
+      // 未预加载完成，显示加载状态并等待
+      setIsTransitioning(true);
+      setPendingNavigation(randomIndex);
+
+      // 如果还没开始预加载，立即开始
+      if (!targetCache && images[randomIndex]) {
+        const img = new Image();
+        img.onload = () => {
+          setPreloadCache(prev => {
+            const newCache = new Map(prev);
+            newCache.set(randomIndex, {
+              loaded: true,
+              img,
+              naturalWidth: img.naturalWidth,
+              naturalHeight: img.naturalHeight
+            });
+            return newCache;
+          });
+
+          // 预加载完成后执行导航
+          onIndexChange(randomIndex);
+          setPendingNavigation(null);
+        };
+        img.onerror = () => {
+          setPreloadCache(prev => {
+            const newCache = new Map(prev);
+            newCache.set(randomIndex, { loaded: true, error: true });
+            return newCache;
+          });
+
+          // 即使加载失败也切换，保持原有行为
+          onIndexChange(randomIndex);
+          setPendingNavigation(null);
+        };
+        img.src = `file://${images[randomIndex].path}`;
+      }
+    }
   };
   
   // 处理鼠标拖动开始
@@ -619,7 +754,18 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
             ref={imgRef}
             src={currentImage.path.startsWith('/') ? `file://${currentImage.path}` : `file:///${currentImage.path}`}
             alt={currentImage.name}
-            onLoad={(e) => detectImageOrientation(e.target)}
+            onLoad={(e) => {
+              // 如果有缓存的尺寸信息，立即使用
+              const cachedImage = preloadCache.get(currentIndex);
+              if (cachedImage && cachedImage.naturalWidth && cachedImage.naturalHeight) {
+                detectImageOrientation({
+                  naturalWidth: cachedImage.naturalWidth,
+                  naturalHeight: cachedImage.naturalHeight
+                });
+              } else {
+                detectImageOrientation(e.target);
+              }
+            }}
             onError={(e) => {
               console.error('图片加载失败:', currentImage.path);
               setImageLoaded(true);
