@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Breadcrumbs,
@@ -28,6 +28,28 @@ function BreadcrumbNavigation({
   variant = 'default' // 新增 variant prop
 }) {
   const theme = useTheme();
+  const containerRef = useRef(null);
+  const [dynamicMaxItems, setDynamicMaxItems] = useState(4);
+
+  useEffect(() => {
+    const calculateMaxItems = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.offsetWidth;
+        // 估算每个面包屑项目的平均宽度（包括图标和间距）
+        const averageItemWidth = 150; // px
+        const calculatedMaxItems = Math.floor(containerWidth / averageItemWidth);
+        // 确保至少显示3个项目（例如：Home > ... > Last），并且不超过一个合理的最大值
+        setDynamicMaxItems(Math.max(3, calculatedMaxItems));
+      }
+    };
+
+    // 初始计算
+    calculateMaxItems();
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', calculateMaxItems);
+    return () => window.removeEventListener('resize', calculateMaxItems);
+  }, [breadcrumbs]); // 当面包屑内容变化时也重新计算
 
   // 处理面包屑点击
   const handleBreadcrumbClick = (breadcrumb, event) => {
@@ -108,13 +130,15 @@ function BreadcrumbNavigation({
 
   // 核心面包屑渲染逻辑
   const renderContent = () => (
-    <Box sx={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 1.5,
-      minHeight: '40px',
-      flexGrow: 1, // 占据可用空间
-      minWidth: 0, // 防止内容溢出
+    <Box 
+      ref={containerRef}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        minHeight: '40px',
+        flexGrow: 1, // 占据可用空间
+        minWidth: 0, // 防止内容溢出
     }}>
       {breadcrumbs.length > 1 && (
         <Tooltip title="返回上级">
@@ -139,7 +163,7 @@ function BreadcrumbNavigation({
           aria-label="路径导航"
           separator="›"
           sx={{ flex: 1, overflow: 'hidden', minWidth: 0, color: 'inherit' }}
-          maxItems={compact ? 2 : 4}
+          maxItems={compact ? 2 : dynamicMaxItems}
         >
           {breadcrumbs.map((breadcrumb, index) => {
             const isLast = index === breadcrumbs.length - 1;
