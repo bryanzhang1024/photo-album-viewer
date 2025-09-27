@@ -776,54 +776,20 @@ function HomePage({ colorMode }) {
   
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <AppBar position="static" color="primary" elevation={0}>
+      <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar variant="dense">
-          {/* 返回按钮 - 只有在子目录时显示 */}
-          {currentPath && currentPath !== rootPath && (
-            <Tooltip title="返回上级目录">
-              <IconButton
-                edge="start"
-                color="inherit"
-                onClick={handleGoUp}
-                sx={{ mr: 1 }}
-              >
-                <ArrowBackIcon />
-              </IconButton>
-            </Tooltip>
-          )}
-
-          {/* 返回根目录按钮 - 只有在子目录时显示 */}
-          {currentPath && currentPath !== rootPath && (
-            <Tooltip title="返回根目录">
-              <IconButton
-                color="inherit"
-                onClick={handleReturnToRoot}
-                sx={{ mr: 1 }}
-              >
-                <HomeIcon />
-              </IconButton>
-            </Tooltip>
-          )}
-
-          {/* 标题 - 根据当前路径显示 */}
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{
-              flexGrow: 1,
-              fontSize: { xs: '1rem', sm: '1.25rem' },
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}
-          >
-            {currentPath && currentPath !== rootPath
-              ? getBasename(currentPath)
-              : '照片相簿浏览器'}
-          </Typography>
+          {/* 用面包屑导航替换左侧的返回、主页和标题 */}
+          <BreadcrumbNavigation
+            breadcrumbs={breadcrumbs}
+            currentPath={currentPath}
+            onNavigate={handleNavigate}
+            variant="minimal"
+            compact={isSmallScreen}
+            sx={{ flexGrow: 1, minWidth: 0 }}
+          />
 
           {/* 功能按钮组 */}
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
             {/* 文件夹选择按钮 - 只在根目录显示 */}
             {(!currentPath || currentPath === rootPath) && (
               <>
@@ -853,16 +819,16 @@ function HomePage({ colorMode }) {
             <FormControl variant="outlined" size="small" sx={{
               minWidth: { xs: 80, sm: 120 },
               mr: 1,
-              bgcolor: 'rgba(255,255,255,0.1)',
+              bgcolor: 'rgba(0,0,0,0.05)',
               borderRadius: 1
             }}>
-              <InputLabel id="sort-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>排序</InputLabel>
+              <InputLabel id="sort-select-label" sx={{ fontSize: '0.8rem' }}>排序</InputLabel>
               <Select
                 labelId="sort-select-label"
                 value={sortBy}
                 onChange={handleSortChange}
                 label="排序"
-                sx={{ color: 'white', fontSize: '0.8rem' }}
+                sx={{ fontSize: '0.8rem' }}
               >
                 <MenuItem value="name">名称</MenuItem>
                 <MenuItem value="imageCount">照片数量</MenuItem>
@@ -907,10 +873,10 @@ function HomePage({ colorMode }) {
             <FormControl variant="outlined" size="small" sx={{
               minWidth: { xs: 80, sm: 100 },
               mr: 1,
-              bgcolor: 'rgba(255,255,255,0.1)',
+              bgcolor: 'rgba(0,0,0,0.05)',
               borderRadius: 1
             }}>
-              <InputLabel id="density-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>密度</InputLabel>
+              <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
               <Select
                 labelId="density-select-label"
                 value={userDensity}
@@ -919,7 +885,7 @@ function HomePage({ colorMode }) {
                   localStorage.setItem('userDensity', e.target.value);
                 }}
                 label="密度"
-                sx={{ color: 'white', fontSize: '0.8rem' }}
+                sx={{ fontSize: '0.8rem' }}
               >
                 <MenuItem value="compact">紧凑</MenuItem>
                 <MenuItem value="standard">标准</MenuItem>
@@ -960,18 +926,6 @@ function HomePage({ colorMode }) {
           </Box>
         </Toolbar>
       </AppBar>
-      
-      {/* 面包屑导航 */}
-      {useNewArchitecture && currentPath && (
-        <BreadcrumbNavigation
-          breadcrumbs={breadcrumbs}
-          currentPath={currentPath}
-          onNavigate={handleNavigate}
-          showStats={true}
-          metadata={metadata}
-          compact={isSmallScreen}
-        />
-      )}
 
       <Box
         ref={scrollContainerRef}
@@ -1000,27 +954,15 @@ function HomePage({ colorMode }) {
           </Paper>
         ) : (
           <Box>
-            {!useNewArchitecture && (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle1">
-                  找到 {albums.length} 个相簿
+            {/* 统计信息的新位置 */}
+            {metadata && (
+              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary">
+                  共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
                 </Typography>
-                {currentPathInfo && (
-                  currentPathInfo.type === 'browsing' ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        根目录: {getBasename(rootPath)}
-                      </Typography>
-                      <Typography variant="caption" color="primary" sx={{ fontWeight: 500 }}>
-                        当前浏览: {currentPathInfo.displayPath}
-                      </Typography>
-                    </Box>
-                  ) : (
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      根目录: {getBasename(rootPath)}
-                    </Typography>
-                  )
-                )}
+                <Typography variant="caption" color="text.secondary">
+                  总计 {metadata.totalImages} 张图片
+                </Typography>
               </Box>
             )}
             
