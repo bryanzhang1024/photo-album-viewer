@@ -169,6 +169,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           handleNavigate('next');
           break;
         case 'Escape':
+        case 'Backspace':
           onClose();
           break;
         case '+':

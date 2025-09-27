@@ -214,14 +214,21 @@ function HomePage({ colorMode }) {
   // 添加键盘快捷键监听
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // 按下 r 键触发随机选择相簿
-      if (event.key === 'r' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // 确保不在输入框中
-        if (document.activeElement.tagName !== 'INPUT' && 
-            document.activeElement.tagName !== 'TEXTAREA' &&
-            !document.activeElement.isContentEditable) {
+      if (document.activeElement.tagName === 'INPUT' || 
+          document.activeElement.tagName === 'TEXTAREA' ||
+          document.activeElement.isContentEditable) {
+        return; // 在输入框中时，禁用部分快捷键
+      }
+
+      switch (event.key) {
+        case 'r':
           handleRandomAlbum();
-        }
+          break;
+        case 'Backspace':
+          handleGoUp();
+          break;
+        default:
+          break;
       }
     };
     
@@ -229,7 +236,7 @@ function HomePage({ colorMode }) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [albums]); // 依赖albums数组，确保有相簿数据时才能正常工作
+  }, [albums, handleGoUp, handleRandomAlbum]); // 添加依赖
   
   // 处理文件夹选择
   const handleSelectDirectory = async () => {

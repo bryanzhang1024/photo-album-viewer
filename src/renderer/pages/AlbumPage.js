@@ -227,8 +227,8 @@ function AlbumPage({ colorMode }) {
   // 添加键盘事件监听
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // 如果按下ESC键且没有打开查看器
-      if (event.key === 'Escape' && !viewerOpen) {
+      // 如果按下ESC或Backspace键且没有打开查看器
+      if ((event.key === 'Escape' || event.key === 'Backspace') && !viewerOpen) {
         handleBack();
       }
 
