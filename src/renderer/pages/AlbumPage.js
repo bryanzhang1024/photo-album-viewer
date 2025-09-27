@@ -549,38 +549,30 @@ function AlbumPage({ colorMode }) {
     }
   };
 
-  // 处理返回
+  // 处理返回 - 统一为严格层级返回
   const handleBack = () => {
     if (isNavigating) return;
 
-    // 保存当前路径到上下文
+    // 保存当前滚动位置
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
 
-    // 优先计算父目录路径
-    const parentPath = decodedAlbumPath.substring(0, decodedAlbumPath.lastIndexOf('/'));
+    // 严格计算父目录路径
+    const parentPath = getDirname(decodedAlbumPath);
 
-    setIsNavigating(true);
-    try {
-      // 首先尝试返回到父目录
-      if (parentPath && parentPath !== decodedAlbumPath && rootPath && parentPath.startsWith(rootPath)) {
-        navigate('/', {
-          state: {
-            navigateToPath: parentPath
-          }
-        });
-      }
-      // 如果父目录不可用，且从其他页面跳转而来，返回首页
-      else if (location.state?.fromHomePage || location.state?.fromAlbumPage) {
-        navigate('/');
+    // 只要存在有效的父目录，就导航到主页并让其显示该父目录
+    if (parentPath && parentPath !== decodedAlbumPath && rootPath && parentPath.startsWith(rootPath)) {
+      setIsNavigating(true);
+      navigate('/', {
+        state: {
+          navigateToPath: parentPath,
+          fromAlbumPage: true // 保留这个state，以便HomePage知道来源
+        }
+      });
     } else {
-        // 直接返回上一页
-        navigate(-1);
-      }
-    } finally {
-      // 重置导航状态（注意：这是异步的，所以用setTimeout）
-      setTimeout(() => setIsNavigating(false), 100);
+      // 如果没有有效的父目录（例如已经是根目录的直接子级），则直接导航到主页
+      navigate('/');
     }
   };
 
