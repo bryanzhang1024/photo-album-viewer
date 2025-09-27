@@ -991,43 +991,33 @@ function AlbumPage({ colorMode }) {
 
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <AppBar position="static" color="primary" elevation={0}>
+      <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar variant="dense">
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={handleBack}
-            sx={{ mr: 1 }}
-            size="small"
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <IconButton
-            color="inherit"
-            onClick={handleHome}
-            sx={{ mr: 2 }}
-            size="small"
-          >
-            <HomeIcon />
-          </IconButton>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontSize: { xs: '0.9rem', sm: '1.25rem' }, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-            {getAlbumName()}
-          </Typography>
+          {/* 用面包屑导航替换左侧的返回、主页和标题 */}
+          <BreadcrumbNavigation
+            breadcrumbs={breadcrumbs.length > 0 ? breadcrumbs : getBreadcrumbPaths(decodedAlbumPath, rootPath)}
+            currentPath={decodedAlbumPath}
+            onNavigate={handleBreadcrumbNavigate}
+            variant="minimal" // 使用极简模式
+            compact={isSmallScreen}
+            sx={{ flexGrow: 1, minWidth: 0 }} // 占据主要空间
+          />
 
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          {/* 右侧的操作按钮保持不变 */}
+          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
             <FormControl variant="outlined" size="small" sx={{
               minWidth: { xs: 80, sm: 120 },
               mr: 1,
-              bgcolor: 'rgba(255,255,255,0.1)',
+              bgcolor: 'rgba(0,0,0,0.05)',
               borderRadius: 1
             }}>
-              <InputLabel id="sort-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>排序</InputLabel>
+              <InputLabel id="sort-select-label" sx={{ fontSize: '0.8rem' }}>排序</InputLabel>
               <Select
                 labelId="sort-select-label"
                 value={sortBy}
                 onChange={handleSortChange}
                 label="排序"
-                sx={{ color: 'white', fontSize: '0.8rem' }}
+                sx={{ fontSize: '0.8rem' }}
               >
                 <MenuItem value="name">名称</MenuItem>
                 <MenuItem value="size">大小</MenuItem>
@@ -1046,10 +1036,10 @@ function AlbumPage({ colorMode }) {
             <FormControl variant="outlined" size="small" sx={{
               minWidth: { xs: 80, sm: 100 },
               mr: 1,
-              bgcolor: 'rgba(255,255,255,0.1)',
+              bgcolor: 'rgba(0,0,0,0.05)',
               borderRadius: 1
             }}>
-              <InputLabel id="density-select-label" sx={{ color: 'white', fontSize: '0.8rem' }}>密度</InputLabel>
+              <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
               <Select
                 labelId="density-select-label"
                 value={userDensity}
@@ -1058,7 +1048,7 @@ function AlbumPage({ colorMode }) {
                   localStorage.setItem('userDensity', e.target.value);
                 }}
                 label="密度"
-                sx={{ color: 'white', fontSize: '0.8rem' }}
+                sx={{ fontSize: '0.8rem' }}
               >
                 <MenuItem value="compact">紧凑</MenuItem>
                 <MenuItem value="standard">标准</MenuItem>
@@ -1082,7 +1072,7 @@ function AlbumPage({ colorMode }) {
             </Tooltip>
 
             {neighboringAlbums.total > 0 && (
-              <Typography variant="caption" sx={{ mx: 0.5, color: 'white', fontSize: '0.75rem' }}>
+              <Typography variant="caption" sx={{ mx: 0.5, fontSize: '0.75rem' }}>
                 {neighboringAlbums.currentIndex + 1}/{neighboringAlbums.total}
               </Typography>
             )}
@@ -1165,20 +1155,6 @@ function AlbumPage({ colorMode }) {
         </Toolbar>
       </AppBar>
 
-
-      {/* 面包屑导航 */}
-      <BreadcrumbNavigation
-        breadcrumbs={breadcrumbs.length > 0 ? breadcrumbs : getBreadcrumbPaths(decodedAlbumPath, rootPath)}
-        currentPath={decodedAlbumPath}
-        onNavigate={handleBreadcrumbNavigate}
-        metadata={metadata || {
-          folderCount: 0,
-          albumCount: 1,
-          totalImages: images.length
-        }}
-        compact={isSmallScreen}
-      />
-
       <Box
         ref={scrollContainerRef}
         sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
@@ -1190,9 +1166,13 @@ function AlbumPage({ colorMode }) {
           </Box>
         ) : (
           <>
-            <Box sx={{ mb: 1 }}>
+            {/* 统计信息的新位置 */}
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="caption" color="text.secondary">
-                共 {images.length} 张照片 | {userDensity === 'compact' ? '紧凑密度' : userDensity === 'standard' ? '标准密度' : '宽松密度'}
+                共 {images.length} 张照片
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {metadata ? `当前目录: ${metadata.folderCount} 文件夹, ${metadata.albumCount} 相簿` : ''}
               </Typography>
             </Box>
 

@@ -24,7 +24,8 @@ function BreadcrumbNavigation({
   onNavigate, 
   showStats = true,
   metadata = null,
-  compact = false
+  compact = false,
+  variant = 'default' // 新增 variant prop
 }) {
   const theme = useTheme();
 
@@ -40,7 +41,9 @@ function BreadcrumbNavigation({
   const handleGoUp = () => {
     if (breadcrumbs.length > 1 && onNavigate) {
       const parentBreadcrumb = breadcrumbs[breadcrumbs.length - 2];
-      onNavigate(parentBreadcrumb.path);
+      if (parentBreadcrumb && parentBreadcrumb.path) {
+        onNavigate(parentBreadcrumb.path);
+      }
     }
   };
 
@@ -103,183 +106,123 @@ function BreadcrumbNavigation({
     );
   };
 
-  if (compact) {
-    // 紧凑模式：只显示当前路径和返回按钮
-    return (
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        minHeight: '40px',
-        px: 1,
-        py: 0.5
-      }}>
-        {breadcrumbs.length > 1 && (
-          <Tooltip title="返回上级">
-            <IconButton
-              size="small"
-              onClick={handleGoUp}
-              sx={{
-                color: 'text.secondary',
-                '&:hover': {
-                  color: 'primary.main',
-                  bgcolor: 'action.hover'
-                }
-              }}
-            >
-              <NavigateBeforeIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-        
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          noWrap
-          title={currentPath}
-          sx={{ flex: 1, minWidth: 0 }}
-        >
-          {getDisplayPath(currentPath, 40)}
-        </Typography>
+  // 核心面包屑渲染逻辑
+  const renderContent = () => (
+    <Box sx={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 1.5,
+      minHeight: '40px',
+      flexGrow: 1, // 占据可用空间
+      minWidth: 0, // 防止内容溢出
+    }}>
+      {breadcrumbs.length > 1 && (
+        <Tooltip title="返回上级">
+          <IconButton
+            size="small"
+            onClick={handleGoUp}
+            sx={{
+              color: 'inherit', // 继承父组件颜色
+              '&:hover': {
+                bgcolor: 'action.hover'
+              }
+            }}
+          >
+            <NavigateBeforeIcon />
+          </IconButton>
+        </Tooltip>
+      )}
 
-        {/* 紧凑模式下的统计信息 - 更简洁 */}
-        {showStats && metadata && (metadata.folderCount > 0 || metadata.albumCount > 0 || metadata.totalImages > 0) && (
-          <Box sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.5,
-            px: 0.75,
-            py: 0.25,
-            bgcolor: 'action.hover',
-            borderRadius: 0.75
-          }}>
-            {metadata.folderCount > 0 && (
-              <Typography variant="caption" color="text.secondary">
-                📁{metadata.folderCount}
-              </Typography>
-            )}
-            {metadata.albumCount > 0 && (
-              <Typography variant="caption" color="text.secondary">
-                📷{metadata.albumCount}
-              </Typography>
-            )}
-            {metadata.totalImages > 0 && (
-              <Typography variant="caption" color="text.secondary">
-                🖼️{metadata.totalImages}
-              </Typography>
-            )}
-          </Box>
-        )}
-      </Box>
-    );
+      {/* 面包屑导航 - 主要内容 */}
+      {breadcrumbs.length > 0 ? (
+        <Breadcrumbs
+          aria-label="路径导航"
+          separator="›"
+          sx={{ flex: 1, overflow: 'hidden', minWidth: 0, color: 'inherit' }}
+          maxItems={compact ? 2 : 4}
+        >
+          {breadcrumbs.map((breadcrumb, index) => {
+            const isLast = index === breadcrumbs.length - 1;
+            const isFirst = index === 0;
+
+            if (isLast) {
+              // 当前路径 - 不可点击
+              return (
+                <Box key={breadcrumb.path} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                  <FolderIcon sx={{ fontSize: '1rem', color: 'inherit', opacity: 0.8, flexShrink: 0 }} />
+                  <Typography
+                    variant="body2"
+                    color="inherit" // 继承颜色
+                    fontWeight="medium"
+                    noWrap
+                    title={breadcrumb.name}
+                    sx={{ minWidth: 0 }}
+                  >
+                    {breadcrumb.name}
+                  </Typography>
+                </Box>
+              );
+            }
+
+            return (
+              <Link
+                key={breadcrumb.path}
+                component="button"
+                variant="body2"
+                color="inherit" // 继承颜色
+                underline="hover"
+                onClick={(e) => handleBreadcrumbClick(breadcrumb, e)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  p: 0,
+                  minWidth: 0,
+                  opacity: 0.8,
+                  '&:hover': {
+                    opacity: 1
+                  }
+                }}
+                title={breadcrumb.path}
+              >
+                {isFirst && <HomeIcon sx={{ fontSize: '1rem', flexShrink: 0 }} />}
+                {!isFirst && <FolderIcon sx={{ fontSize: '1rem', flexShrink: 0 }} />}
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                  {breadcrumb.name}
+                </span>
+              </Link>
+            );
+          })}
+        </Breadcrumbs>
+      ) : (
+        <Typography variant="body2" color="inherit" sx={{ flex: 1 }}>
+          请选择文件夹
+        </Typography>
+      )}
+    </Box>
+  );
+
+  // 根据 variant 选择渲染模式
+  if (variant === 'minimal') {
+    return renderContent();
   }
 
-  // 完整模式：显示完整面包屑
+  // 默认模式（旧的完整模式）
   return (
     <Box sx={{
       display: 'flex',
       flexDirection: 'column',
-      p: 1.5,
+      p: compact ? 1 : 1.5,
       bgcolor: 'background.paper',
       borderBottom: 1,
       borderColor: 'divider'
     }}>
-      {/* 整合导航和统计的单行布局 */}
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        minHeight: '40px'
-      }}>
-        {breadcrumbs.length > 1 && (
-          <Tooltip title="返回上级">
-            <IconButton
-              size="small"
-              onClick={handleGoUp}
-              sx={{
-                color: 'text.secondary',
-                '&:hover': {
-                  color: 'primary.main',
-                  bgcolor: 'action.hover'
-                }
-              }}
-            >
-              <NavigateBeforeIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-
-        {/* 面包屑导航 - 主要内容 */}
-        {breadcrumbs.length > 0 ? (
-          <Breadcrumbs
-            aria-label="路径导航"
-            separator="›"
-            sx={{ flex: 1, overflow: 'hidden', minWidth: 0 }}
-            maxItems={4}
-          >
-            {breadcrumbs.map((breadcrumb, index) => {
-              const isLast = index === breadcrumbs.length - 1;
-              const isFirst = index === 0;
-
-              if (isLast) {
-                // 当前路径 - 不可点击
-                return (
-                  <Box key={breadcrumb.path} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-                    <FolderIcon sx={{ fontSize: '1rem', color: 'text.secondary', flexShrink: 0 }} />
-                    <Typography
-                      variant="body2"
-                      color="text.primary"
-                      fontWeight="medium"
-                      noWrap
-                      title={breadcrumb.name}
-                      sx={{ minWidth: 0 }}
-                    >
-                      {breadcrumb.name}
-                    </Typography>
-                  </Box>
-                );
-              }
-
-              return (
-                <Link
-                  key={breadcrumb.path}
-                  component="button"
-                  variant="body2"
-                  color="text.secondary"
-                  underline="hover"
-                  onClick={(e) => handleBreadcrumbClick(breadcrumb, e)}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    p: 0,
-                    minWidth: 0,
-                    '&:hover': {
-                      color: 'primary.main'
-                    }
-                  }}
-                  title={breadcrumb.path}
-                >
-                  {isFirst && <HomeIcon sx={{ fontSize: '1rem', flexShrink: 0 }} />}
-                  {!isFirst && <FolderIcon sx={{ fontSize: '1rem', flexShrink: 0 }} />}
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-                    {breadcrumb.name}
-                  </span>
-                </Link>
-              );
-            })}
-          </Breadcrumbs>
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-            请选择文件夹
-          </Typography>
-        )}
-
-        {/* 统计信息 - 紧凑显示 */}
-        {renderStats()}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        {renderContent()}
+        {showStats && renderStats()}
       </Box>
     </Box>
   );
