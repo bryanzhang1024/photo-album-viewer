@@ -674,12 +674,42 @@ async function scanNavigationLevel(targetPath) {
       return createNavigationResponse([], targetPath, path.dirname(targetPath), []);
     }
 
-    // 并行处理目录项
-    const nodePromises = entries
-      .slice(0, 100) // 限制处理数量防止过载
-      .map(entry => processNavigationEntry(targetPath, entry));
-    
+    const directoryEntries = [];
+    const imageFiles = [];
+
+    // 1. 分离文件和目录
+    for (const entry of entries) {
+      try {
+        const fullPath = path.join(targetPath, entry);
+        const stats = await stat(fullPath);
+        if (stats.isDirectory()) {
+          directoryEntries.push(entry);
+        } else if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+          imageFiles.push({ path: fullPath, name: entry, stats });
+        }
+      } catch (err) {
+        // 忽略无法访问的条目
+        continue;
+      }
+    }
+
+    // 2. 处理所有子目录
+    const nodePromises = directoryEntries.map(entry => processNavigationEntry(targetPath, entry));
     const nodes = (await Promise.all(nodePromises)).filter(Boolean);
+
+    // 3. 如果当前目录有图片，则创建一个“同名相簿”节点
+    if (imageFiles.length > 0) {
+      imageFiles.sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime());
+      const albumStats = {
+        imageCount: imageFiles.length,
+        previewImages: imageFiles.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES).map(f => f.path),
+        lastModified: imageFiles.length > 0 ? imageFiles[0].stats.mtime : new Date(),
+        firstImageDate: imageFiles.length > 0 ? imageFiles[imageFiles.length - 1].stats.mtime : null,
+        totalSize: imageFiles.reduce((sum, img) => sum + img.stats.size, 0),
+      };
+      const selfAlbumNode = createAlbumNode(targetPath, path.basename(targetPath), albumStats);
+      nodes.push(selfAlbumNode);
+    }
     
     // 按类型和名称排序：文件夹在前，相册在后
     nodes.sort((a, b) => {
@@ -745,25 +775,41 @@ async function determineNodeType(dirPath) {
   try {
     const entries = await readdir(dirPath);
     if (entries.length === 0) return NODE_TYPES.EMPTY;
-    
-    // 快速检查：只看前20个项目
-    const sampleEntries = entries.slice(0, SCAN_CONFIG.SAMPLE_LIMIT);
-    
-    for (const entry of sampleEntries) {
+
+    let hasSubdirectories = false;
+    let hasImages = false;
+
+    // 遍历所有条目来确定是否存在子目录和图片
+    for (const entry of entries) {
       const entryPath = path.join(dirPath, entry);
       try {
         const stats = await stat(entryPath);
-        
-        if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
-          return NODE_TYPES.ALBUM; // 发现图片，是相册
+        if (stats.isDirectory()) {
+          hasSubdirectories = true;
+          // 发现子目录，可以立即确定是文件夹类型，中断循环
+          break;
+        } else if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+          hasImages = true;
         }
       } catch {
-        continue; // 跳过无法访问的文件
+        // 跳过无法访问的文件或目录
+        continue;
       }
     }
-    
-    return NODE_TYPES.FOLDER; // 没有直接图片，是文件夹
-    
+
+    // 核心逻辑：只要有子目录，就一定是文件夹
+    if (hasSubdirectories) {
+      return NODE_TYPES.FOLDER;
+    }
+
+    // 没有子目录，但有图片，是相册
+    if (hasImages) {
+      return NODE_TYPES.ALBUM;
+    }
+
+    // 没有子目录，也没有图片，视为空文件夹
+    return NODE_TYPES.EMPTY;
+
   } catch (error) {
     console.warn(`检查节点类型失败 ${dirPath}:`, error.message);
     return NODE_TYPES.EMPTY;
