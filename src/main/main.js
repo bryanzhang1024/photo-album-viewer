@@ -11,6 +11,9 @@ const url = require('url');
 const { createWindow, getMainWindow, windows } = require('./services/WindowService');
 const FileSystemService = require('./services/FileSystemService');
 const ThumbnailService = require('./services/ThumbnailService');
+const FavoritesService = require('./services/FavoritesService');
+
+FavoritesService.registerIpcHandlers();
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
@@ -116,12 +119,12 @@ app.whenReady().then(async () => {
   createWindow(initialPath);
   
   // 启动收藏数据文件监听
-  startFavoritesWatcher();
+  FavoritesService.startFavoritesWatcher();
 });
 
 // 应用退出时清理资源
 app.on('before-quit', () => {
-  stopFavoritesWatcher();
+  FavoritesService.stopFavoritesWatcher();
 });
 
 app.on('window-all-closed', () => {
@@ -225,132 +228,7 @@ ipcMain.handle('update-performance-settings', async (event, settings) => {
   }
 });
 
-// 收藏数据文件路径
-const FAVORITES_FILE_PATH = path.join(app.getPath('userData'), 'favorites.json');
-
-// 文件监听器
-let favoritesWatcher = null;
-
-// 启动文件监听
-function startFavoritesWatcher() {
-  try {
-    if (favoritesWatcher) {
-      favoritesWatcher.close();
-    }
-    
-    favoritesWatcher = fs.watch(FAVORITES_FILE_PATH, (eventType, filename) => {
-      if (eventType === 'change') {
-        // 延迟处理，避免文件写入过程中的竞态条件
-        setTimeout(async () => {
-          try {
-            const favoritesData = await loadFavoritesInternal();
-            
-            // 广播更新给所有渲染进程
-            BrowserWindow.getAllWindows().forEach(window => {
-              if (window.webContents && !window.webContents.isDestroyed()) {
-                window.webContents.send('favorites-updated', favoritesData);
-              }
-            });
-          } catch (error) {
-            console.error('文件监听处理失败:', error);
-          }
-        }, 100);
-      }
-    });
-  } catch (error) {
-    console.error('启动文件监听失败:', error);
-  }
-}
-
-// 停止文件监听
-function stopFavoritesWatcher() {
-  if (favoritesWatcher) {
-    favoritesWatcher.close();
-    favoritesWatcher = null;
-  }
-}
-
-// 内部加载收藏数据的方法
-async function loadFavoritesInternal() {
-  try {
-    // 检查文件是否存在
-    try {
-      await stat(FAVORITES_FILE_PATH);
-    } catch (err) {
-      // 文件不存在，创建默认结构
-      const defaultData = {
-        albums: [],
-        images: [],
-        collections: [],
-        version: 1,
-        lastModified: Date.now()
-      };
-      await writeFile(FAVORITES_FILE_PATH, JSON.stringify(defaultData, null, 2));
-      return defaultData;
-    }
-    
-    // 读取文件
-    const data = await readFile(FAVORITES_FILE_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('加载收藏数据失败:', error);
-    // 返回空的默认结构
-    return {
-      albums: [],
-      images: [],
-      collections: [],
-      version: 1,
-      lastModified: Date.now()
-    };
-  }
-}
-
-// 保存收藏数据 - 带冲突检测的乐观锁机制
-ipcMain.handle('save-favorites', async (event, favoritesData, expectedVersion) => {
-  try {
-    console.log('保存收藏数据');
-    
-    // 读取当前文件版本
-    const currentData = await loadFavoritesInternal();
-    
-    // 版本冲突检测
-    if (expectedVersion !== undefined && currentData.version !== expectedVersion) {
-      console.warn('版本冲突检测，当前版本:', currentData.version, '期望版本:', expectedVersion);
-      return { 
-        success: false, 
-        error: '版本冲突，请刷新后重试',
-        currentVersion: currentData.version,
-        expectedVersion: expectedVersion
-      };
-    }
-    
-    // 添加版本控制和元数据
-    const enhancedData = {
-      ...favoritesData,
-      version: (currentData.version || 1) + 1,
-      lastModified: Date.now()
-    };
-    
-    await writeFile(FAVORITES_FILE_PATH, JSON.stringify(enhancedData, null, 2));
-    
-    // 广播更新事件给所有渲染进程（包括发送者，用于确认更新）
-    BrowserWindow.getAllWindows().forEach(window => {
-      if (window.webContents && !window.webContents.isDestroyed()) {
-        window.webContents.send('favorites-updated', enhancedData);
-      }
-    });
-    
-    return { success: true, version: enhancedData.version };
-  } catch (error) {
-    console.error('保存收藏数据失败:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// 加载收藏数据
-ipcMain.handle('load-favorites', async () => {
-  return await loadFavoritesInternal();
-}); 
+ 
 
 // 清空缩略图缓存
 ipcMain.handle('clear-thumbnail-cache', async () => {
