@@ -43,6 +43,7 @@ import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
 import { getBreadcrumbPaths, getBasename, getDirname, isValidPath } from '../utils/pathUtils';
+import CHANNELS from '../../common/ipc-channels';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -308,7 +309,7 @@ function AlbumPage({ colorMode }) {
         return;
       }
 
-      const result = await ipcRenderer.invoke('get-album-images', decodedAlbumPath);
+      const result = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, decodedAlbumPath);
 
       // 缓存结果
       imageCache.set('album', decodedAlbumPath, result);
@@ -430,7 +431,7 @@ function AlbumPage({ colorMode }) {
         // 如果没有缓存，调用导航扫描API
         if (ipcRenderer) {
           try {
-            const response = await ipcRenderer.invoke('scan-navigation-level', parentPath);
+            const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, parentPath);
             if (response.success) {
               // 缓存结果
               imageCache.set('navigation', parentPath, response);

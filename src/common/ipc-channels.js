@@ -1,0 +1,22 @@
+module.exports = {
+    SELECT_DIRECTORY: 'select-directory',
+    SCAN_NAVIGATION_LEVEL: 'scan-navigation-level',
+    SCAN_DIRECTORY: 'scan-directory',
+    GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',
+    GET_THUMBNAIL: 'get-thumbnail',
+    GET_BATCH_THUMBNAILS: 'get-batch-thumbnails',
+    GET_ALBUM_IMAGES: 'get-album-images',
+    UPDATE_PERFORMANCE_SETTINGS: 'update-performance-settings',
+    SAVE_FAVORITES: 'save-favorites',
+    LOAD_FAVORITES: 'load-favorites',
+    CLEAR_THUMBNAIL_CACHE: 'clear-thumbnail-cache',
+    SHOW_IN_FOLDER: 'show-in-folder',
+    COPY_IMAGE_TO_CLIPBOARD: 'copy-image-to-clipboard',
+    SHOW_CONTEXT_MENU: 'show-context-menu',
+    CREATE_NEW_WINDOW: 'create-new-window',
+    CREATE_NEW_INSTANCE: 'create-new-instance',
+    GET_WINDOWS_INFO: 'get-windows-info',
+    SCAN_DIRECTORY_TREE: 'scan-directory-tree',
+    FAVORITES_UPDATED: 'favorites-updated',
+    MENU_ACTION: 'menu-action'
+};

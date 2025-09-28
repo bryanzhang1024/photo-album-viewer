@@ -32,6 +32,7 @@ try {
 }
 
 import useIsVisible from '../hooks/useIsVisible';
+import CHANNELS from '../../common/ipc-channels';
 
 // 观察器已移除 - 使用isVisible属性替代
 
@@ -141,7 +142,7 @@ function AlbumCard({
         
         // 使用批量API请求预览图，优先级根据可见性决定
         const priority = isVisible ? 0 : 1;
-        const results = await ipcRenderer.invoke('get-batch-thumbnails', imagePaths, priority);
+        const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, imagePaths, priority);
         
         // 过滤有效的URL
         const validUrls = imagePaths
@@ -491,7 +492,7 @@ function AlbumCard({
     e.stopPropagation(); // 阻止事件冒泡
     if (!ipcRenderer) return;
     
-    ipcRenderer.invoke('create-new-window', cardData.path)
+    ipcRenderer.invoke(CHANNELS.CREATE_NEW_WINDOW, cardData.path)
       .then(result => {
         if (result.success) {
           console.log('新窗口已创建');

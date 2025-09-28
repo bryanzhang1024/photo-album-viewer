@@ -2,6 +2,7 @@ const { app, ipcMain, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { promisify } = require('util');
+const CHANNELS = require(path.join(__dirname, '..', '..', 'common', 'ipc-channels.js'));
 
 const stat = promisify(fs.stat);
 const readFile = promisify(fs.readFile);
@@ -34,7 +35,7 @@ function startFavoritesWatcher() {
                         const favoritesData = await loadFavoritesInternal();
                         BrowserWindow.getAllWindows().forEach(window => {
                             if (window.webContents && !window.webContents.isDestroyed()) {
-                                window.webContents.send('favorites-updated', favoritesData);
+                                window.webContents.send(CHANNELS.FAVORITES_UPDATED, favoritesData);
                             }
                         });
                     } catch (error) {
@@ -56,11 +57,11 @@ function stopFavoritesWatcher() {
 }
 
 function registerIpcHandlers() {
-    ipcMain.handle('load-favorites', async () => {
+    ipcMain.handle(CHANNELS.LOAD_FAVORITES, async () => {
         return await loadFavoritesInternal();
     });
 
-    ipcMain.handle('save-favorites', async (event, favoritesData, expectedVersion) => {
+    ipcMain.handle(CHANNELS.SAVE_FAVORITES, async (event, favoritesData, expectedVersion) => {
         try {
             const currentData = await loadFavoritesInternal();
             if (expectedVersion !== undefined && currentData.version !== expectedVersion) {
@@ -70,7 +71,7 @@ function registerIpcHandlers() {
             await writeFile(FAVORITES_FILE_PATH, JSON.stringify(enhancedData, null, 2));
             BrowserWindow.getAllWindows().forEach(window => {
                 if (window.webContents && !window.webContents.isDestroyed()) {
-                    window.webContents.send('favorites-updated', enhancedData);
+                    window.webContents.send(CHANNELS.FAVORITES_UPDATED, enhancedData);
                 }
             });
             return { success: true, version: enhancedData.version };

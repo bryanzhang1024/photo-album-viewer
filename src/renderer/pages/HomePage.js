@@ -43,6 +43,7 @@ import './AlbumPage.css';
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
+import CHANNELS from '../../common/ipc-channels';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -238,16 +239,13 @@ function HomePage({ colorMode }) {
     };
   }, [albums, handleGoUp, handleRandomAlbum]); // 添加依赖
   
-  // 处理文件夹选择
-  const handleSelectDirectory = async () => {
-    try {
-      if (!ipcRenderer) {
-        setError('无法访问ipcRenderer, Electron可能没有正确加载');
-        return;
-      }
-      
-      const selectedDir = await ipcRenderer.invoke('select-directory');
-      if (selectedDir) {
+    // 处理选择文件夹的逻辑
+    const handleSelectDirectory = async () => {
+      if (!ipcRenderer) return;
+      try {
+        const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
+        if (selectedDir) {
+
         setRootPath(selectedDir);
         // 保存到localStorage
         localStorage.setItem(windowStorageKey, selectedDir);
@@ -263,17 +261,12 @@ function HomePage({ colorMode }) {
   };
 
   // 处理新实例选择文件夹（启动新的应用实例）
-  const handleOpenNewInstance = async () => {
-    try {
-      if (!ipcRenderer) {
-        setError('无法访问ipcRenderer, Electron可能没有正确加载');
-        return;
-      }
-      
-      const selectedDir = await ipcRenderer.invoke('select-directory');
-      if (selectedDir) {
-        // 启动新的应用实例来加载这个文件夹
-        const result = await ipcRenderer.invoke('create-new-instance', selectedDir);
+    const handleOpenNewInstance = async () => {
+      if (!ipcRenderer) return;
+      try {
+        const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
+        if (selectedDir) {
+          await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, selectedDir);
         if (result.success) {
           console.log('新实例已启动');
         } else {
@@ -315,7 +308,7 @@ function HomePage({ colorMode }) {
       setError('');
 
       console.log(`开始扫描导航层级: ${targetPath}`);
-      const response = await ipcRenderer.invoke('scan-navigation-level', targetPath);
+      const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, targetPath);
 
       if (response.success) {
         // 缓存结果
@@ -370,7 +363,7 @@ function HomePage({ colorMode }) {
         return;
       }
 
-      const result = await ipcRenderer.invoke('scan-directory', path);
+        const albums = await ipcRenderer.invoke(CHANNELS.SCAN_DIRECTORY, path);
 
       // 缓存结果
       imageCache.set('albums', path, result);
@@ -478,7 +471,7 @@ function HomePage({ colorMode }) {
 
     // 通过IPC通知主进程清空缩略图缓存
     if (ipcRenderer) {
-      ipcRenderer.invoke('clear-thumbnail-cache')
+      ipcRenderer.invoke(CHANNELS.CLEAR_THUMBNAIL_CACHE)
         .then(result => {
           if (result.success) {
             setError('所有缓存已成功清除。可能需要重新加载应用以完全应用更改。');

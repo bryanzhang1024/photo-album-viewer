@@ -12,6 +12,7 @@ const { createWindow, getMainWindow, windows } = require('./services/WindowServi
 const FileSystemService = require('./services/FileSystemService');
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
+const CHANNELS = require(path.join(__dirname, '..', 'common', 'ipc-channels.js'));
 
 FavoritesService.registerIpcHandlers();
 
@@ -140,7 +141,7 @@ app.on('activate', () => {
 
 
 // 处理选择文件夹请求
-ipcMain.handle('select-directory', async () => {
+ipcMain.handle(CHANNELS.SELECT_DIRECTORY, async () => {
   try {
     const result = await dialog.showOpenDialog(getMainWindow(), {
       properties: ['openDirectory']
@@ -157,7 +158,7 @@ ipcMain.handle('select-directory', async () => {
 });
 
 // 新的智能导航API
-ipcMain.handle('scan-navigation-level', async (event, targetPath) => {
+ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
   try {
     console.log(`开始智能扫描: ${targetPath}`);
     const response = await FileSystemService.scanNavigationLevel(targetPath);
@@ -170,7 +171,7 @@ ipcMain.handle('scan-navigation-level', async (event, targetPath) => {
 });
 
 // 处理扫描文件夹请求（兼容性保留）
-ipcMain.handle('scan-directory', async (event, rootPath) => {
+ipcMain.handle(CHANNELS.SCAN_DIRECTORY, async (event, rootPath) => {
   try {
     console.log(`开始扫描文件夹: ${rootPath}（兼容模式）`);
     const startTime = Date.now();
@@ -185,17 +186,17 @@ ipcMain.handle('scan-directory', async (event, rootPath) => {
 });
 
 // 获取图片的缩略图 - 使用新的服务
-ipcMain.handle('get-image-thumbnail', (event, imagePath, priority = 0) => {
+ipcMain.handle(CHANNELS.GET_IMAGE_THUMBNAIL, (event, imagePath, priority = 0) => {
     return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
 });
 
 // 获取单个图片的缩略图 - 与get-image-thumbnail功能相同，但为了兼容性添加
-ipcMain.handle('get-thumbnail', (event, imagePath, priority = 0) => {
+ipcMain.handle(CHANNELS.GET_THUMBNAIL, (event, imagePath, priority = 0) => {
     return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
 });
 
 // 批量请求预览图 - 提高效率的新接口
-ipcMain.handle('get-batch-thumbnails', async (event, imagePaths, priority = 0) => {
+ipcMain.handle(CHANNELS.GET_BATCH_THUMBNAILS, async (event, imagePaths, priority = 0) => {
     const promises = imagePaths.map(p => ThumbnailService.generateThumbnail(p, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5).then(url => ({[p]: url})));
     const results = await Promise.all(promises);
     return Object.assign({}, ...results);
@@ -203,12 +204,12 @@ ipcMain.handle('get-batch-thumbnails', async (event, imagePaths, priority = 0) =
 
 
 
-ipcMain.handle('get-album-images', async (event, albumPath) => {
+ipcMain.handle(CHANNELS.GET_ALBUM_IMAGES, async (event, albumPath) => {
     return FileSystemService.getAlbumImages(albumPath);
 });
 
 // 处理性能设置更新
-ipcMain.handle('update-performance-settings', async (event, settings) => {
+ipcMain.handle(CHANNELS.UPDATE_PERFORMANCE_SETTINGS, async (event, settings) => {
   try {
     console.log('更新性能设置:', settings);
     performanceSettings = {
@@ -227,7 +228,7 @@ ipcMain.handle('update-performance-settings', async (event, settings) => {
  
 
 // 清空缩略图缓存
-ipcMain.handle('clear-thumbnail-cache', async () => {
+ipcMain.handle(CHANNELS.CLEAR_THUMBNAIL_CACHE, async () => {
   try {
     console.log('开始清空缩略图缓存...');
     
@@ -272,7 +273,7 @@ ipcMain.handle('clear-thumbnail-cache', async () => {
 }); 
 
 // 在文件管理器中显示图片
-ipcMain.handle('show-in-folder', async (event, filePath) => {
+ipcMain.handle(CHANNELS.SHOW_IN_FOLDER, async (event, filePath) => {
   try {
     shell.showItemInFolder(filePath);
     return { success: true };
@@ -283,7 +284,7 @@ ipcMain.handle('show-in-folder', async (event, filePath) => {
 });
 
 // 复制图片到剪贴板
-ipcMain.handle('copy-image-to-clipboard', async (event, filePath) => {
+ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath) => {
   try {
     const { clipboard, nativeImage } = require('electron');
     
@@ -309,7 +310,7 @@ ipcMain.handle('copy-image-to-clipboard', async (event, filePath) => {
 });
 
 // 显示右键菜单
-ipcMain.handle('show-context-menu', async (event, menuItems) => {
+ipcMain.handle(CHANNELS.SHOW_CONTEXT_MENU, async (event, menuItems) => {
   try {
     console.log('=== 显示右键菜单开始 ===');
     
@@ -371,7 +372,7 @@ ipcMain.handle('show-context-menu', async (event, menuItems) => {
 });
 
 // 创建新窗口查看文件夹
-ipcMain.handle('create-new-window', async (event, albumPath) => {
+ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, albumPath) => {
   try {
     console.log('创建新窗口查看文件夹:', albumPath);
     const newWindow = createWindow(albumPath);
@@ -383,7 +384,7 @@ ipcMain.handle('create-new-window', async (event, albumPath) => {
 });
 
 // 创建新实例并选择文件夹
-ipcMain.handle('create-new-instance', async (event, folderPath) => {
+ipcMain.handle(CHANNELS.CREATE_NEW_INSTANCE, async (event, folderPath) => {
   try {
     console.log('=== 创建新实例开始 ===');
     console.log('文件夹路径:', folderPath);
@@ -477,7 +478,7 @@ ipcMain.handle('create-new-instance', async (event, folderPath) => {
 });
 
 // 获取所有窗口信息
-ipcMain.handle('get-windows-info', async () => {
+ipcMain.handle(CHANNELS.GET_WINDOWS_INFO, async () => {
   try {
     const windowsInfo = Array.from(windows).map(window => ({
       id: window.id,
@@ -556,7 +557,7 @@ async function scanDirectoryTree(rootPath, depth = 0, maxDepth = 3) {
 }
 
 // 处理扫描目录树请求
-ipcMain.handle('scan-directory-tree', async (event, rootPath) => {
+ipcMain.handle(CHANNELS.SCAN_DIRECTORY_TREE, async (event, rootPath) => {
   try {
     console.log(`开始扫描目录树: ${rootPath}`);
     const tree = await scanDirectoryTree(rootPath);

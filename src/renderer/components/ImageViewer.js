@@ -25,6 +25,7 @@ import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useSettings } from '../contexts/SettingsContext';
+import CHANNELS from '../../common/ipc-channels';
 const { ipcRenderer } = window.require('electron');
 
 function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
@@ -571,7 +572,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   // 在文件管理器中显示图片
   const handleShowInFolder = () => {
     if (currentImage) {
-      ipcRenderer.invoke('show-in-folder', currentImage.path)
+      ipcRenderer.invoke(CHANNELS.SHOW_IN_FOLDER, currentImage.path)
         .catch(error => console.error('在文件管理器中显示失败:', error));
     }
   };

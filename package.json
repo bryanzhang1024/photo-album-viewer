@@ -17,6 +17,7 @@
     "files": [
       "build/**/*",
       "src/main/**/*",
+      "src/common/**/*",
       "node_modules/**/*",
       "assets/**/*"
     ],
