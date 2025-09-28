@@ -410,63 +410,36 @@ function AlbumPage({ colorMode }) {
   // 加载面包屑导航数据 - 与HomePage保持一致
   const loadBreadcrumbData = async () => {
     try {
-      if (!decodedAlbumPath || !rootPath) {
-        // 如果没有足够的路径信息，使用前端计算作为fallback
-        if (decodedAlbumPath) {
-          const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
-          setBreadcrumbs(fallbackBreadcrumbs);
-        }
+      if (!decodedAlbumPath) {
+        setBreadcrumbs([]);
         return;
       }
 
-      // 使用与HomePage相同的逻辑：扫描父目录获取面包屑信息
-      const parentPath = getDirname(decodedAlbumPath);
-      if (parentPath && parentPath !== decodedAlbumPath) {
-        // 使用统一缓存管理器
-        const cachedData = imageCache.get('navigation', parentPath);
-        if (cachedData && cachedData.breadcrumbs) {
-          setBreadcrumbs(cachedData.breadcrumbs);
-          setMetadata(cachedData.metadata);
-          return;
-        }
+      // 直接请求当前路径的导航信息，让主进程生成完整的面包屑
+      const cachedData = imageCache.get('navigation', decodedAlbumPath);
+      if (cachedData && cachedData.breadcrumbs) {
+        setBreadcrumbs(cachedData.breadcrumbs);
+        setMetadata(cachedData.metadata);
+        return;
+      }
 
-        // 如果没有缓存，调用导航扫描API
-        if (ipcRenderer) {
-          try {
-            const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, parentPath);
-            if (response.success) {
-              // 缓存结果
-              imageCache.set('navigation', parentPath, response);
-              setBreadcrumbs(response.breadcrumbs);
-              setMetadata(response.metadata);
-            } else {
-              // fallback到前端计算
-              const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
-              setBreadcrumbs(fallbackBreadcrumbs);
-            }
-          } catch (error) {
-            console.error('加载面包屑数据失败:', error);
-            // fallback到前端计算
-            const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
-            setBreadcrumbs(fallbackBreadcrumbs);
-          }
+      if (ipcRenderer) {
+        const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, decodedAlbumPath);
+        if (response.success) {
+          // 直接缓存和使用主进程返回的完整面包屑
+          imageCache.set('navigation', decodedAlbumPath, response);
+          setBreadcrumbs(response.breadcrumbs);
+          setMetadata(response.metadata);
         } else {
-          // fallback到前端计算
-          const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
-          setBreadcrumbs(fallbackBreadcrumbs);
+          // Fallback: 如果API失败，至少显示基于路径的简单面包屑
+          setBreadcrumbs(getBreadcrumbPaths(decodedAlbumPath, rootPath));
         }
       } else {
-        // 已经是根目录，使用前端计算
-        const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
-        setBreadcrumbs(fallbackBreadcrumbs);
+        setBreadcrumbs(getBreadcrumbPaths(decodedAlbumPath, rootPath));
       }
     } catch (error) {
       console.error('加载面包屑数据失败:', error);
-      // 最终fallback到前端计算
-      if (decodedAlbumPath) {
-        const fallbackBreadcrumbs = getBreadcrumbPaths(decodedAlbumPath, rootPath);
-        setBreadcrumbs(fallbackBreadcrumbs);
-      }
+      setBreadcrumbs(getBreadcrumbPaths(decodedAlbumPath, rootPath));
     }
   };
 
