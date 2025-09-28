@@ -1,15 +1,21 @@
 import { useState, useCallback } from 'react';
 
 function useSorting(initialSortBy = 'name', initialSortDirection = 'asc') {
-  const [sortBy, setSortBy] = useState(initialSortBy);
-  const [sortDirection, setSortDirection] = useState(initialSortDirection);
+  const [sortBy, setSortBy] = useState(() => localStorage.getItem('sortBy') || initialSortBy);
+  const [sortDirection, setSortDirection] = useState(() => localStorage.getItem('sortDirection') || initialSortDirection);
 
   const handleSortChange = useCallback((event) => {
-    setSortBy(event.target.value);
+    const newSortBy = event.target.value;
+    localStorage.setItem('sortBy', newSortBy);
+    setSortBy(newSortBy);
   }, []);
 
   const handleDirectionChange = useCallback(() => {
-    setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    setSortDirection(prev => {
+      const newDirection = prev === 'asc' ? 'desc' : 'asc';
+      localStorage.setItem('sortDirection', newDirection);
+      return newDirection;
+    });
   }, []);
 
   return {
