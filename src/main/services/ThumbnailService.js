@@ -13,9 +13,6 @@ const stat = promisify(fs.stat);
 
 const THUMBNAIL_CACHE_DIR = path.join(app.getPath('userData'), 'thumbnail-cache');
 
-// 性能设置
-let performanceSettings = {};
-
 let thumbnailServer = null;
 let thumbnailServerPort = 0;
 
@@ -133,12 +130,7 @@ function startThumbnailServer() {
   });
 }
 
-function init(settings) {
-    performanceSettings = settings;
-}
-
 module.exports = {
-    init,
     ensureCacheDir,
     generateThumbnail,
     startThumbnailServer,

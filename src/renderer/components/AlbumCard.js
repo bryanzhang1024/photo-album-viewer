@@ -31,6 +31,8 @@ try {
   console.error('无法加载Electron模块:', error);
 }
 
+import useIsVisible from '../hooks/useIsVisible';
+
 // 观察器已移除 - 使用isVisible属性替代
 
 // 全局请求映射 - 防止重复请求
@@ -43,13 +45,13 @@ function AlbumCard({
   displayPath, 
   onClick, 
   isCompactMode, 
-  isVisible = false, 
   isFavoritesPage = false 
 }) {
   const [previewUrls, setPreviewUrls] = useState([]);
   const [loading, setLoading] = useState(true);
   const cardRef = useRef(null);
   const theme = useTheme();
+  const isVisible = useIsVisible(cardRef); // 使用新的Hook
   
   // 数据兼容性处理：优先使用新的node数据，回退到旧的album数据
   const cardData = useMemo(() => {

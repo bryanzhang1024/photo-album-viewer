@@ -18,6 +18,18 @@ const mkdir = promisify(fs.mkdir);
 const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
 
+// 性能设置默认值 - 基于 CPU 核心数优化
+const DEFAULT_PERFORMANCE_SETTINGS = {
+  concurrentTasks: Math.max(2, Math.min(6, os.cpus().length - 1)), // 动态设置并发数：2-6之间，基于CPU核心数
+  preloadDistance: 5,
+  cacheTimeout: 60, // 分钟
+  cacheEnabled: true,
+  thumbnailResolution: 600 // 缩略图分辨率（宽度，高度会按比例调整）
+};
+
+// 当前性能设置
+let performanceSettings = {...DEFAULT_PERFORMANCE_SETTINGS};
+
 // 单实例锁定 - 允许多窗口
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -172,17 +184,17 @@ ipcMain.handle('scan-directory', async (event, rootPath) => {
 
 // 获取图片的缩略图 - 使用新的服务
 ipcMain.handle('get-image-thumbnail', (event, imagePath, priority = 0) => {
-    return ThumbnailService.generateThumbnail(imagePath, 300, 300);
+    return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
 });
 
 // 获取单个图片的缩略图 - 与get-image-thumbnail功能相同，但为了兼容性添加
 ipcMain.handle('get-thumbnail', (event, imagePath, priority = 0) => {
-    return ThumbnailService.generateThumbnail(imagePath, 300, 300);
+    return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
 });
 
 // 批量请求预览图 - 提高效率的新接口
 ipcMain.handle('get-batch-thumbnails', async (event, imagePaths, priority = 0) => {
-    const promises = imagePaths.map(p => ThumbnailService.generateThumbnail(p, 300, 300).then(url => ({[p]: url})));
+    const promises = imagePaths.map(p => ThumbnailService.generateThumbnail(p, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5).then(url => ({[p]: url})));
     const results = await Promise.all(promises);
     return Object.assign({}, ...results);
 });
@@ -200,7 +212,12 @@ ipcMain.handle('get-album-images', async (event, albumPath) => {
 ipcMain.handle('update-performance-settings', async (event, settings) => {
   try {
     console.log('更新性能设置:', settings);
-    ThumbnailService.init(settings);
+    performanceSettings = {
+      ...performanceSettings,
+      ...settings
+    };
+    // Also pass the settings to the service if it needs to react instantly
+    // ThumbnailService.init(performanceSettings);
     return { success: true };
   } catch (error) {
     console.error('更新性能设置失败:', error);

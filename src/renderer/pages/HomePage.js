@@ -987,7 +987,6 @@ function HomePage({ colorMode }) {
                       displayPath={getNodeDisplayPath(node)}
                       onClick={() => handleNodeClick(node)}
                       isCompactMode={userDensity === 'compact'}
-                      isVisible={true}
                     />
                   </div>
                 )) :
