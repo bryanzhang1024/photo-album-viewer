@@ -19,6 +19,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../contexts/SettingsContext';
+import { clearAllCache } from '../utils/cacheUtils';
 
 function SettingsPage() {
   const { settings, updateSetting, resetSettings } = useSettings();
@@ -111,6 +112,24 @@ function SettingsPage() {
             label="显示文件名"
             sx={{ mb: 2 }}
           />
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            缓存管理
+          </Typography>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={clearAllCache}
+          >
+            清除所有缓存
+          </Button>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            此操作将清除所有缩略图、相册和导航缓存。在遇到显示问题时使用。
+          </Typography>
         </Box>
 
         <Divider sx={{ my: 2 }} />

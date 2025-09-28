@@ -44,7 +44,7 @@ async function generateThumbnail(imagePath, width = 300, height = 300) {
 
         try {
             await sharp(imagePath, { failOnError: false })
-                .resize({ width, height, fit: sharp.fit.inside, withoutEnlargement: true })
+                .resize({ width, height, fit: sharp.fit.cover, withoutEnlargement: true })
                 .webp({ quality: 80 })
                 .toFile(cacheFilename);
         } catch (err) {
@@ -65,5 +65,6 @@ async function generateThumbnail(imagePath, width = 300, height = 300) {
 
 module.exports = {
     ensureCacheDir,
-    generateThumbnail
+    generateThumbnail,
+    THUMBNAIL_CACHE_DIR
 };

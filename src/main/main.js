@@ -234,21 +234,21 @@ ipcMain.handle(CHANNELS.CLEAR_THUMBNAIL_CACHE, async () => {
     
     // 确保缓存目录存在
     try {
-      await ensureCacheDir();
+      await ThumbnailService.ensureCacheDir();
     } catch (err) {
       console.error('访问缓存目录失败:', err);
       return { success: false, error: '访问缓存目录失败: ' + err.message };
     }
     
     // 读取缓存目录中的所有文件
-    const files = await readdir(THUMBNAIL_CACHE_DIR);
+    const files = await readdir(ThumbnailService.THUMBNAIL_CACHE_DIR);
     let deletedCount = 0;
     
     // 删除每个缓存文件
     for (const file of files) {
       if (file === '.' || file === '..') continue;
       
-      const filePath = path.join(THUMBNAIL_CACHE_DIR, file);
+      const filePath = path.join(ThumbnailService.THUMBNAIL_CACHE_DIR, file);
       try {
         await fs.promises.unlink(filePath);
         deletedCount++;
@@ -257,13 +257,7 @@ ipcMain.handle(CHANNELS.CLEAR_THUMBNAIL_CACHE, async () => {
         // 继续删除其他文件
       }
     }
-    
-    // 清空处理中的图片映射
-    processingImages.clear();
-    // 重置缩略图队列
-    thumbnailQueue = [];
-    runningThumbnailTasks = 0;
-    
+        
     console.log(`缩略图缓存清理完成，删除了 ${deletedCount} 个文件`);
     return { success: true, deletedCount };
   } catch (error) {

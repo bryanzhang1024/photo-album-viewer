@@ -445,49 +445,7 @@ function HomePage({ colorMode }) {
     }
   };
   
-  // 清空所有缓存
-  const clearAllCache = () => {
-    // 清空统一缓存
-    imageCache.clearAll();
 
-    // 清空localStorage中的旧缓存（兼容性）
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (key.startsWith('albums_cache_') || key.startsWith('album_images_') || key.startsWith('navigation_cache_'))) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach(key => localStorage.removeItem(key));
-
-    // 清空sessionStorage中的预览图缓存（兼容性）
-    const sessionKeysToRemove = [];
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (key && (key.startsWith('album_preview_') || key.startsWith('image_thumbnail_'))) {
-        sessionKeysToRemove.push(key);
-      }
-    }
-    sessionKeysToRemove.forEach(key => sessionStorage.removeItem(key));
-
-    // 通过IPC通知主进程清空缩略图缓存
-    if (ipcRenderer) {
-      ipcRenderer.invoke(CHANNELS.CLEAR_THUMBNAIL_CACHE)
-        .then(result => {
-          if (result.success) {
-            setError('所有缓存已成功清除。可能需要重新加载应用以完全应用更改。');
-          } else {
-            setError('清除缓存时出现错误: ' + (result.error || '未知错误'));
-          }
-        })
-        .catch(err => {
-          setError('清除缓存时出现错误: ' + err.message);
-        });
-    } else {
-      setError('缓存部分清除成功。重新加载应用以完全应用更改。');
-    }
-  };
-  
   // 重新扫描
   const handleRefresh = () => {
     if (rootPath) {
