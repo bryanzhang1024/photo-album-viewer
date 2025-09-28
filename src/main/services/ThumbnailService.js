@@ -53,10 +53,9 @@ async function generateThumbnail(imagePath, width = 300, height = 300) {
         }
     }
 
-    // 读取缓存文件并返回Data URI
+    // 返回缓存文件路径
     try {
-        const fileBuffer = await readFile(cacheFilename);
-        return `data:image/webp;base64,${fileBuffer.toString('base64')}`;
+        return cacheFilename;
     } catch (readError) {
         console.error(`读取缩略图缓存失败: ${cacheFilename}`, readError);
         return null;

@@ -1,4 +1,4 @@
-const { app, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, ipcMain, dialog, shell, Menu, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -111,6 +111,13 @@ const handleCommandLine = () => {
 
 app.whenReady().then(async () => {
   await ThumbnailService.ensureCacheDir(); // 使用ThumbnailService
+
+  // 注册一个安全的自定义文件协议来提供缩略图
+  session.defaultSession.protocol.registerFileProtocol('thumbnail-protocol', (request, callback) => {
+    const url = request.url.substr(21); // 移除 'thumbnail-protocol://'
+    const filePath = path.join(ThumbnailService.THUMBNAIL_CACHE_DIR, url);
+    callback({ path: path.normalize(filePath) });
+  });
   
   // 处理命令行参数，使用指定的文件夹路径
   const initialPath = handleCommandLine();

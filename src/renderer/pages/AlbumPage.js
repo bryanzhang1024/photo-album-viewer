@@ -1252,10 +1252,13 @@ function ImageCard({ image, onClick, density, onLoad, albumPath, lazyLoad }) {
           return;
         }
 
-        // 缓存到统一缓存管理器
-        imageCache.set('thumbnail', image.path, url);
+        // 将文件路径转换为自定义协议URL
+        const thumbnailUrl = `thumbnail-protocol://${getBasename(url)}`;
 
-        setImageUrl(url);
+        // 缓存到统一缓存管理器
+        imageCache.set('thumbnail', image.path, thumbnailUrl);
+
+        setImageUrl(thumbnailUrl);
       } catch (err) {
         console.error('加载图片出错:', err);
         setImageError(true);
