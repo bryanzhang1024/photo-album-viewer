@@ -1148,6 +1148,7 @@ function AlbumPage({ colorMode }) {
                   density={userDensity}
                   onLoad={handleImageLoad}
                   albumPath={decodedAlbumPath}
+                  lazyLoad={true}
                 />
               </div>
             ))}
@@ -1191,10 +1192,14 @@ function AlbumPage({ colorMode }) {
   );
 }
 
+import useIsVisible from '../hooks/useIsVisible';
+
 // 图片卡片组件
-function ImageCard({ image, onClick, density, onLoad, albumPath }) {
+function ImageCard({ image, onClick, density, onLoad, albumPath, lazyLoad }) {
+  const cardRef = useRef(null);
+  const isVisible = useIsVisible(cardRef);
   const [imageUrl, setImageUrl] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(lazyLoad);
   const [aspectRatio, setAspectRatio] = useState(1); // 默认为1:1
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -1259,8 +1264,14 @@ function ImageCard({ image, onClick, density, onLoad, albumPath }) {
       }
     };
 
-    loadImage();
-  }, [image, density, retryCount]);
+    if (lazyLoad) {
+      if (isVisible) {
+        loadImage();
+      }
+    } else {
+      loadImage();
+    }
+  }, [image, density, retryCount, isVisible, lazyLoad]);
 
   // 格式化文件大小
   const formatFileSize = (bytes) => {
@@ -1319,6 +1330,7 @@ function ImageCard({ image, onClick, density, onLoad, albumPath }) {
 
   return (
     <Paper
+      ref={cardRef}
       sx={{
         width: '100%',
         display: 'flex',
