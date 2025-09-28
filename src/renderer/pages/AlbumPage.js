@@ -56,7 +56,17 @@ const DENSITY_CONFIG = {
   comfortable: { baseWidth: 280, spacing: 12 } // 宽松模式较大间距
 };
 
-function AlbumPage({ colorMode }) {
+function AlbumPage({
+  colorMode,
+  // URL模式的新props
+  albumPath: urlAlbumPath = null,
+  initialImage: urlInitialImage = null,
+  onNavigate = null,
+  onBreadcrumbNavigate = null,
+  onAlbumClick = null,
+  onGoBack = null,
+  urlMode = false
+}) {
   const { albumPath } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -94,6 +104,12 @@ function AlbumPage({ colorMode }) {
 
   // 解码路径 - 统一的路径解析逻辑
   const decodedAlbumPath = useMemo(() => {
+    // URL模式：使用传入的路径
+    if (urlMode && urlAlbumPath !== null) {
+      return urlAlbumPath;
+    }
+
+    // 传统模式：
     // 优先使用state中的路径（最可靠）
     if (location.state?.albumPath) {
       return location.state.albumPath;
@@ -114,7 +130,7 @@ function AlbumPage({ colorMode }) {
       }
     }
     return '';
-  }, [albumPath, location.state]);
+  }, [urlMode, urlAlbumPath, albumPath, location.state]);
 
   // 检测路径类型（文件夹 vs 相簿）
   const detectPathType = useCallback(async (path) => {
@@ -180,14 +196,20 @@ function AlbumPage({ colorMode }) {
 
   // 从URL参数中获取初始图片路径
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const imagePath = searchParams.get('image');
-    if (imagePath) {
-      initialImagePath.current = decodeURIComponent(imagePath);
+    if (urlMode && urlInitialImage) {
+      // URL模式：使用传入的初始图片路径
+      initialImagePath.current = urlInitialImage;
     } else {
-      initialImagePath.current = null;
+      // 传统模式：从URL参数获取
+      const searchParams = new URLSearchParams(location.search);
+      const imagePath = searchParams.get('image');
+      if (imagePath) {
+        initialImagePath.current = decodeURIComponent(imagePath);
+      } else {
+        initialImagePath.current = null;
+      }
     }
-  }, [location.search]);
+  }, [urlMode, urlInitialImage, location.search]);
 
   // 加载相簿图片、相邻相簿信息和面包屑数据
   useEffect(() => {
@@ -504,10 +526,17 @@ function AlbumPage({ colorMode }) {
     }
   };
 
-  // 处理返回 - 统一为严格层级返回
+  // 处理返回 - 支持URL模式
   const handleBack = () => {
     if (isNavigating) return;
 
+    // URL模式：使用传入的回调函数
+    if (urlMode && onGoBack) {
+      onGoBack();
+      return;
+    }
+
+    // 传统模式：原有逻辑
     // 保存当前滚动位置
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
@@ -672,6 +701,13 @@ function AlbumPage({ colorMode }) {
   const handleNavigateToAdjacentAlbum = (direction) => {
     const targetAlbum = direction === 'prev' ? neighboringAlbums.prev : neighboringAlbums.next;
     if (targetAlbum) {
+      // URL模式：使用传入的回调函数
+      if (urlMode && onAlbumClick) {
+        onAlbumClick(targetAlbum.path, targetAlbum.name);
+        return;
+      }
+
+      // 传统模式：原有逻辑
       // 保存当前滚动位置
       if (scrollContainerRef.current) {
         scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
@@ -692,6 +728,13 @@ function AlbumPage({ colorMode }) {
   const handleBreadcrumbNavigate = useCallback(async (targetPath) => {
     if (isNavigating) return;
 
+    // URL模式：使用传入的回调函数
+    if (urlMode && onBreadcrumbNavigate) {
+      onBreadcrumbNavigate(targetPath);
+      return;
+    }
+
+    // 传统模式：原有逻辑
     // 验证路径有效性 - 放宽验证，让主进程决定路径是否真的无效
     if (!isValidPath(targetPath)) {
       console.warn(`面包屑路径验证失败: ${targetPath}`);

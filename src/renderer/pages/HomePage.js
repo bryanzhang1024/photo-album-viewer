@@ -57,7 +57,16 @@ const DENSITY_CONFIG = {
   comfortable: { baseWidth: 280, spacing: 12 }
 };
 
-function HomePage({ colorMode }) {
+function HomePage({
+  colorMode,
+  // URL模式的新props
+  currentPath: urlCurrentPath = null,
+  onNavigate = null,
+  onBreadcrumbNavigate = null,
+  onAlbumClick = null,
+  onFolderClick = null,
+  urlMode = false
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -135,8 +144,30 @@ function HomePage({ colorMode }) {
   }, []);
   
   
-  // 处理从AlbumPage返回的导航请求
+  // URL模式初始化 - 处理来自BrowserPage的props
   useEffect(() => {
+    if (urlMode && urlCurrentPath !== null) {
+      console.log('URL模式：设置当前路径为', urlCurrentPath);
+      setCurrentPath(urlCurrentPath);
+      setBrowsingPath(urlCurrentPath);
+
+      // 如果有路径，扫描该路径
+      if (urlCurrentPath) {
+        scanNavigationLevel(urlCurrentPath);
+      } else {
+        // 空路径，需要用户选择根目录
+        setNavigationNodes([]);
+        setAlbums([]);
+        setBreadcrumbs([]);
+        setMetadata(null);
+      }
+      return;
+    }
+  }, [urlMode, urlCurrentPath]);
+
+  // 处理从AlbumPage返回的导航请求 (仅非URL模式)
+  useEffect(() => {
+    if (urlMode) return; // URL模式下不处理这个逻辑
     if (location.state?.navigateToPath) {
       const targetPath = location.state.navigateToPath;
       console.log(`从相册页面返回，导航到: ${targetPath}`);
@@ -164,8 +195,9 @@ function HomePage({ colorMode }) {
     }
   }, [location.state]);
 
-  // 从localStorage中读取上次的路径，并处理URL参数
+  // 从localStorage中读取上次的路径，并处理URL参数 (仅非URL模式)
   useEffect(() => {
+    if (urlMode) return; // URL模式下不处理localStorage逻辑
     if (urlPathProcessed) {
       console.log('URL参数已处理，跳过重复处理');
       return;
@@ -375,10 +407,17 @@ function HomePage({ colorMode }) {
     }
   };
 
-  // 处理导航点击 - 新架构
+  // 处理导航点击 - 支持URL模式
   const handleNavigate = async (targetPath) => {
     if (targetPath === currentPath || isNavigating) return; // 避免重复导航和并发操作
 
+    // URL模式：使用传入的回调函数
+    if (urlMode && onNavigate) {
+      onNavigate(targetPath, 'folder');
+      return;
+    }
+
+    // 传统模式：内部处理
     // 验证路径有效性
     if (!isValidPath(targetPath)) {
       console.warn(`路径验证失败: ${targetPath}`);
@@ -402,27 +441,35 @@ function HomePage({ colorMode }) {
   const handleNodeClick = useCallback(async (node) => {
     if (node.type === 'folder') {
       // 文件夹类型：导航到该文件夹
-      await scanNavigationLevel(node.path);
+      if (urlMode && onFolderClick) {
+        onFolderClick(node.path);
+      } else {
+        await scanNavigationLevel(node.path);
+      }
     } else if (node.type === 'album') {
       // 相册类型：打开相册页面
-      navigate(`/album`, { state: {
-        albumPath: node.path,
-        albumName: node.name,
-        fromHomePage: true,
-        browsingPath: currentPath || rootPath
-      }});
+      if (urlMode && onAlbumClick) {
+        onAlbumClick(node.path, node.name);
+      } else {
+        navigate(`/album`, { state: {
+          albumPath: node.path,
+          albumName: node.name,
+          fromHomePage: true,
+          browsingPath: currentPath || rootPath
+        }});
+      }
     }
-  }, [navigate, currentPath, rootPath, scanNavigationLevel]);
+  }, [urlMode, onFolderClick, onAlbumClick, navigate, currentPath, rootPath, scanNavigationLevel]);
 
   // 处理浮动导航面板的相册点击
   const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
-    navigate(`/album`, { state: { 
-      albumPath: albumPath,
-      albumName: albumName,
-      fromHomePage: true,
-      browsingPath: currentPath || rootPath
-    }});
-  }, [navigate, currentPath, rootPath]);
+    if (urlMode && onAlbumClick) {
+      onAlbumClick(albumPath, albumName);
+    } else {
+      // 使用新的URL格式
+      navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
+    }
+  }, [urlMode, onAlbumClick, navigate]);
   
   // 清理旧缓存（兼容性保留）
   const clearOldCaches = () => {
@@ -546,14 +593,19 @@ function HomePage({ colorMode }) {
   
   // 处理相簿点击
   const handleAlbumClick = (albumPath) => {
-    // 保存当前滚动位置
+    // URL模式：使用传入的回调函数
+    if (urlMode && onAlbumClick) {
+      onAlbumClick(albumPath);
+      return;
+    }
+
+    // 传统模式：保存当前滚动位置
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    
-    // 用安全的路径编码处理
-    const safePath = albumPath.replace(/\//g, '%2F');
-    navigate(`/album/${safePath}`);
+
+    // 使用新的URL格式
+    navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
   };
 
   // 获取当前显示的路径信息 - 使用 useMemo 缓存
@@ -673,11 +725,15 @@ function HomePage({ colorMode }) {
       }
       
       // 导航到随机选择的相簿
-      navigate(`/album/${encodeURIComponent(randomAlbum.path)}`);
+      if (urlMode && onAlbumClick) {
+        onAlbumClick(randomAlbum.path, randomAlbum.name);
+      } else {
+        navigate(`/browse/${encodeURIComponent(randomAlbum.path)}?view=album`);
+      }
     } else {
       setError('没有可用的相簿进行随机选择');
     }
-  }, [useNewArchitecture, sortedNodesData, sortedAlbumsData, scrollContext, location.pathname, navigate]);
+  }, [urlMode, onAlbumClick, useNewArchitecture, sortedNodesData, sortedAlbumsData, scrollContext, location.pathname, navigate]);
 
   // 处理导航面板的文件夹导航 - 真正的层级浏览
   const handleNavigationPanelNavigate = (folderPath) => {
@@ -727,7 +783,7 @@ function HomePage({ colorMode }) {
         <BreadcrumbNavigation
           breadcrumbs={breadcrumbs}
           currentPath={currentPath}
-          onNavigate={handleNavigate}
+          onNavigate={urlMode && onBreadcrumbNavigate ? onBreadcrumbNavigate : handleNavigate}
           variant="minimal"
           compact={isSmallScreen}
           sx={{ flexGrow: 1, minWidth: 0 }}

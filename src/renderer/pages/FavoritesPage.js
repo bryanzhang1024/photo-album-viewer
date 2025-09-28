@@ -138,7 +138,8 @@ function FavoritesPage({ colorMode }) {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    navigate(`/album/${encodeURIComponent(albumPath)}`);
+    // 使用新的URL格式
+    navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
   };
 
   // 处理图片点击
@@ -163,7 +164,8 @@ function FavoritesPage({ colorMode }) {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    navigate(`/album/${encodeURIComponent(albumPath)}`);
+    // 使用新的URL格式
+    navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
   };
 
   // 关闭查看器

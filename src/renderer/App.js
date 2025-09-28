@@ -3,8 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import HomePage from './pages/HomePage';
-import AlbumPage from './pages/AlbumPage';
+import BrowserPage from './pages/BrowserPage';
 import FavoritesPage from './pages/FavoritesPage';
 import TestPage from './pages/TestPage';
 import SettingsPage from './pages/SettingsPage';
@@ -113,12 +112,14 @@ function App() {
         <FavoritesProvider>
           <ScrollPositionContext.Provider value={scrollContext}>
             <Routes>
-              <Route path="/" element={<HomePage colorMode={colorMode} />} />
+              <Route path="/" element={<BrowserPage colorMode={colorMode} />} />
+              <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} />} />
               <Route path="/test" element={<TestPage colorMode={colorMode} />} />
-              <Route path="/album/:albumPath" element={<AlbumPage colorMode={colorMode} />} />
-              <Route path="/album" element={<AlbumPage colorMode={colorMode} />} />
               <Route path="/favorites" element={<FavoritesPage colorMode={colorMode} />} />
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
+              {/* 兼容性路由 - 重定向旧的相册URL */}
+              <Route path="/album/:albumPath" element={<BrowserPage colorMode={colorMode} redirectFromOldRoute={true} />} />
+              <Route path="/album" element={<BrowserPage colorMode={colorMode} redirectFromOldRoute={true} />} />
             </Routes>
           </ScrollPositionContext.Provider>
         </FavoritesProvider>
