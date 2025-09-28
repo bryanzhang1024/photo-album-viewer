@@ -75,6 +75,7 @@ function AlbumPage({ colorMode }) {
 });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [imageHeights, setImageHeights] = useState({}); // 存储图片高度信息
+  const [siblingAlbums, setSiblingAlbums] = useState([]); // 新增：存储兄弟相簿列表
   const [neighboringAlbums, setNeighboringAlbums] = useState({
     prev: null,
     next: null,
@@ -472,72 +473,52 @@ function AlbumPage({ colorMode }) {
   // 加载相邻相簿信息
   const loadNeighboringAlbums = async () => {
     try {
-      if (!ipcRenderer) return;
+      if (!ipcRenderer || !decodedAlbumPath) return;
 
-      // 获取根路径 - 使用与随机选择相簿相同的逻辑
-      const getWindowStorageKey = () => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const initialPath = searchParams.get('initialPath');
-        if (initialPath) {
-          try {
-            const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
-            return `lastRootPath_${pathHash}`;
-          } catch (e) {
-            let hash = 0;
-            const str = decodeURIComponent(initialPath);
-            for (let i = 0; i < str.length; i++) {
-              const char = str.charCodeAt(i);
-              hash = ((hash << 5) - hash) + char;
-              hash = hash & hash;
-            }
-            return `lastRootPath_${Math.abs(hash)}`;
-          }
-        } else {
-          return 'lastRootPath_default';
-        }
-      };
-      
-      const windowStorageKey = getWindowStorageKey();
-      const rootPath = localStorage.getItem(windowStorageKey);
-      if (!rootPath) return;
-
-      // 获取相簿列表 - 使用统一缓存管理器
-      let albums = [];
-      const cachedData = imageCache.get('albums', rootPath);
-
-      if (cachedData) {
-        albums = cachedData;
-      } else {
-        albums = await ipcRenderer.invoke('scan-directory', rootPath);
-        // 缓存相簿列表
-        imageCache.set('albums', rootPath, albums);
+      const parentPath = getDirname(decodedAlbumPath);
+      if (!parentPath || parentPath === decodedAlbumPath) {
+        setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: 0 });
+        setSiblingAlbums([]); // 清空兄弟相簿
+        return;
       }
 
-      if (albums.length === 0) return;
+      // 使用新的导航API扫描父目录
+      const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, parentPath);
+
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to scan parent directory');
+      }
+
+      // 从节点中只筛选出相册
+      const siblingAlbums = response.nodes.filter(node => node.type === 'album');
+
+      if (siblingAlbums.length === 0) {
+        setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: 0 });
+        setSiblingAlbums([]); // 确保清空
+        return;
+      }
 
       // 使用与HomePage相同的排序逻辑
-      const sortedAlbums = [...albums].sort((a, b) => {
+      const sortedAlbums = [...siblingAlbums].sort((a, b) => {
         let comparison = 0;
-        // 获取当前排序设置
         const savedSortBy = localStorage.getItem('sortBy') || 'name';
         const savedSortDirection = localStorage.getItem('sortDirection') || 'asc';
         
         if (savedSortBy === 'name') {
-          comparison = a.name.localeCompare(b.name);
+          comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
         } else if (savedSortBy === 'imageCount') {
           comparison = a.imageCount - b.imageCount;
         } else if (savedSortBy === 'lastModified') {
-          const aDate = a.previewImages[0]?.lastModified || 0;
-          const bDate = b.previewImages[0]?.lastModified || 0;
-          comparison = new Date(aDate) - new Date(bDate);
+          comparison = new Date(a.lastModified) - new Date(b.lastModified);
         }
         
         return savedSortDirection === 'asc' ? comparison : -comparison;
       });
 
-      // 找到当前相簿索引
       const currentIndex = sortedAlbums.findIndex(album => album.path === decodedAlbumPath);
-      
+
+      setSiblingAlbums(sortedAlbums); // 保存兄弟相簿列表
+
       if (currentIndex !== -1) {
         setNeighboringAlbums({
           prev: currentIndex > 0 ? sortedAlbums[currentIndex - 1] : null,
@@ -548,6 +529,7 @@ function AlbumPage({ colorMode }) {
       }
     } catch (err) {
       console.error('加载相邻相簿信息失败:', err);
+      setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: 0 });
     }
   };
 
@@ -891,87 +873,37 @@ function AlbumPage({ colorMode }) {
   }, [decodedAlbumPath, navigate, location.pathname, scrollContext]);
 
   // 处理随机选择相簿
-  const handleRandomAlbum = async () => {
-    try {
-      if (!ipcRenderer) {
-        setError('无法访问ipcRenderer, Electron可能没有正确加载');
-        return;
-      }
-
-      // 获取根路径 - 使用与HomePage相同的逻辑
-      const getWindowStorageKey = () => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const initialPath = searchParams.get('initialPath');
-        if (initialPath) {
-          try {
-            const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
-            return `lastRootPath_${pathHash}`;
-          } catch (e) {
-            let hash = 0;
-            const str = decodeURIComponent(initialPath);
-            for (let i = 0; i < str.length; i++) {
-              const char = str.charCodeAt(i);
-              hash = ((hash << 5) - hash) + char;
-              hash = hash & hash;
-            }
-            return `lastRootPath_${Math.abs(hash)}`;
-          }
-        } else {
-          return 'lastRootPath_default';
-        }
-      };
-      
-      const windowStorageKey = getWindowStorageKey();
-      const rootPath = localStorage.getItem(windowStorageKey);
-      if (!rootPath) {
-        setError('没有设置根路径，无法随机选择相簿');
-        return;
-      }
-
-      // 检查是否有缓存的相簿列表 - 使用统一缓存管理器
-      const cachedData = imageCache.get('albums', rootPath);
-      let albums;
-      if (cachedData) {
-        albums = cachedData;
-      } else {
-        // 如果没有缓存，重新扫描目录
-        albums = await ipcRenderer.invoke('scan-directory', rootPath);
-        // 缓存相簿列表
-        imageCache.set('albums', rootPath, albums);
-      }
-
-      if (albums.length > 0) {
-        // 随机选择一个相簿，但避免选到当前相簿
-        let randomAlbum;
-        let randomIndex;
-        let attempts = 0;
-        const maxAttempts = 10; // 防止无限循环
-
-        do {
-          randomIndex = Math.floor(Math.random() * albums.length);
-          randomAlbum = albums[randomIndex];
-          attempts++;
-        } while (randomAlbum.path === decodedAlbumPath && albums.length > 1 && attempts < maxAttempts);
-
-        // 保存当前滚动位置
-        if (scrollContainerRef.current) {
-          scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-        }
-
-        // 导航到随机选择的相簿
-        navigate(`/album/${encodeURIComponent(randomAlbum.path)}`, {
-          state: {
-            albumPath: randomAlbum.path,
-            albumName: randomAlbum.name,
-            fromAlbumPage: true
-          }
-        });
-      } else {
-        setError('没有可用的相簿进行随机选择');
-      }
-    } catch (err) {
-      setError('随机选择相簿时出错: ' + err.message);
+  const handleRandomAlbum = () => {
+    if (siblingAlbums.length <= 1) {
+      // 如果没有其他相簿可选，则不执行任何操作
+      setError('没有其他相簿可供随机选择');
+      return;
     }
+
+    let randomAlbum;
+    let attempts = 0;
+    const maxAttempts = 10; // 防止无限循环
+
+    // 随机选择一个相簿，但避免选到当前相簿
+    do {
+      const randomIndex = Math.floor(Math.random() * siblingAlbums.length);
+      randomAlbum = siblingAlbums[randomIndex];
+      attempts++;
+    } while (randomAlbum.path === decodedAlbumPath && siblingAlbums.length > 1 && attempts < maxAttempts);
+
+    // 保存当前滚动位置
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+
+    // 导航到随机选择的相簿
+    navigate(`/album/${encodeURIComponent(randomAlbum.path)}`, {
+      state: {
+        albumPath: randomAlbum.path,
+        albumName: randomAlbum.name,
+        fromAlbumPage: true
+      }
+    });
   };
 
   const renderHeader = () => (
