@@ -26,8 +26,6 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import Brightness4Icon from '@mui/icons-material/Brightness4';
-import Brightness7Icon from '@mui/icons-material/Brightness7';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
@@ -999,16 +997,6 @@ function AlbumPage({ colorMode }) {
             sx={{ mx: 0.5 }}
           >
             <FavoriteIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
-          <IconButton
-            color="inherit"
-            onClick={colorMode.toggleColorMode}
-            size="small"
-            sx={{ mx: 0.5 }}
-          >
-            {colorMode.mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
         </Tooltip>
         <IconButton

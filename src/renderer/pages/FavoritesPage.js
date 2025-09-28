@@ -24,8 +24,6 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import Brightness4Icon from '@mui/icons-material/Brightness4';
-import Brightness7Icon from '@mui/icons-material/Brightness7';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -380,16 +378,6 @@ function FavoritesPage({ colorMode }) {
               </Select>
             </FormControl>
 
-            <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
-              <IconButton 
-                color="inherit"
-                onClick={colorMode.toggleColorMode}
-                size="small"
-                sx={{ mx: 0.5 }}
-              >
-                {colorMode.mode === 'dark' ? <Brightness7Icon sx={{ fontSize: '1.2rem' }} /> : <Brightness4Icon sx={{ fontSize: '1.2rem' }} />}
-              </IconButton>
-            </Tooltip>
 
             <IconButton 
               color="inherit" 

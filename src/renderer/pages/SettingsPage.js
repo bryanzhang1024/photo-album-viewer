@@ -17,11 +17,13 @@ import {
   Toolbar
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../contexts/SettingsContext';
 import { clearAllCache } from '../utils/cacheUtils';
 
-function SettingsPage() {
+function SettingsPage({ colorMode }) {
   const { settings, updateSetting, resetSettings } = useSettings();
   const navigate = useNavigate();
 
@@ -99,9 +101,30 @@ function SettingsPage() {
 
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" gutterBottom>
+            主题设置
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={colorMode.mode === 'dark'}
+                onChange={colorMode.toggleColorMode}
+                icon={<Brightness7Icon />}
+                checkedIcon={<Brightness4Icon />}
+              />
+            }
+            label={colorMode.mode === 'dark' ? '深色模式' : '浅色模式'}
+            sx={{ mb: 2 }}
+          />
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
             其他设置
           </Typography>
-          
+
           <FormControlLabel
             control={
               <Switch

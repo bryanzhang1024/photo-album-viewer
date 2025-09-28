@@ -29,8 +29,6 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FavoriteIcon from '@mui/icons-material/Favorite';
-import Brightness4Icon from '@mui/icons-material/Brightness4';
-import Brightness7Icon from '@mui/icons-material/Brightness7';
 import CasinoIcon from '@mui/icons-material/Casino';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -825,16 +823,6 @@ function HomePage({ colorMode }) {
               <MenuItem value="comfortable">宽松</MenuItem>
             </Select>
           </FormControl>
-          <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
-            <IconButton
-              color="inherit"
-              onClick={colorMode.toggleColorMode}
-              size="small"
-              sx={{ mx: 0.5 }}
-            >
-              {colorMode.mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
-            </IconButton>
-          </Tooltip>
           <IconButton
             color="inherit"
             onClick={handleRefresh}
