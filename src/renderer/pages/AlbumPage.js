@@ -44,6 +44,7 @@ import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
 import { getBreadcrumbPaths, getBasename, getDirname, isValidPath } from '../utils/pathUtils';
 import CHANNELS from '../../common/ipc-channels';
+import useSorting from '../hooks/useSorting';
 import PageLayout from '../components/PageLayout';
 
 // 安全地获取electron对象
@@ -65,8 +66,7 @@ function AlbumPage({ colorMode }) {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [sortBy, setSortBy] = useState('name');
-  const [sortDirection, setSortDirection] = useState('asc');
+  const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [userDensity, setUserDensity] = useState(() => {
@@ -599,15 +599,6 @@ function AlbumPage({ colorMode }) {
     loadBreadcrumbData();
   };
 
-  // 处理排序方式变化
-  const handleSortChange = (event) => {
-    setSortBy(event.target.value);
-  };
-
-  // 处理排序方向变化
-  const handleDirectionChange = () => {
-    setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-  };
 
   // 切换密度设置（循环：紧凑->标准->宽松）
   const cycleDensity = () => {

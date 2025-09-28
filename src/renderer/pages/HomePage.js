@@ -44,6 +44,7 @@ import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
+import useSorting from '../hooks/useSorting';
 import PageLayout from '../components/PageLayout';
 
 // 安全地获取electron对象
@@ -70,8 +71,7 @@ function HomePage({ colorMode }) {
   const [metadata, setMetadata] = useState(null); // 当前层级的元数据
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [sortBy, setSortBy] = useState('name');
-  const [sortDirection, setSortDirection] = useState('asc');
+  const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
   const [userDensity, setUserDensity] = useState(() => {
   const savedDensity = localStorage.getItem('userDensity');
   return (savedDensity && DENSITY_CONFIG[savedDensity]) ? savedDensity : 'standard';
@@ -522,16 +522,7 @@ function HomePage({ colorMode }) {
     }
   };
   
-  // 处理排序方式变化
-  const handleSortChange = (event) => {
-    setSortBy(event.target.value);
-  };
-  
-  // 处理排序方向变化
-  const handleDirectionChange = () => {
-    setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-  };
-  
+
   
   // 排序相簿 - 使用 useMemo 缓存结果
   const sortedAlbumsData = useMemo(() => {
