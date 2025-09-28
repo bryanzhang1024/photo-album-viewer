@@ -53,9 +53,9 @@ async function generateThumbnail(imagePath, width = 300, height = 300) {
         }
     }
 
-    // 返回缓存文件路径
+    // 返回缓存文件路径，使用file://协议确保在所有环境下都能正确访问
     try {
-        return cacheFilename;
+        return `file://${cacheFilename}`;
     } catch (readError) {
         console.error(`读取缩略图缓存失败: ${cacheFilename}`, readError);
         return null;

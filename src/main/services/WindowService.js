@@ -54,7 +54,8 @@ function createWindow(albumPath = null) {
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true,
-      webSecurity: false, // 暂时禁用webSecurity进行测试
+      webSecurity: false, // 禁用webSecurity以支持file://协议
+      allowRunningInsecureContent: true, // 允许加载本地文件
       devTools: isDev,
       nodeIntegrationInWorker: true
     },
