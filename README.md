@@ -34,6 +34,30 @@
 - **动画效果**: 流畅的过渡动画和微交互
 - **响应式设计**: 适配桌面和移动设备
 
+## 🏛️ 架构 (Architecture)
+
+经过重构，应用现在采用更现代化、更易于维护的架构。
+
+### 后端 (Main Process)
+- **服务化 (Service-Oriented)**: 核心的后台逻辑被拆分到独立的、单一职责的服务中，位于 `src/main/services` 目录。
+  - `WindowService.js`: 管理应用的窗口创建和生命周期。
+  - `FileSystemService.js`: 负责所有文件和目录的扫描与导航逻辑。
+  - `ThumbnailService.js`: 处理所有缩略图的生成和缓存。
+  - `FavoritesService.js`: 管理收藏夹的读写和文件监听。
+- **调度中心**: `main.js` 作为IPC调度中心，负责路由前端请求到相应的服务，自身不包含具体业务逻辑。
+
+### 前端 (Renderer Process)
+- **组件化 (Component-Based)**: UI被拆分为可复用的React组件，位于 `src/renderer/components` 目录。
+  - `PageLayout.js`: 统一所有页面的通用布局（顶栏、内容区等）。
+  - `AlbumCard.js`, `ImageCard.js`: 列表和网格中的卡片单元。
+  - `BreadcrumbNavigation.js`: 可复用的面包屑导航栏。
+- **逻辑抽象 (Hook-Based)**: 重复的业务逻辑被抽象为自定义Hook，位于 `src/renderer/hooks` 目录。
+  - `useSorting.js`: 封装了排序相关的状态和逻辑。
+  - `useIsVisible.js`: 使用 `IntersectionObserver` 实现懒加载逻辑。
+
+### 共享代码
+- **`src/common`**: 该目录用于存放主进程和渲染器进程之间需要共享的代码，例如 `ipc-channels.js` 中定义的IPC通道名称常量。
+
 ## 🛠️ 技术栈
 
 ### 核心技术
@@ -194,16 +218,9 @@ npm run build:linux   # Linux
 
 ## 🤝 贡献指南
 
-### 开发规范
-- 使用ESLint代码规范
-- 遵循Git提交规范
-- 单元测试覆盖率>80%
-- 代码审查流程
+我们欢迎任何形式的贡献！为了保持代码库的整洁和一致性，请在开始开发前仔细阅读我们的 **[贡献指南 (CONTRIBUTING.md)](CONTRIBUTING.md)**。
 
-### 问题反馈
-- GitHub Issues: 功能建议和Bug报告
-- 邮件反馈：详细描述问题场景
-- 社区讨论：使用体验和改进建议
+该指南包含了详细的开发规范、Git提交格式以及代码审查流程。
 
 ## 📄 许可证
 
@@ -225,6 +242,5 @@ A: 支持SMB、NFS等网络挂载的文件夹
 
 ---
 
-**版本**: 1.0.0  
-**更新日期**: 2025.07.31 
-**作者**: clover with claude
+**版本**: 2.0.0  
+**更新日期**: 2025.09.28 
