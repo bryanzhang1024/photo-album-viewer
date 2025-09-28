@@ -8,7 +8,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, 'build'),
     filename: 'bundle.js',
-    publicPath: './'  // 使用相对路径以避免生产环境路径问题
+    publicPath: process.env.NODE_ENV === 'production' ? './' : '/'
   },
   resolve: {
     extensions: ['.js', '.jsx'],
@@ -52,10 +52,8 @@ module.exports = {
     })
   ],
   devServer: {
-    static: {
-      directory: path.join(__dirname, 'public'),
-    },
-    historyApiFallback: true,
+    static: false,
+    historyApiFallback: { index: '/index.html' },
     compress: true,
     port: 3000,
     hot: true,

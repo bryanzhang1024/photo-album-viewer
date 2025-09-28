@@ -4,9 +4,9 @@
   "description": "照片相簿浏览器 - 穿透多层文件夹查看底层相簿",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
+    "start": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000/bundle.js && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
     "start:renderer": "webpack serve --mode development",
-    "build": "webpack --mode production && electron-builder",
+    "build": "cross-env NODE_ENV=production webpack --mode production && electron-builder",
     "build:webpack": "webpack --mode production",
     "build:electron": "electron-builder"
   },
