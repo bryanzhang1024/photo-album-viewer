@@ -110,7 +110,6 @@ const handleCommandLine = () => {
 
 app.whenReady().then(async () => {
   await ThumbnailService.ensureCacheDir(); // 使用ThumbnailService
-  await ThumbnailService.startThumbnailServer(); // 使用ThumbnailService
   
   // 处理命令行参数，使用指定的文件夹路径
   const initialPath = handleCommandLine();
@@ -202,10 +201,7 @@ ipcMain.handle('get-batch-thumbnails', async (event, imagePaths, priority = 0) =
     return Object.assign({}, ...results);
 });
 
-// 获取缩略图服务器端口
-ipcMain.handle('get-thumbnail-server-port', () => {
-  return ThumbnailService.getThumbnailUrl(''); // This is a bit of a hack, but it works for now
-});
+
 
 ipcMain.handle('get-album-images', async (event, albumPath) => {
     return FileSystemService.getAlbumImages(albumPath);
