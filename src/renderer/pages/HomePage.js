@@ -44,6 +44,7 @@ import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
+import PageLayout from '../components/PageLayout';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -774,171 +775,141 @@ function HomePage({ colorMode }) {
     }
   };
   
-  return (
-    <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar variant="dense">
-          {/* 用面包屑导航替换左侧的返回、主页和标题 */}
-          <BreadcrumbNavigation
-            breadcrumbs={breadcrumbs}
-            currentPath={currentPath}
-            onNavigate={handleNavigate}
-            variant="minimal"
-            compact={isSmallScreen}
-            sx={{ flexGrow: 1, minWidth: 0 }}
-          />
-
-          {/* 功能按钮组 */}
-          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
-            {/* 文件夹选择按钮 - 只在根目录显示 */}
-            {(!currentPath || currentPath === rootPath) && (
-              <>
-                <Button
-                  color="inherit"
-                  startIcon={<FolderOpenIcon />}
-                  onClick={handleSelectDirectory}
-                  size="small"
-                  sx={{ mr: 1 }}
-                >
-                  选择文件夹
-                </Button>
-
-                <Button
-                  color="inherit"
-                  startIcon={<OpenInNewIcon />}
-                  onClick={handleOpenNewInstance}
-                  size="small"
-                  sx={{ mr: 1 }}
-                >
-                  新实例选择
-                </Button>
-              </>
-            )}
-
-            {/* 排序控制 */}
-            <FormControl variant="outlined" size="small" sx={{
-              minWidth: { xs: 80, sm: 120 },
-              mr: 1,
-              bgcolor: 'rgba(0,0,0,0.05)',
-              borderRadius: 1
-            }}>
-              <InputLabel id="sort-select-label" sx={{ fontSize: '0.8rem' }}>排序</InputLabel>
-              <Select
-                labelId="sort-select-label"
-                value={sortBy}
-                onChange={handleSortChange}
-                label="排序"
-                sx={{ fontSize: '0.8rem' }}
-              >
-                <MenuItem value="name">名称</MenuItem>
-                <MenuItem value="imageCount">照片数量</MenuItem>
-                <MenuItem value="lastModified">修改时间</MenuItem>
-              </Select>
-            </FormControl>
-
-            <IconButton color="inherit" onClick={handleDirectionChange} size="small">
-              <SortIcon sx={{
-                transform: sortDirection === 'desc' ? 'rotate(180deg)' : 'none',
-                transition: 'transform 0.3s',
-                fontSize: '1.2rem'
-              }} />
-            </IconButton>
-
-            {/* 随机选择相簿按钮 */}
-            <Tooltip title="随机选择相簿 (R)">
-              <IconButton
+    const renderHeader = () => (
+      <>
+        <BreadcrumbNavigation
+          breadcrumbs={breadcrumbs}
+          currentPath={currentPath}
+          onNavigate={handleNavigate}
+          variant="minimal"
+          compact={isSmallScreen}
+          sx={{ flexGrow: 1, minWidth: 0 }}
+        />
+        <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+          {(!currentPath || currentPath === rootPath) && (
+            <>
+              <Button
                 color="inherit"
-                onClick={handleRandomAlbum}
+                startIcon={<FolderOpenIcon />}
+                onClick={handleSelectDirectory}
                 size="small"
-                sx={{ mx: 0.5 }}
-                disabled={albums.length === 0}
+                sx={{ mr: 1 }}
               >
-                <CasinoIcon sx={{ fontSize: '1.2rem' }} />
-              </IconButton>
-            </Tooltip>
-
-            {/* 收藏按钮 */}
-            <Tooltip title="我的收藏">
-              <IconButton
+                选择文件夹
+              </Button>
+              <Button
                 color="inherit"
-                onClick={handleNavigateToFavorites}
+                startIcon={<OpenInNewIcon />}
+                onClick={handleOpenNewInstance}
                 size="small"
-                sx={{ mx: 0.5 }}
+                sx={{ mr: 1 }}
               >
-                <FavoriteIcon sx={{ fontSize: '1.2rem' }} />
-              </IconButton>
-            </Tooltip>
-
-            {/* 密度选择 */}
-            <FormControl variant="outlined" size="small" sx={{
-              minWidth: { xs: 80, sm: 100 },
-              mr: 1,
-              bgcolor: 'rgba(0,0,0,0.05)',
-              borderRadius: 1
-            }}>
-              <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
-              <Select
-                labelId="density-select-label"
-                value={userDensity}
-                onChange={(e) => {
-                  setUserDensity(e.target.value);
-                  localStorage.setItem('userDensity', e.target.value);
-                }}
-                label="密度"
-                sx={{ fontSize: '0.8rem' }}
-              >
-                <MenuItem value="compact">紧凑</MenuItem>
-                <MenuItem value="standard">标准</MenuItem>
-                <MenuItem value="comfortable">宽松</MenuItem>
-              </Select>
-            </FormControl>
-
-            {/* 深色模式切换按钮 */}
-            <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
-              <IconButton
-                color="inherit"
-                onClick={colorMode.toggleColorMode}
-                size="small"
-                sx={{ mx: 0.5 }}
-              >
-                {colorMode.mode === 'dark' ? <Brightness7Icon sx={{ fontSize: '1.2rem' }} /> : <Brightness4Icon sx={{ fontSize: '1.2rem' }} />}
-              </IconButton>
-            </Tooltip>
-
+                新实例选择
+              </Button>
+            </>
+          )}
+          <FormControl variant="outlined" size="small" sx={{
+            minWidth: { xs: 80, sm: 120 },
+            mr: 1,
+            bgcolor: 'rgba(0,0,0,0.05)',
+            borderRadius: 1
+          }}>
+            <InputLabel id="sort-select-label" sx={{ fontSize: '0.8rem' }}>排序</InputLabel>
+            <Select
+              labelId="sort-select-label"
+              value={sortBy}
+              onChange={handleSortChange}
+              label="排序"
+              sx={{ fontSize: '0.8rem' }}
+            >
+              <MenuItem value="name">名称</MenuItem>
+              <MenuItem value="imageCount">照片数量</MenuItem>
+              <MenuItem value="lastModified">修改时间</MenuItem>
+            </Select>
+          </FormControl>
+          <IconButton color="inherit" onClick={handleDirectionChange} size="small">
+            <SortIcon sx={{
+              transform: sortDirection === 'desc' ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.3s'
+            }} />
+          </IconButton>
+          <Tooltip title="随机选择相簿 (R)">
             <IconButton
               color="inherit"
-              onClick={handleRefresh}
-              disabled={!rootPath || loading}
+              onClick={handleRandomAlbum}
+              size="small"
+              sx={{ mx: 0.5 }}
+              disabled={albums.length === 0}
+            >
+              <CasinoIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="我的收藏">
+            <IconButton
+              color="inherit"
+              onClick={handleNavigateToFavorites}
+              size="small"
+              sx={{ mx: 0.5 }}
+            >
+              <FavoriteIcon />
+            </IconButton>
+          </Tooltip>
+          <FormControl variant="outlined" size="small" sx={{
+            minWidth: { xs: 80, sm: 100 },
+            mr: 1,
+            bgcolor: 'rgba(0,0,0,0.05)',
+            borderRadius: 1
+          }}>
+            <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
+            <Select
+              labelId="density-select-label"
+              value={userDensity}
+              onChange={(e) => {
+                setUserDensity(e.target.value);
+                localStorage.setItem('userDensity', e.target.value);
+              }}
+              label="密度"
+              sx={{ fontSize: '0.8rem' }}
+            >
+              <MenuItem value="compact">紧凑</MenuItem>
+              <MenuItem value="standard">标准</MenuItem>
+              <MenuItem value="comfortable">宽松</MenuItem>
+            </Select>
+          </FormControl>
+          <Tooltip title={colorMode.mode === 'dark' ? "切换到浅色模式" : "切换到深色模式"}>
+            <IconButton
+              color="inherit"
+              onClick={colorMode.toggleColorMode}
+              size="small"
+              sx={{ mx: 0.5 }}
+            >
+              {colorMode.mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
+            </IconButton>
+          </Tooltip>
+          <IconButton
+            color="inherit"
+            onClick={handleRefresh}
+            disabled={!rootPath || loading}
+            size="small"
+          >
+            <RefreshIcon />
+          </IconButton>
+          <Tooltip title="设置">
+            <IconButton
+              color="inherit"
+              onClick={() => navigate('/settings')}
               size="small"
             >
-              <RefreshIcon sx={{ fontSize: '1.2rem' }} />
+              <SettingsIcon />
             </IconButton>
-
-            <Tooltip title="设置">
-              <IconButton
-                color="inherit"
-                onClick={() => navigate('/settings')}
-                size="small"
-              >
-                <SettingsIcon sx={{ fontSize: '1.2rem' }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Toolbar>
-      </AppBar>
-
-      <Box
-        ref={scrollContainerRef}
-        sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
-        className="scroll-container"
-      >
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-            <CircularProgress />
-          </Box>
-        ) : error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-        ) : (useNewArchitecture ? navigationNodes.length === 0 : albums.length === 0) ? (
+          </Tooltip>
+        </Box>
+      </>
+    );
+  
+    const renderContent = () => {
+      if (useNewArchitecture ? navigationNodes.length === 0 : albums.length === 0) {
+        return (
           <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="h6" gutterBottom>没有找到相簿</Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
@@ -952,68 +923,73 @@ function HomePage({ colorMode }) {
               选择文件夹
             </Button>
           </Paper>
-        ) : (
-          <Box>
-            {/* 统计信息的新位置 */}
-            {metadata && (
-              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="caption" color="text.secondary">
-                  共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  总计 {metadata.totalImages} 张图片
-                </Typography>
-              </Box>
+        );
+      }
+  
+      return (
+        <Box>
+          {metadata && (
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="caption" color="text.secondary">
+                共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                总计 {metadata.totalImages} 张图片
+              </Typography>
+            </Box>
+          )}
+          <Masonry
+            key={`masonry-${userDensity}-${windowWidth}-${useNewArchitecture ? 'new' : 'old'}`}
+            breakpointCols={getMasonryBreakpoints()}
+            className="masonry-grid"
+            columnClassName="masonry-grid_column"
+          >
+            {(useNewArchitecture ?
+              sortedNodesData.map((node) => (
+                <div key={node.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
+                  <AlbumCard
+                    node={node}
+                    displayPath={getNodeDisplayPath(node)}
+                    onClick={() => handleNodeClick(node)}
+                    isCompactMode={userDensity === 'compact'}
+                  />
+                </div>
+              )) :
+              sortedAlbumsData.map((album) => (
+                <div key={album.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
+                  <AlbumCard
+                    album={album}
+                    displayPath={getAlbumDisplayPath(album)}
+                    onClick={() => handleAlbumClick(album.path)}
+                    isCompactMode={userDensity === 'compact'}
+                  />
+                </div>
+              ))
             )}
-            
-            <Masonry
-              key={`masonry-${userDensity}-${windowWidth}-${useNewArchitecture ? 'new' : 'old'}`}
-              breakpointCols={getMasonryBreakpoints()}
-              className="masonry-grid"
-              columnClassName="masonry-grid_column"
-            >
-              {(useNewArchitecture ?
-                sortedNodesData.map((node) => (
-                  <div key={node.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
-                    <AlbumCard
-                      node={node}
-                      displayPath={getNodeDisplayPath(node)}
-                      onClick={() => handleNodeClick(node)}
-                      isCompactMode={userDensity === 'compact'}
-                    />
-                  </div>
-                )) :
-                sortedAlbumsData.map((album) => (
-                  <div key={album.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
-                    <AlbumCard
-                      album={album}
-                      displayPath={getAlbumDisplayPath(album)}
-                      onClick={() => handleAlbumClick(album.path)}
-                      isCompactMode={userDensity === 'compact'}
-                      isVisible={true}
-                    />
-                  </div>
-                ))
-              )}
-            </Masonry>
-          </Box>
-        )}
-      </Box>
-
-      
-      <Snackbar 
-        open={!!error} 
-        autoHideDuration={6000} 
-        onClose={() => setError('')}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          </Masonry>
+        </Box>
+      );
+    };
+  
+    return (
+      <PageLayout
+        loading={loading}
+        error={error}
+        headerContent={renderHeader()}
+        scrollContainerRef={scrollContainerRef}
       >
-        <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
-          {error}
-        </Alert>
-      </Snackbar>
-      
-    </Box>
-  );
-}
-
+        {renderContent()}
+        <Snackbar 
+          open={!!error} 
+          autoHideDuration={6000} 
+          onClose={() => setError('')} 
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
+            {error}
+          </Alert>
+        </Snackbar>
+      </PageLayout>
+    );
+  }
 export default HomePage; 
