@@ -1056,12 +1056,9 @@ function AlbumPage({
 
   const renderContent = () => (
     <>
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ mb: 2 }}>
         <Typography variant="caption" color="text.secondary">
           共 {images.length} 张照片
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {metadata ? `当前目录: ${metadata.folderCount} 文件夹, ${metadata.albumCount} 相簿` : ''}
         </Typography>
       </Box>
       {images.length > 0 ? (

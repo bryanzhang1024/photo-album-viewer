@@ -922,7 +922,7 @@ function HomePage({
       return (
         <Box>
           {metadata && (
-            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 2 }}>
               <Typography variant="caption" color="text.secondary">
                 共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
               </Typography>
