@@ -111,7 +111,7 @@ function createWindow(albumPath = null) {
     const encodedPath = encodeURIComponent(albumPath);
     finalUrl = isDev 
       ? `http://localhost:3000/?initialPath=${encodedPath}`
-      : `file://${path.join(__dirname, '../../build/index.html')}?initialPath=${encodedPath}`;
+      : `file://${path.join(__dirname, '../../../build/index.html')}?initialPath=${encodedPath}`;
     console.log('创建窗口的URL:', finalUrl);
   }
 

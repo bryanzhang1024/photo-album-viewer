@@ -53,4 +53,5 @@ logs/
 *.tmp
 *.temp
 .claude/
+.gemini/
 .venv/

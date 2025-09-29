@@ -77,25 +77,46 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       const image = searchParams.get('image');
 
       if (albumPath) {
-        // 重定向到新的URL格式
-        const newURL = generateURL(
-          decodeURIComponent(albumPath),
-          'album',
-          image ? decodeURIComponent(image) : null
-        );
+        const newURL = generateURL(decodeURIComponent(albumPath), 'album', image ? decodeURIComponent(image) : null);
         navigate(newURL, { replace: true, state: location.state });
       } else {
-        // 空的相册路径，重定向到根目录
         navigate('/', { replace: true, state: location.state });
       }
-      return;
     }
   }, [redirectFromOldRoute, params, location, navigate]);
 
+  // 启动时恢复会话
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const commandLinePath = searchParams.get('initialPath');
+
+    if (commandLinePath) {
+      // 优先处理命令行传入的路径
+      navigateToPath(decodeURIComponent(commandLinePath), 'folder', null, true);
+    } else {
+      // 否则，恢复上次会话的路径
+      const lastPath = localStorage.getItem('lastPath');
+      if (lastPath) {
+        navigateToPath(lastPath, 'folder', null, true);
+      }
+    }
+  }, []); // 空依赖数组确保只在挂载时运行一次
+
+  // 路径变化时保存会话
+  useEffect(() => {
+    if (urlState.targetPath && !urlState.isRoot) {
+      localStorage.setItem('lastPath', urlState.targetPath);
+    } else if (urlState.isRoot) {
+      // 如果返回到根目录，可以选择清除lastPath，以便下次打开是主页
+      // localStorage.removeItem('lastPath');
+    }
+  }, [urlState.targetPath, urlState.isRoot]);
+
+
   // 导航函数 - 供子组件使用
-  const navigateToPath = (targetPath, viewMode = 'folder', initialImage = null) => {
+  const navigateToPath = (targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
     const newURL = generateURL(targetPath, viewMode, initialImage);
-    navigate(newURL);
+    navigate(newURL, { replace });
   };
 
   // 面包屑导航函数
