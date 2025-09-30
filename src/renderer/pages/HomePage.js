@@ -25,12 +25,10 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SortIcon from '@mui/icons-material/Sort';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -195,6 +193,22 @@ function HomePage({
     }
   }, [location.state]);
 
+  // 从设置页面接收新的根路径
+  useEffect(() => {
+    if (location.state?.newRootPath) {
+      const newPath = location.state.newRootPath;
+      console.log(`从设置页面接收到新的根路径: ${newPath}`);
+      setRootPath(newPath);
+      if (useNewArchitecture) {
+        scanNavigationLevel(newPath);
+      } else {
+        scanDirectory(newPath);
+      }
+      // 清除state，防止重复触发
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, navigate, useNewArchitecture]);
+
   // 从localStorage中读取上次的路径，并处理URL参数 (仅非URL模式)
   useEffect(() => {
     if (urlMode) return; // URL模式下不处理localStorage逻辑
@@ -270,44 +284,7 @@ function HomePage({
     };
   }, [albums, handleGoUp, handleRandomAlbum]); // 添加依赖
   
-    // 处理选择文件夹的逻辑
-    const handleSelectDirectory = async () => {
-      if (!ipcRenderer) return;
-      try {
-        const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
-        if (selectedDir) {
 
-        setRootPath(selectedDir);
-        // 保存到localStorage
-        localStorage.setItem(windowStorageKey, selectedDir);
-        if (useNewArchitecture) {
-          await scanNavigationLevel(selectedDir);
-        } else {
-          await scanDirectory(selectedDir);
-        }
-      }
-    } catch (err) {
-      setError('选择文件夹时出错: ' + err.message);
-    }
-  };
-
-  // 处理新实例选择文件夹（启动新的应用实例）
-    const handleOpenNewInstance = async () => {
-      if (!ipcRenderer) return;
-      try {
-        const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
-        if (selectedDir) {
-          await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, selectedDir);
-        if (result.success) {
-          console.log('新实例已启动');
-        } else {
-          setError('启动新实例失败: ' + result.error);
-        }
-      }
-    } catch (err) {
-      setError('启动新实例时出错: ' + err.message);
-    }
-  };
   
   // 智能导航扫描 - 新架构（使用统一缓存）
   const scanNavigationLevel = async (targetPath) => {
@@ -789,28 +766,7 @@ function HomePage({
           sx={{ flexGrow: 1, minWidth: 0 }}
         />
         <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
-          {(!currentPath || currentPath === rootPath) && (
-            <>
-              <Button
-                color="inherit"
-                startIcon={<FolderOpenIcon />}
-                onClick={handleSelectDirectory}
-                size="small"
-                sx={{ mr: 1 }}
-              >
-                选择文件夹
-              </Button>
-              <Button
-                color="inherit"
-                startIcon={<OpenInNewIcon />}
-                onClick={handleOpenNewInstance}
-                size="small"
-                sx={{ mr: 1 }}
-              >
-                新实例选择
-              </Button>
-            </>
-          )}
+
           <FormControl variant="outlined" size="small" sx={{
             minWidth: { xs: 80, sm: 120 },
             mr: 1,
@@ -906,14 +862,14 @@ function HomePage({
           <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="h6" gutterBottom>没有找到相簿</Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
-              请选择一个包含照片相簿的文件夹
+              请在设置页面选择一个包含照片相簿的文件夹
             </Typography>
             <Button 
               variant="contained" 
-              startIcon={<FolderOpenIcon />}
-              onClick={handleSelectDirectory}
+              startIcon={<SettingsIcon />}
+              onClick={() => navigate('/settings')}
             >
-              选择文件夹
+              打开设置
             </Button>
           </Paper>
         );
