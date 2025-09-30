@@ -346,6 +346,10 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       newIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
     }
 
+    // 切换图片前重置状态
+    setZoomLevel(1);
+    setDragOffset({ x: 0, y: 0 });
+
     // 检查目标图片是否已在预加载缓存中
     const targetCache = preloadCache.get(newIndex);
     if (targetCache && targetCache.loaded) {
@@ -405,6 +409,10 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     do {
       randomIndex = Math.floor(Math.random() * images.length);
     } while (randomIndex === currentIndex);
+
+    // 切换图片前重置状态
+    setZoomLevel(1);
+    setDragOffset({ x: 0, y: 0 });
 
     // 检查目标图片是否已在预加载缓存中
     const targetCache = preloadCache.get(randomIndex);
