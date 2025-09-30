@@ -451,6 +451,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     }
   };
   
+  const clickStartRef = useRef(null);
   // 处理鼠标拖动开始
   const handleMouseDown = (e) => {
     // 中键点击关闭窗口
@@ -460,10 +461,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       return;
     }
     
-    // 如果放大了，则开始拖动（左键拖动）
-    if (e.button === 0 && zoomLevel > 1) {
-      setDragStart({ x: e.clientX, y: e.clientY });
-      setIsDragging(true);
+    // 左键按下，记录点击起始信息
+    if (e.button === 0) {
+      clickStartRef.current = {
+        time: performance.now(),
+        x: e.clientX,
+        y: e.clientY,
+      };
+
+      // 如果放大了，则准备开始拖动
+      if (zoomLevel > 1) {
+        setDragStart({ x: e.clientX, y: e.clientY });
+        setIsDragging(true);
+      }
     }
   };
   
@@ -483,9 +493,22 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   };
   
   // 处理鼠标拖动结束
-  const handleMouseUp = () => {
+  const handleMouseUp = (e) => {
+    if (e.button === 0 && clickStartRef.current) {
+      const timeElapsed = performance.now() - clickStartRef.current.time;
+      const distanceMoved = Math.sqrt(
+        Math.pow(e.clientX - clickStartRef.current.x, 2) +
+        Math.pow(e.clientY - clickStartRef.current.y, 2)
+      );
+
+      // 如果按下时间短且移动距离小，则视为点击
+      if (timeElapsed < 200 && distanceMoved < 5) {
+        handleZoom(1.2);
+      }
+    }
     setDragStart(null);
     setIsDragging(false);
+    clickStartRef.current = null;
   };
   
   // 处理鼠标离开
@@ -500,24 +523,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const handleContextMenu = (e) => {
     e.preventDefault();
     onClose();
-  };
-
-  
-  // 处理左键单击：界面分区导航（移除点击空白关闭）
-  const handleClick = (e) => {
-    // 左键单击直接执行导航，不再等待延时检测
-    if (e.button === 0 && zoomLevel === 1) { // 左键点击且未缩放状态
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const containerWidth = rect.width;
-      
-      // 左侧50%区域：上一张，右侧50%区域：下一张
-      if (clickX < containerWidth / 2) {
-        handleNavigate('prev');
-      } else {
-        handleNavigate('next');
-      }
-    }
   };
   
   
@@ -749,7 +754,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       onMouseLeave={handleMouseLeave}
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
-      onClick={handleClick}
       >
         {currentImage && (
           <img
