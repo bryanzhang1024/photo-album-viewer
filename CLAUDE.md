@@ -146,36 +146,13 @@
 
 ## 工具使用
 
-### 文档工具
+### mcp工具Context7
 1. **查看官方文档**
    - `resolve-library-id` - 解析库名到 Context7 ID
    - `get-library-docs` - 获取最新官方文档
 
-需要先安装Context7 MCP，安装后此部分可以从引导词中删除：
-```bash
-claude mcp add --transport http context7 https://mcp.context7.com/mcp
-```
+## 项目要求
 
-2. **搜索真实代码**
-   - `searchGitHub` - 搜索 GitHub 上的实际使用案例
-
-需要先安装Grep MCP，安装后此部分可以从引导词中删除：
-```bash
-claude mcp add --transport http grep https://mcp.grep.app
-```
-
-### 编写规范文档工具
-编写需求和设计文档时使用 `specs-workflow`：
-
-1. **检查进度**: `action.type="check"` 
-2. **初始化**: `action.type="init"`
-3. **更新任务**: `action.type="complete_task"`
-
-路径：`/docs/specs/*`
-
-需要先安装spec workflow MCP，安装后此部分可以从引导词中删除：
-```bash
-claude mcp add spec-workflow-mcp -s user -- npx -y spec-workflow-mcp@latest
-```
-
-如果需要编译软件，使用npm run build
+- 如果需要编译软件，使用npm run build
+- 小步快跑，稳健更新。避免修改后软件无法运行
+- 每次修改前都先阅读相关代码，然后思考解决思路，构思计划，等用户审阅，用户同意后，批准后，再实施修改
