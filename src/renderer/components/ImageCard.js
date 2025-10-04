@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   Paper, 
@@ -10,91 +10,134 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useFavorites } from '../contexts/FavoritesContext';
+import imageCache from '../utils/ImageCacheManager';
+import { getBasename } from '../utils/pathUtils';
+import useIsVisible from '../hooks/useIsVisible';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
-// 图片卡片组件
-function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = false, albumPath, onAlbumClick, showAlbumLink = false }) {
+/**
+ * 图片卡片组件
+ *
+ * @param {Object} props
+ * @param {Object} props.image - 图片对象 {path, name, size}
+ * @param {Function} props.onClick - 点击卡片的回调
+ * @param {string} props.density - 显示密度 'compact' | 'standard' | 'comfortable' (优先使用)
+ * @param {boolean} props.isCompactMode - 紧凑模式 (向后兼容,已废弃)
+ * @param {Function} props.onLoad - 图片加载完成的回调
+ * @param {string} props.albumPath - 相簿路径
+ * @param {boolean} props.lazyLoad - 是否启用懒加载 (默认false)
+ * @param {boolean} props.isFavoritesPage - 是否在收藏页面 (默认false)
+ * @param {Function} props.onAlbumClick - 点击相册名称的回调
+ * @param {boolean} props.showAlbumLink - 是否显示相册链接 (默认false)
+ */
+function ImageCard({
+  image,
+  onClick,
+  density,
+  isCompactMode,
+  onLoad,
+  isFavoritesPage = false,
+  albumPath,
+  onAlbumClick,
+  showAlbumLink = false,
+  lazyLoad = false
+}) {
+  const cardRef = useRef(null);
+  const isVisible = useIsVisible(cardRef);
   const [imageUrl, setImageUrl] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(lazyLoad); // 如果启用懒加载,初始为加载中
   const [aspectRatio, setAspectRatio] = useState(1); // 默认为1:1
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 2; // 最大重试次数
-  
+
   // 使用收藏上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const isFavorited = image ? isImageFavorited(image.path) : false;
-  
+
+  // 兼容旧参数: isCompactMode优先于density
+  const actualDensity = density || (isCompactMode ? 'compact' : 'standard');
+
   useEffect(() => {
+    let isMounted = true; // 组件挂载标志
+
     const loadImage = async () => {
       if (!image || !ipcRenderer) return;
-      
+
       try {
+        if (!isMounted) return; // 提前检查
+
         setLoading(true);
         setImageLoaded(false);
         setImageError(false);
-        
-        // 检查会话缓存中是否有图片URL
-        const cacheKey = `image_thumbnail_${image.path}`;
-        const cachedUrl = sessionStorage.getItem(cacheKey);
-        
+
+        // 使用统一缓存管理器
+        const cachedUrl = imageCache.get('thumbnail', image.path);
         if (cachedUrl) {
+          if (!isMounted) return; // 组件已卸载，忽略结果
           setImageUrl(cachedUrl);
           setLoading(false);
           return;
         }
-        
+
         // 设置优先级 - 根据文件名排序，常见的首图文件名排在前面
         const filename = image.name.toLowerCase();
-        const isPriority = 
-          filename.includes('cover') || 
-          filename.includes('folder') || 
+        const isPriority =
+          filename.includes('cover') ||
+          filename.includes('folder') ||
           filename.startsWith('0') ||
           filename.startsWith('1') ||
           filename.startsWith('a') ||
           filename.startsWith('front') ||
           filename.startsWith('main');
-        
+
         // 获取缩略图 - 使用主进程中配置的分辨率
-        console.log(`正在获取缩略图: ${image.path}`);
         const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, isPriority ? 0 : 1);
-        
+
+        if (!isMounted) return; // 组件已卸载，忽略结果
+
         if (!url) {
-          console.error(`无法获取缩略图: ${image.path}`, {
-            imageName: image.name,
-            imageSize: image.size,
-            albumPath: image.albumPath,
-            albumName: image.albumName
-          });
+          console.error(`无法获取缩略图: ${image.path}`);
           setImageError(true);
           setLoading(false);
           return;
         }
-        
-        console.log(`缩略图获取成功: ${image.path} -> ${url}`);
-        
-        // 缓存到会话存储
-        try {
-          sessionStorage.setItem(cacheKey, url);
-        } catch (e) {
-          console.warn('缓存缩略图失败', e);
-        }
-        
-        setImageUrl(url);
+
+        // 将文件路径转换为自定义协议URL
+        const thumbnailUrl = `thumbnail-protocol://${getBasename(url)}`;
+
+        // 缓存到统一缓存管理器
+        imageCache.set('thumbnail', image.path, thumbnailUrl);
+
+        setImageUrl(thumbnailUrl);
       } catch (err) {
+        if (!isMounted) return; // 组件已卸载，忽略错误
         console.error('加载图片出错:', err);
         setImageError(true);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
-    
-    loadImage();
-  }, [image, isCompactMode, retryCount]);
+
+    if (lazyLoad) {
+      if (isVisible) {
+        loadImage();
+      }
+    } else {
+      loadImage();
+    }
+
+    // Cleanup函数：组件卸载时执行
+    return () => {
+      isMounted = false;
+    };
+  }, [image, actualDensity, retryCount, isVisible, lazyLoad]);
   
   // 格式化文件大小
   const formatFileSize = (bytes) => {
@@ -118,13 +161,12 @@ function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = fa
   // 处理图片加载错误
   const handleImageError = (e) => {
     console.error(`图片加载失败: ${image.path}`);
-    
+
     // 尝试重试加载
     if (retryCount < maxRetries) {
       console.log(`重试加载图片(${retryCount + 1}/${maxRetries}): ${image.path}`);
       // 清除缓存
-      const cacheKey = `image_thumbnail_${image.path}`;
-      sessionStorage.removeItem(cacheKey);
+      imageCache.clearType('thumbnail');
       // 增加重试计数并触发重新加载
       setRetryCount(prev => prev + 1);
     } else {
@@ -161,7 +203,8 @@ function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = fa
   };
   
   return (
-    <Paper 
+    <Paper
+      ref={cardRef}
       sx={{ 
         width: '100%',
         display: 'flex',
@@ -221,11 +264,11 @@ function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = fa
               src={imageUrl} 
               alt={image.name} 
               className={imageLoaded ? 'loaded' : ''}
-              style={{ 
+              style={{
                 width: '100%',
                 display: 'block',
                 height: 'auto', // 允许高度自适应
-                borderRadius: isCompactMode ? '4px' : '4px 4px 0 0'
+                borderRadius: actualDensity === 'compact' ? '2px' : actualDensity === 'standard' ? '4px' : '6px'
               }} 
               loading="lazy"
               onLoad={handleImageLoaded}
@@ -235,7 +278,7 @@ function ImageCard({ image, onClick, isCompactMode, onLoad, isFavoritesPage = fa
         )}
       </Box>
       
-      {!isCompactMode && (
+      {actualDensity !== 'compact' && (
         <Box sx={{ p: 1, flexGrow: 0, bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
