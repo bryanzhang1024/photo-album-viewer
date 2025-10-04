@@ -214,11 +214,31 @@ function AlbumPage({
 
   // 加载相簿图片、相邻相簿信息和面包屑数据
   useEffect(() => {
-    loadAlbumImages();
-    loadNeighboringAlbums();
-    loadBreadcrumbData();
-    loadRootPath();
-    preloadParentDirectory(); // 新增：预加载父目录
+    let cancelled = false; // 竞态条件保护
+
+    const loadAllData = async () => {
+      if (cancelled) return;
+      await loadAlbumImages();
+
+      if (cancelled) return;
+      await loadNeighboringAlbums();
+
+      if (cancelled) return;
+      await loadBreadcrumbData();
+
+      if (cancelled) return;
+      await loadRootPath();
+
+      if (cancelled) return;
+      await preloadParentDirectory();
+    };
+
+    loadAllData();
+
+    // Cleanup: 组件卸载或路径变化时取消旧请求
+    return () => {
+      cancelled = true;
+    };
   }, [decodedAlbumPath]);
 
   // 监听窗口大小变化
