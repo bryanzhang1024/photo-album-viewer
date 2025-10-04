@@ -22,11 +22,7 @@ function PageLayout({ loading, error, headerContent, children, scrollContainerRe
         sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
         className="scroll-container"
       >
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-            <CircularProgress />
-          </Box>
-        ) : error ? (
+        {error ? (
           <Container maxWidth="md">
             <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
           </Container>

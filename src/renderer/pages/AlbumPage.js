@@ -1148,10 +1148,14 @@ function ImageCard({ image, onClick, density, onLoad, albumPath, lazyLoad }) {
   const ipcRenderer = electron ? electron.ipcRenderer : null;
 
   useEffect(() => {
+    let isMounted = true; // 组件挂载标志
+
     const loadImage = async () => {
       if (!image || !ipcRenderer) return;
 
       try {
+        if (!isMounted) return; // 提前检查
+
         setLoading(true);
         setImageLoaded(false);
         setImageError(false);
@@ -1159,6 +1163,7 @@ function ImageCard({ image, onClick, density, onLoad, albumPath, lazyLoad }) {
         // 使用统一缓存管理器
         const cachedUrl = imageCache.get('thumbnail', image.path);
         if (cachedUrl) {
+          if (!isMounted) return; // 组件已卸载，忽略结果
           setImageUrl(cachedUrl);
           setLoading(false);
           return;
@@ -1178,6 +1183,8 @@ function ImageCard({ image, onClick, density, onLoad, albumPath, lazyLoad }) {
         // 获取缩略图 - 使用主进程中配置的分辨率
         const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, isPriority ? 0 : 1);
 
+        if (!isMounted) return; // 组件已卸载，忽略结果
+
         if (!url) {
           console.error(`无法获取缩略图: ${image.path}`);
           setImageError(true);
@@ -1193,10 +1200,13 @@ function ImageCard({ image, onClick, density, onLoad, albumPath, lazyLoad }) {
 
         setImageUrl(thumbnailUrl);
       } catch (err) {
+        if (!isMounted) return; // 组件已卸载，忽略错误
         console.error('加载图片出错:', err);
         setImageError(true);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -1207,6 +1217,11 @@ function ImageCard({ image, onClick, density, onLoad, albumPath, lazyLoad }) {
     } else {
       loadImage();
     }
+
+    // Cleanup函数：组件卸载时执行
+    return () => {
+      isMounted = false;
+    };
   }, [image, density, retryCount, isVisible, lazyLoad]);
 
   // 格式化文件大小
