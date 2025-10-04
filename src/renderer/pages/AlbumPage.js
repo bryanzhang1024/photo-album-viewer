@@ -496,11 +496,23 @@ function AlbumPage({
         return;
       }
 
-      // 使用新的导航API扫描父目录
-      const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, parentPath);
+      // 性能优化: 优先使用缓存，避免重复扫描同一父目录
+      const cachedResponse = imageCache.get('navigation', parentPath);
+      let response;
 
-      if (!response.success) {
-        throw new Error(response.error?.message || 'Failed to scan parent directory');
+      if (cachedResponse) {
+        // 缓存命中，直接使用
+        response = cachedResponse;
+      } else {
+        // 缓存未命中，调用IPC扫描父目录
+        response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, parentPath);
+
+        if (!response.success) {
+          throw new Error(response.error?.message || 'Failed to scan parent directory');
+        }
+
+        // 存入缓存供后续使用 (TTL: 1小时)
+        imageCache.set('navigation', parentPath, response);
       }
 
       // 从节点中只筛选出相册
