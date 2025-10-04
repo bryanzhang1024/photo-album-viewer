@@ -41,7 +41,7 @@ import './AlbumPage.css'; // 我们将添加这个CSS文件
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
-import { getBreadcrumbPaths, getBasename, getDirname, isValidPath } from '../utils/pathUtils';
+import { getBreadcrumbPaths, getBasename, getDirname, isValidPath, safeDecodeURIPath } from '../utils/pathUtils';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
 import PageLayout from '../components/PageLayout';
@@ -105,32 +105,9 @@ function AlbumPage({
 
   // 解码路径 - 统一的路径解析逻辑
   const decodedAlbumPath = useMemo(() => {
-    // URL模式：使用传入的路径
-    if (urlMode && urlAlbumPath !== null) {
-      return urlAlbumPath;
-    }
-
-    // 传统模式：
-    // 优先使用state中的路径（最可靠）
-    if (location.state?.albumPath) {
-      return location.state.albumPath;
-    }
-    // 回退到URL参数 - 使用安全的路径解码
-    if (albumPath) {
-      try {
-        // 先尝试标准的decodeURIComponent
-        return decodeURIComponent(albumPath);
-      } catch (e) {
-        // 如果失败，尝试手动解码%2F为/
-        const manualDecoded = albumPath.replace(/%2F/g, '/');
-        if (manualDecoded !== albumPath) {
-          return manualDecoded;
-        }
-        console.error('路径解码失败:', albumPath, e);
-        return '';
-      }
-    }
-    return '';
+    if (urlMode && urlAlbumPath !== null) return urlAlbumPath;
+    if (location.state?.albumPath) return location.state.albumPath;
+    return albumPath ? safeDecodeURIPath(albumPath) : '';
   }, [urlMode, urlAlbumPath, albumPath, location.state]);
 
   // 检测路径类型（文件夹 vs 相簿）

@@ -92,13 +92,35 @@ export const getRelativePath = (from, to) => {
 };
 
 /**
+ * 安全地解码URI路径
+ * 处理各种编码异常情况，提供统一的路径解码入口
+ * @param {string} encodedPath - 编码的路径
+ * @returns {string} - 解码后的路径
+ */
+export const safeDecodeURIPath = (encodedPath) => {
+  if (!encodedPath) return '';
+
+  try {
+    return decodeURIComponent(encodedPath);
+  } catch (e) {
+    // 如果标准解码失败，尝试手动解码 %2F → /
+    const manualDecoded = encodedPath.replace(/%2F/g, '/');
+    if (manualDecoded !== encodedPath) {
+      return manualDecoded;
+    }
+    console.error('路径解码失败:', encodedPath, e);
+    return encodedPath; // 返回原始路径，避免数据丢失
+  }
+};
+
+/**
  * 检查路径是否为绝对路径
  * @param {string} filePath - 文件路径
  * @returns {boolean} - 是否为绝对路径
  */
 export const isAbsolutePath = (filePath) => {
   if (!filePath) return false;
-  
+
   // Windows: C:\ 或 \\server\share
   // Unix: /path
   return /^[a-zA-Z]:[\\\/]/.test(filePath) || filePath.startsWith('/') || filePath.startsWith('\\\\');
