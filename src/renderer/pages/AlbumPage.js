@@ -25,7 +25,6 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import SortIcon from '@mui/icons-material/Sort';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
@@ -44,6 +43,9 @@ import imageCache from '../utils/ImageCacheManager';
 import { getBreadcrumbPaths, getBasename, getDirname, isValidPath, safeDecodeURIPath } from '../utils/pathUtils';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
+import useAlbumImages from '../hooks/useAlbumImages';
+import useBreadcrumbs from '../hooks/useBreadcrumbs';
+import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
 import PageLayout from '../components/PageLayout';
 
 // 安全地获取electron对象
@@ -72,9 +74,6 @@ function AlbumPage({
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const [images, setImages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -84,16 +83,7 @@ function AlbumPage({
 });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [imageHeights, setImageHeights] = useState({}); // 存储图片高度信息
-  const [siblingAlbums, setSiblingAlbums] = useState([]); // 新增：存储兄弟相簿列表
-  const [neighboringAlbums, setNeighboringAlbums] = useState({
-    prev: null,
-    next: null,
-    currentIndex: -1,
-    total: 0
-  });
   const [rootPath, setRootPath] = useState('');
-  const [breadcrumbs, setBreadcrumbs] = useState([]); // 面包屑导航数据
-  const [metadata, setMetadata] = useState(null); // 当前层级的元数据
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
@@ -109,6 +99,11 @@ function AlbumPage({
     if (location.state?.albumPath) return location.state.albumPath;
     return albumPath ? safeDecodeURIPath(albumPath) : '';
   }, [urlMode, urlAlbumPath, albumPath, location.state]);
+
+  // 使用自定义 Hooks
+  const { images, loading, error, loadImages } = useAlbumImages(decodedAlbumPath);
+  const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
+  const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
 
   // 检测路径类型（文件夹 vs 相簿）
   const detectPathType = useCallback(async (path) => {
@@ -195,19 +190,31 @@ function AlbumPage({
 
     const loadAllData = async () => {
       if (cancelled) return;
-      await loadAlbumImages();
+      const result = await loadImages();
 
       if (cancelled) return;
       await loadNeighboringAlbums();
 
       if (cancelled) return;
-      await loadBreadcrumbData();
+      await loadBreadcrumbs();
 
       if (cancelled) return;
       await loadRootPath();
 
       if (cancelled) return;
       await preloadParentDirectory();
+
+      // 如果有初始图片路径，找到对应的索引并打开查看器
+      if (initialImagePath.current && result.length > 0) {
+        const imageIndex = result.findIndex(img => img.path === initialImagePath.current);
+        if (imageIndex !== -1) {
+          setTimeout(() => {
+            setSelectedImageIndex(imageIndex);
+            setViewerOpen(true);
+            initialImagePath.current = null;
+          }, 100);
+        }
+      }
     };
 
     loadAllData();
@@ -216,7 +223,7 @@ function AlbumPage({
     return () => {
       cancelled = true;
     };
-  }, [decodedAlbumPath]);
+  }, [decodedAlbumPath, loadImages, loadNeighboringAlbums, loadBreadcrumbs]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -310,52 +317,6 @@ function AlbumPage({
     };
   }, [viewerOpen, neighboringAlbums]);
 
-  // 加载相簿图片
-  const loadAlbumImages = async () => {
-    try {
-      if (!ipcRenderer) {
-        setError('无法访问ipcRenderer, Electron可能没有正确加载');
-        return;
-      }
-
-      setLoading(true);
-      setError('');
-
-      // 使用统一缓存管理器
-      const cachedData = imageCache.get('album', decodedAlbumPath);
-      if (cachedData) {
-        setImages(cachedData);
-        setLoading(false);
-        return;
-      }
-
-      const result = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, decodedAlbumPath);
-
-      // 缓存结果
-      imageCache.set('album', decodedAlbumPath, result);
-
-      setImages(result);
-
-      // 如果有初始图片路径，找到对应的索引并打开查看器
-      if (initialImagePath.current) {
-        const imageIndex = result.findIndex(img => img.path === initialImagePath.current);
-        if (imageIndex !== -1) {
-          // 使用setTimeout确保在渲染完成后打开查看器
-          setTimeout(() => {
-            setSelectedImageIndex(imageIndex);
-            setViewerOpen(true);
-            // 清除初始图片路径，避免重复打开
-            initialImagePath.current = null;
-          }, 100);
-        }
-      }
-
-      setLoading(false);
-    } catch (err) {
-      setError('加载相簿图片时出错: ' + err.message);
-      setLoading(false);
-    }
-  };
 
   // 加载根路径信息
   const loadRootPath = async () => {
@@ -425,116 +386,7 @@ function AlbumPage({
     }
   };
 
-  // 加载面包屑导航数据 - 与HomePage保持一致
-  const loadBreadcrumbData = async () => {
-    try {
-      if (!decodedAlbumPath) {
-        setBreadcrumbs([]);
-        return;
-      }
 
-      // 直接请求当前路径的导航信息，让主进程生成完整的面包屑
-      const cachedData = imageCache.get('navigation', decodedAlbumPath);
-      if (cachedData && cachedData.breadcrumbs) {
-        setBreadcrumbs(cachedData.breadcrumbs);
-        setMetadata(cachedData.metadata);
-        return;
-      }
-
-      if (ipcRenderer) {
-        const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, decodedAlbumPath);
-        if (response.success) {
-          // 直接缓存和使用主进程返回的完整面包屑
-          imageCache.set('navigation', decodedAlbumPath, response);
-          setBreadcrumbs(response.breadcrumbs);
-          setMetadata(response.metadata);
-        } else {
-          // Fallback: 如果API失败，至少显示基于路径的简单面包屑
-          setBreadcrumbs(getBreadcrumbPaths(decodedAlbumPath, rootPath));
-        }
-      } else {
-        setBreadcrumbs(getBreadcrumbPaths(decodedAlbumPath, rootPath));
-      }
-    } catch (error) {
-      console.error('加载面包屑数据失败:', error);
-      setBreadcrumbs(getBreadcrumbPaths(decodedAlbumPath, rootPath));
-    }
-  };
-
-  // 加载相邻相簿信息
-  const loadNeighboringAlbums = async () => {
-    try {
-      if (!ipcRenderer || !decodedAlbumPath) return;
-
-      const parentPath = getDirname(decodedAlbumPath);
-      if (!parentPath || parentPath === decodedAlbumPath) {
-        setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: 0 });
-        setSiblingAlbums([]); // 清空兄弟相簿
-        return;
-      }
-
-      // 性能优化: 优先使用缓存，避免重复扫描同一父目录
-      const cachedResponse = imageCache.get('navigation', parentPath);
-      let response;
-
-      if (cachedResponse) {
-        // 缓存命中，直接使用
-        response = cachedResponse;
-      } else {
-        // 缓存未命中，调用IPC扫描父目录
-        response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, parentPath);
-
-        if (!response.success) {
-          throw new Error(response.error?.message || 'Failed to scan parent directory');
-        }
-
-        // 存入缓存供后续使用 (TTL: 1小时)
-        imageCache.set('navigation', parentPath, response);
-      }
-
-      // 从节点中只筛选出相册
-      const siblingAlbums = response.nodes.filter(node => node.type === 'album');
-
-      if (siblingAlbums.length === 0) {
-        setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: 0 });
-        setSiblingAlbums([]); // 确保清空
-        return;
-      }
-
-      // 使用与HomePage相同的排序逻辑
-      const sortedAlbums = [...siblingAlbums].sort((a, b) => {
-        let comparison = 0;
-        const savedSortBy = localStorage.getItem('sortBy') || 'name';
-        const savedSortDirection = localStorage.getItem('sortDirection') || 'asc';
-        
-        if (savedSortBy === 'name') {
-          comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
-        } else if (savedSortBy === 'imageCount') {
-          comparison = a.imageCount - b.imageCount;
-        } else if (savedSortBy === 'lastModified') {
-          comparison = new Date(a.lastModified) - new Date(b.lastModified);
-        }
-        
-        return savedSortDirection === 'asc' ? comparison : -comparison;
-      });
-
-      const currentIndex = sortedAlbums.findIndex(album => album.path === decodedAlbumPath);
-
-      setSiblingAlbums(sortedAlbums); // 保存兄弟相簿列表
-
-      if (currentIndex !== -1) {
-        setNeighboringAlbums({
-          prev: currentIndex > 0 ? sortedAlbums[currentIndex - 1] : null,
-          next: currentIndex < sortedAlbums.length - 1 ? sortedAlbums[currentIndex + 1] : null,
-          currentIndex,
-          total: sortedAlbums.length
-        });
-      }
-    } catch (err) {
-      console.error('加载相邻相簿信息失败:', err);
-      setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: 0 });
-    }
-  };
 
   // 处理返回 - 支持URL模式
   const handleBack = () => {
@@ -579,18 +431,6 @@ function AlbumPage({
 
     navigate('/');
   };
-
-  // 处理刷新
-  const handleRefresh = () => {
-    // 清除缓存
-    imageCache.clearType('album');
-    imageCache.clearType('albums');
-    imageCache.clearType('navigation');
-
-    loadAlbumImages();
-    loadBreadcrumbData();
-  };
-
 
   // 切换密度设置（循环：紧凑->标准->宽松）
   const cycleDensity = () => {
@@ -1052,14 +892,6 @@ function AlbumPage({
             <FavoriteIcon />
           </IconButton>
         </Tooltip>
-        <IconButton
-          color="inherit"
-          onClick={handleRefresh}
-          disabled={loading}
-          size="small"
-        >
-          <RefreshIcon />
-        </IconButton>
       </Box>
     </>
   );
