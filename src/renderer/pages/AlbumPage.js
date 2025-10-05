@@ -898,7 +898,7 @@ function AlbumPage({
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                  gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
                   gap: `${config.gap}px`,
                   mb: `${config.gap}px`,
                   px: { xs: 2, sm: 3 }

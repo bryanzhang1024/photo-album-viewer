@@ -255,7 +255,7 @@ function FavoritesPage({ colorMode }) {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${effectiveColumns}, 1fr)`,
+              gridTemplateColumns: `repeat(${effectiveColumns}, minmax(0, 1fr))`,
               gap: `${densityConfig.gap}px`,
               mb: `${densityConfig.gap}px`,
               px: { xs: 1, sm: 2, md: 3 }
@@ -309,7 +309,7 @@ function FavoritesPage({ colorMode }) {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${effectiveColumns}, 1fr)`,
+              gridTemplateColumns: `repeat(${effectiveColumns}, minmax(0, 1fr))`,
               gap: `${densityConfig.gap}px`,
               mb: `${densityConfig.gap}px`,
               px: { xs: 1, sm: 2, md: 3 }

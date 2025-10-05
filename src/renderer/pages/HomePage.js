@@ -889,7 +889,7 @@ function HomePage({
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${columnsCount}, 1fr)`,
+                gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`,
                 gap: `${densityConfig.gap}px`,
                 mb: `${densityConfig.gap}px`,
                 px: { xs: 1, sm: 2, md: 3 }
