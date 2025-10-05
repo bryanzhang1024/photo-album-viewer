@@ -33,6 +33,24 @@ class ThumbnailService {
   }
 
   /**
+   * 动态调整并发worker数量
+   */
+  setMaxWorkers(count) {
+    const numeric = Number(count);
+    if (!Number.isFinite(numeric)) {
+      return;
+    }
+
+    const safeValue = Math.max(1, Math.min(8, Math.floor(numeric)));
+    if (safeValue === this.MAX_WORKERS) {
+      return;
+    }
+
+    this.MAX_WORKERS = safeValue;
+    console.log(`[ThumbnailService] 更新并发度: ${this.MAX_WORKERS}`);
+  }
+
+  /**
    * 初始化缓存目录 - 只执行一次
    */
   async ensureCacheDir() {
@@ -282,5 +300,6 @@ module.exports = {
   thumbnailService,
   ensureCacheDir,
   generateThumbnail,
-  THUMBNAIL_CACHE_DIR
+  THUMBNAIL_CACHE_DIR,
+  setMaxWorkers: (count) => thumbnailService.setMaxWorkers(count)
 };

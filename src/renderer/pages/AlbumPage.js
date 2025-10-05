@@ -52,6 +52,9 @@ import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from 
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
+const PREFETCH_ROWS_AHEAD = 4;
+const PREFETCH_ROWS_BEHIND = 1;
+
 
 function AlbumPage({
   colorMode,
@@ -82,6 +85,7 @@ function AlbumPage({
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
+  const thumbnailPrefetchInFlight = useRef(new Set());
 
 
   // 获取滚动位置上下文
@@ -494,6 +498,74 @@ function AlbumPage({
     [sortedImages, columnsCount]
   );
 
+  const prefetchThumbnails = useCallback(async (paths, priority = 1) => {
+    if (!ipcRenderer || !Array.isArray(paths) || paths.length === 0) return;
+
+    const uniquePaths = Array.from(new Set(paths)).filter((imagePath) => {
+      if (!imagePath) return false;
+      if (thumbnailPrefetchInFlight.current.has(imagePath)) return false;
+      if (imageCache.get('thumbnail', imagePath)) return false;
+      return true;
+    });
+
+    if (!uniquePaths.length) return;
+
+    uniquePaths.forEach(path => thumbnailPrefetchInFlight.current.add(path));
+
+    try {
+      const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, uniquePaths, priority);
+
+      if (results && typeof results === 'object') {
+        uniquePaths.forEach((imagePath) => {
+          const url = results[imagePath];
+          if (!url) return;
+          const thumbnailUrl = `thumbnail-protocol://${getBasename(url)}`;
+          imageCache.set('thumbnail', imagePath, thumbnailUrl);
+        });
+      }
+    } catch (error) {
+      console.error('预取缩略图失败:', error);
+    } finally {
+      uniquePaths.forEach(path => thumbnailPrefetchInFlight.current.delete(path));
+    }
+  }, [ipcRenderer]);
+
+  const prefetchRows = useCallback((startRow, endRow, priority = 1) => {
+    if (!gridRows.length) return;
+
+    const normalizedStart = Math.max(0, startRow);
+    const normalizedEnd = Math.min(gridRows.length - 1, endRow);
+
+    if (normalizedStart > normalizedEnd) return;
+
+    const paths = [];
+
+    for (let rowIndex = normalizedStart; rowIndex <= normalizedEnd; rowIndex++) {
+      const row = gridRows[rowIndex];
+      if (!Array.isArray(row)) continue;
+      row.forEach(image => {
+        if (image && image.path) {
+          paths.push(image.path);
+        }
+      });
+    }
+
+    if (paths.length) {
+      prefetchThumbnails(paths, priority);
+    }
+  }, [gridRows, prefetchThumbnails]);
+
+  useEffect(() => {
+    if (!gridRows.length) return;
+    prefetchRows(0, Math.min(gridRows.length - 1, PREFETCH_ROWS_AHEAD), 0);
+  }, [gridRows, prefetchRows]);
+
+  const handleRangeChanged = useCallback(({ startIndex, endIndex }) => {
+    prefetchRows(startIndex, endIndex, 0);
+    prefetchRows(startIndex - PREFETCH_ROWS_BEHIND, startIndex - 1, 1);
+    prefetchRows(endIndex + 1, endIndex + PREFETCH_ROWS_AHEAD, 1);
+  }, [prefetchRows]);
+
   // 获取相簿名称
   const getAlbumName = () => {
     // 新架构：优先使用state中的albumName
@@ -890,6 +962,7 @@ function AlbumPage({
           data={gridRows}
           customScrollParent={virtualScrollParent || undefined}
           overscan={200}
+          rangeChanged={handleRangeChanged}
           itemContent={(rowIndex, imageRow) => {
             const config = GRID_CONFIG[userDensity];
             const columns = columnsCount;

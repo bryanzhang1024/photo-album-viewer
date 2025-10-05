@@ -43,9 +43,10 @@ function ImageCard({
 }) {
   const cardRef = useRef(null);
   const isVisible = useIsVisible(cardRef);
-  const [imageUrl, setImageUrl] = useState('');
-  const [loading, setLoading] = useState(lazyLoad); // 如果启用懒加载,初始为加载中
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const initialCachedUrl = image ? imageCache.get('thumbnail', image.path) : null;
+  const [imageUrl, setImageUrl] = useState(initialCachedUrl || '');
+  const [loading, setLoading] = useState(lazyLoad && !initialCachedUrl);
+  const [imageLoaded, setImageLoaded] = useState(!!initialCachedUrl);
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 2; // 最大重试次数
@@ -61,23 +62,12 @@ function ImageCard({
     let isMounted = true; // 组件挂载标志
 
     const loadImage = async () => {
-      if (!image || !ipcRenderer) return;
+      if (!image || !ipcRenderer || !isMounted) return;
 
       try {
-        if (!isMounted) return; // 提前检查
-
         setLoading(true);
         setImageLoaded(false);
         setImageError(false);
-
-        // 使用统一缓存管理器
-        const cachedUrl = imageCache.get('thumbnail', image.path);
-        if (cachedUrl) {
-          if (!isMounted) return; // 组件已卸载，忽略结果
-          setImageUrl(cachedUrl);
-          setLoading(false);
-          return;
-        }
 
         // 设置优先级 - 根据文件名排序，常见的首图文件名排在前面
         const filename = image.name.toLowerCase();
@@ -109,6 +99,7 @@ function ImageCard({
         imageCache.set('thumbnail', image.path, thumbnailUrl);
 
         setImageUrl(thumbnailUrl);
+        setImageLoaded(true);
       } catch (err) {
         if (!isMounted) return; // 组件已卸载，忽略错误
         console.error('加载图片出错:', err);
@@ -120,11 +111,28 @@ function ImageCard({
       }
     };
 
-    if (lazyLoad) {
-      if (isVisible) {
-        loadImage();
-      }
+    if (!image || !ipcRenderer) {
+      setImageUrl('');
+      setLoading(false);
+      setImageLoaded(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const cachedUrl = imageCache.get('thumbnail', image.path);
+    if (cachedUrl) {
+      setImageUrl(cachedUrl);
+      setImageLoaded(true);
+      setImageError(false);
+      setLoading(false);
+    } else if (lazyLoad && !isVisible) {
+      setImageUrl('');
+      setImageLoaded(false);
+      setLoading(true);
     } else {
+      setImageUrl('');
+      setImageLoaded(false);
       loadImage();
     }
 
@@ -132,7 +140,7 @@ function ImageCard({
     return () => {
       isMounted = false;
     };
-  }, [image, actualDensity, retryCount, isVisible, lazyLoad]);
+  }, [image, retryCount, isVisible, lazyLoad]);
   
   // 格式化文件大小
   const formatFileSize = (bytes) => {

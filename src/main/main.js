@@ -33,6 +33,7 @@ const DEFAULT_PERFORMANCE_SETTINGS = {
 
 // 当前性能设置
 let performanceSettings = {...DEFAULT_PERFORMANCE_SETTINGS};
+ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
 
 // 单实例锁定 - 允许多窗口
 const gotTheLock = app.requestSingleInstanceLock();
@@ -223,6 +224,9 @@ ipcMain.handle(CHANNELS.UPDATE_PERFORMANCE_SETTINGS, async (event, settings) => 
       ...performanceSettings,
       ...settings
     };
+    if (settings && typeof settings.concurrentTasks !== 'undefined') {
+      ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
+    }
     // Also pass the settings to the service if it needs to react instantly
     // ThumbnailService.init(performanceSettings);
     return { success: true };
