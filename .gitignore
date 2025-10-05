@@ -1,6 +1,7 @@
 # 用户
 CLAUDE.md
 GEMINI.md
+AGENTS.md
 agents/
 .spec-workflow/
 # 依赖

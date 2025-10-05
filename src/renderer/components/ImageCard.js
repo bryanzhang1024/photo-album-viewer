@@ -19,14 +19,12 @@ const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
 /**
- * 图片卡片组件
+ * 图片卡片组件 - 固定 2:3 宽高比显示
  *
  * @param {Object} props
  * @param {Object} props.image - 图片对象 {path, name, size}
  * @param {Function} props.onClick - 点击卡片的回调
- * @param {string} props.density - 显示密度 'compact' | 'standard' | 'comfortable' (优先使用)
- * @param {boolean} props.isCompactMode - 紧凑模式 (向后兼容,已废弃)
- * @param {Function} props.onLoad - 图片加载完成的回调
+ * @param {string} props.density - 显示密度 'compact' | 'standard' | 'comfortable'
  * @param {string} props.albumPath - 相簿路径
  * @param {boolean} props.lazyLoad - 是否启用懒加载 (默认false)
  * @param {boolean} props.isFavoritesPage - 是否在收藏页面 (默认false)
@@ -37,8 +35,6 @@ function ImageCard({
   image,
   onClick,
   density,
-  isCompactMode,
-  onLoad,
   isFavoritesPage = false,
   albumPath,
   onAlbumClick,
@@ -49,7 +45,6 @@ function ImageCard({
   const isVisible = useIsVisible(cardRef);
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(lazyLoad); // 如果启用懒加载,初始为加载中
-  const [aspectRatio, setAspectRatio] = useState(1); // 默认为1:1
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -59,8 +54,8 @@ function ImageCard({
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const isFavorited = image ? isImageFavorited(image.path) : false;
 
-  // 兼容旧参数: isCompactMode优先于density
-  const actualDensity = density || (isCompactMode ? 'compact' : 'standard');
+  // 使用密度设置
+  const actualDensity = density || 'standard';
 
   useEffect(() => {
     let isMounted = true; // 组件挂载标志
@@ -147,15 +142,8 @@ function ImageCard({
   };
   
   // 处理图片加载完成
-  const handleImageLoaded = (e) => {
-    const { naturalWidth, naturalHeight } = e.target;
-    const ratio = naturalHeight / naturalWidth;
-    setAspectRatio(ratio);
+  const handleImageLoaded = () => {
     setImageLoaded(true);
-    
-    if (onLoad) {
-      onLoad(image.path, e.target.height);
-    }
   };
   
   // 处理图片加载错误
@@ -222,59 +210,57 @@ function ImageCard({
       onClick={handleClick}
       elevation={1}
     >
-      <Box sx={{ position: 'relative', width: '100%' }}>
+      <Box sx={{ position: 'relative', width: '100%', paddingTop: '150%' }}>
+        {/* 150% = 2:3 固定比例 */}
         {loading ? (
-          <Box sx={{ 
-            paddingTop: aspectRatio > 1.5 ? '133%' : aspectRatio > 0.8 ? '100%' : '75%', // 根据比例调整
-            bgcolor: 'rgba(0,0,0,0.05)', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            position: 'relative',
-            width: '100%'
+          <Box sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            bgcolor: 'rgba(0,0,0,0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-            <CircularProgress 
-              size={24} 
-              sx={{ 
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                marginTop: '-12px',
-                marginLeft: '-12px'
-              }} 
-            />
+            <CircularProgress size={24} />
           </Box>
         ) : imageError ? (
-          <Box sx={{ 
-            paddingTop: '75%',
-            bgcolor: 'rgba(0,0,0,0.05)', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            position: 'relative',
-            width: '100%'
+          <Box sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            bgcolor: 'rgba(0,0,0,0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-            <Typography variant="caption" color="text.secondary" sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+            <Typography variant="caption" color="text.secondary">
               加载失败
             </Typography>
           </Box>
         ) : (
-          <div style={{ width: '100%', overflow: 'hidden' }}>
-            <img 
-              src={imageUrl} 
-              alt={image.name} 
-              className={imageLoaded ? 'loaded' : ''}
-              style={{
-                width: '100%',
-                display: 'block',
-                height: 'auto', // 允许高度自适应
-                borderRadius: actualDensity === 'compact' ? '2px' : actualDensity === 'standard' ? '4px' : '6px'
-              }} 
-              loading="lazy"
-              onLoad={handleImageLoaded}
-              onError={handleImageError}
-            />
-          </div>
+          <img
+            src={imageUrl}
+            alt={image.name}
+            className={imageLoaded ? 'loaded' : ''}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover', // 覆盖填充，与后端 Sharp fit.cover 一致
+              display: 'block',
+              borderRadius: actualDensity === 'compact' ? '2px' : actualDensity === 'standard' ? '4px' : '6px'
+            }}
+            loading="lazy"
+            onLoad={handleImageLoaded}
+            onError={handleImageError}
+          />
         )}
       </Box>
       

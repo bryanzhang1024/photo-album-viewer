@@ -35,8 +35,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ImageViewer from '../components/ImageViewer';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import ImageCard from '../components/ImageCard';
-import Masonry from 'react-masonry-css';
-import './AlbumPage.css'; // 我们将添加这个CSS文件
+import { Virtuoso } from 'react-virtuoso';
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
@@ -47,17 +46,12 @@ import useAlbumImages from '../hooks/useAlbumImages';
 import useBreadcrumbs from '../hooks/useBreadcrumbs';
 import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
 import PageLayout from '../components/PageLayout';
+import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
-// 优化的布局配置 - 根据密度调整基础宽度和间距
-const DENSITY_CONFIG = {
-  compact: { baseWidth: 180, spacing: 8 },   // 紧凑模式更小间距
-  standard: { baseWidth: 220, spacing: 10 }, // 标准模式适中间距
-  comfortable: { baseWidth: 280, spacing: 12 } // 宽松模式较大间距
-};
 
 function AlbumPage({
   colorMode,
@@ -78,11 +72,10 @@ function AlbumPage({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [userDensity, setUserDensity] = useState(() => {
-  const savedDensity = localStorage.getItem('userDensity');
-  return (savedDensity && DENSITY_CONFIG[savedDensity]) ? savedDensity : 'standard';
-});
+    const savedDensity = localStorage.getItem('userDensity');
+    return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
+  });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [imageHeights, setImageHeights] = useState({}); // 存储图片高度信息
   const [rootPath, setRootPath] = useState('');
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
@@ -242,15 +235,6 @@ function AlbumPage({
       setUserDensity(savedDensity);
     }
   }, []);
-
-  // 当密度设置变化时，强制重新计算布局
-  useEffect(() => {
-    if (images.length > 0) {
-      // 强制触发重新渲染
-      const event = new Event('resize');
-      window.dispatchEvent(event);
-    }
-  }, [userDensity, images.length, windowWidth]);
 
   // 添加键盘事件监听
   useEffect(() => {
@@ -460,10 +444,10 @@ function AlbumPage({
   };
 
   // 排序图片
-  const sortedImages = () => {
+  const sortedImages = useMemo(() => {
     if (!images.length) return [];
 
-    return [...images].sort((a, b) => {
+    const sorted = [...images].sort((a, b) => {
       let comparison = 0;
 
       if (sortBy === 'name') {
@@ -476,7 +460,9 @@ function AlbumPage({
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  };
+
+    return sorted;
+  }, [images, sortBy, sortDirection]);
 
   // 处理图片点击
   const handleImageClick = (index) => {
@@ -489,19 +475,17 @@ function AlbumPage({
     setViewerOpen(false);
   };
 
-  // 优化的响应式瀑布流布局 - 更精确的空间计算
-  const getMasonryBreakpoints = useCallback(() => {
-    const config = DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard;
-    const containerPadding = isSmallScreen ? 8 : 12; // 进一步减少内边距
-    const scrollbarWidth = 2; // 最小化滚动条估算
-    const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
+  // 计算网格列数
+  const columnsCount = useMemo(
+    () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
+    [windowWidth, userDensity, isSmallScreen]
+  );
 
-    // 更精确的空间计算，确保充分利用可用宽度
-    const columnWidth = config.baseWidth + config.spacing;
-    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
-
-    return columns;
-  }, [windowWidth, isSmallScreen, userDensity]);
+  // 将一维图片数组转换为二维网格行
+  const gridRows = useMemo(
+    () => chunkIntoRows(sortedImages, columnsCount),
+    [sortedImages, columnsCount]
+  );
 
   // 获取相簿名称
   const getAlbumName = () => {
@@ -514,15 +498,6 @@ function AlbumPage({
     const parts = decodedAlbumPath.split('/');
     return parts[parts.length - 1];
   };
-
-  // 记录图片加载完成后的高度
-  const handleImageLoad = (imagePath, height) => {
-    setImageHeights(prev => ({
-      ...prev,
-      [imagePath]: height
-    }));
-  };
-
 
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
@@ -904,31 +879,48 @@ function AlbumPage({
         </Typography>
       </Box>
       {images.length > 0 ? (
-        <Box sx={{ minHeight: 'calc(100vh - 120px)' }}>
-          <Masonry
-            key={`masonry-${userDensity}-${windowWidth}`}
-            breakpointCols={getMasonryBreakpoints()}
-            className="masonry-grid"
-            columnClassName="masonry-grid_column"
-          >
-            {sortedImages().map((image, index) => (
-              <div
-                key={`${image.path}-${index}`}
-                className="masonry-item"
-                style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}
+        <Virtuoso
+          style={{ height: 'calc(100vh - 180px)' }}
+          data={gridRows}
+          overscan={200}
+          itemContent={(rowIndex, imageRow) => {
+            const config = GRID_CONFIG[userDensity];
+            const columns = columnsCount;
+
+            return (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                  gap: `${config.gap}px`,
+                  mb: `${config.gap}px`,
+                  px: { xs: 2, sm: 3 }
+                }}
               >
-                <ImageCard
-                  image={image}
-                  onClick={() => handleImageClick(index)}
-                  density={userDensity}
-                  onLoad={handleImageLoad}
-                  albumPath={decodedAlbumPath}
-                  lazyLoad={true}
-                />
-              </div>
-            ))}
-          </Masonry>
-        </Box>
+                {imageRow.map((image, colIndex) => {
+                  const actualIndex = rowIndex * columns + colIndex;
+                  return (
+                    <Box
+                      key={image.path}
+                      sx={{
+                        width: '100%',
+                        aspectRatio: '2/3' // 固定 2:3 比例
+                      }}
+                    >
+                      <ImageCard
+                        image={image}
+                        onClick={() => handleImageClick(actualIndex)}
+                        density={userDensity}
+                        albumPath={decodedAlbumPath}
+                        lazyLoad={true}
+                      />
+                    </Box>
+                  );
+                })}
+              </Box>
+            );
+          }}
+        />
       ) : (
         <Box sx={{ textAlign: 'center', mt: 8 }}>
           <Typography variant="h6" color="text.secondary">
@@ -941,7 +933,7 @@ function AlbumPage({
       )}
       {viewerOpen && (
         <ImageViewer
-          images={sortedImages()}
+          images={sortedImages}
           currentIndex={selectedImageIndex}
           onClose={handleCloseViewer}
           onIndexChange={setSelectedImageIndex}

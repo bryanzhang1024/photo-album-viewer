@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, 
@@ -31,16 +31,9 @@ import { useFavorites } from '../contexts/FavoritesContext';
 import ImageViewer from '../components/ImageViewer';
 import AlbumCard from '../components/AlbumCard';
 import ImageCard from '../components/ImageCard';
-import Masonry from 'react-masonry-css';
 import { ScrollPositionContext } from '../App';
-import './AlbumPage.css';
-
-// 统一的布局配置 - 与HomePage和AlbumPage保持一致
-const DENSITY_CONFIG = {
-  compact: { baseWidth: 180, spacing: 8 },
-  standard: { baseWidth: 220, spacing: 10 },
-  comfortable: { baseWidth: 280, spacing: 12 }
-};
+import { Virtuoso } from 'react-virtuoso';
+import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 
 // 收藏页面组件
 function FavoritesPage({ colorMode }) {
@@ -55,12 +48,13 @@ function FavoritesPage({ colorMode }) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [viewerImages, setViewerImages] = useState([]);
   const [userDensity, setUserDensity] = useState(() => {
-  const savedDensity = localStorage.getItem('userDensity');
-  return (savedDensity && DENSITY_CONFIG[savedDensity]) ? savedDensity : 'standard';
-});
+    const savedDensity = localStorage.getItem('userDensity');
+    return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
+  });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [refreshCounter, setRefreshCounter] = useState(0);
   const scrollContainerRef = useRef(null);
+  const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   
   // 使用收藏上下文
   const { favorites, isLoading, toggleAlbumFavorite, toggleImageFavorite } = useFavorites();
@@ -73,9 +67,15 @@ function FavoritesPage({ colorMode }) {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
     };
-    
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      setVirtualScrollParent(scrollContainerRef.current);
+    }
   }, []);
 
   // 从localStorage中读取密度设置
@@ -143,17 +143,17 @@ function FavoritesPage({ colorMode }) {
   };
 
   // 处理图片点击
-  const handleImageClick = (image, index) => {
+  const handleImageClick = (index) => {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    
-    const images = sortedImages().map(img => ({
+
+    const images = sortedImages.map(img => ({
       path: img.path,
       name: img.name,
       url: img.path // 使用原始图片路径，ImageViewer会处理缩略图加载
     }));
-    
+
     setViewerImages(images);
     setSelectedImageIndex(index);
     setViewerOpen(true);
@@ -174,12 +174,12 @@ function FavoritesPage({ colorMode }) {
   };
 
   // 排序收藏的相簿
-  const sortedAlbums = useCallback(() => {
+  const sortedAlbums = useMemo(() => {
     if (!favorites.albums.length) return [];
-    
+
     return [...favorites.albums].sort((a, b) => {
       let comparison = 0;
-      
+
       if (sortBy === 'name') {
         comparison = a.name.localeCompare(b.name);
       } else if (sortBy === 'date') {
@@ -187,18 +187,18 @@ function FavoritesPage({ colorMode }) {
       } else if (sortBy === 'count') {
         comparison = a.imageCount - b.imageCount;
       }
-      
+
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   }, [favorites.albums, sortBy, sortDirection]);
 
   // 排序收藏的图片
-  const sortedImages = useCallback(() => {
+  const sortedImages = useMemo(() => {
     if (!favorites.images.length) return [];
-    
+
     return [...favorites.images].sort((a, b) => {
       let comparison = 0;
-      
+
       if (sortBy === 'name') {
         comparison = a.name.localeCompare(b.name);
       } else if (sortBy === 'date') {
@@ -206,29 +206,30 @@ function FavoritesPage({ colorMode }) {
       } else if (sortBy === 'album') {
         comparison = a.albumName.localeCompare(b.albumName);
       }
-      
+
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   }, [favorites.images, sortBy, sortDirection]);
 
-  // 优化的响应式瀑布流布局 - 更精确的空间计算
-  const getMasonryBreakpoints = useCallback(() => {
-    const config = DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard;
-    const containerPadding = isSmallScreen ? 8 : 12;
-    const scrollbarWidth = 2;
-    const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
+  const columnsCount = useMemo(
+    () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
+    [windowWidth, userDensity, isSmallScreen]
+  );
 
-    const columnWidth = config.baseWidth + config.spacing;
-    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
+  const albumRows = useMemo(
+    () => chunkIntoRows(sortedAlbums, columnsCount),
+    [sortedAlbums, columnsCount]
+  );
 
-    return columns;
-  }, [windowWidth, isSmallScreen, userDensity]);
+  const imageRows = useMemo(
+    () => chunkIntoRows(sortedImages, columnsCount),
+    [sortedImages, columnsCount]
+  );
 
-  // 渲染相簿列表
+  const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
+
   const renderAlbums = () => {
-    const albums = sortedAlbums();
-    
-    if (albums.length === 0) {
+    if (!sortedAlbums.length) {
       return (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh', flexDirection: 'column' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
@@ -240,35 +241,49 @@ function FavoritesPage({ colorMode }) {
         </Box>
       );
     }
-    
+
+    const rows = albumRows.length > 0 ? albumRows : [sortedAlbums];
+    const effectiveColumns = Math.max(columnsCount, 1);
+
     return (
-      <Masonry
-        key={`albums-masonry-${userDensity}-${windowWidth}`}
-        breakpointCols={getMasonryBreakpoints()}
-        className="masonry-grid"
-        columnClassName="masonry-grid_column"
-      >
-        {albums.map((album) => (
-          <div key={album.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
-            <AlbumCard
-              album={album}
-              displayPath={album.path}
-              onClick={() => handleAlbumClick(album.path)}
-              isCompactMode={userDensity === 'compact'}
-              isFavoritesPage={true}
-              isVisible={true}
-            />
-          </div>
-        ))}
-      </Masonry>
+      <Virtuoso
+        key={`favorites-albums-${userDensity}-${effectiveColumns}`}
+        data={rows}
+        customScrollParent={virtualScrollParent || undefined}
+        overscan={200}
+        itemContent={(rowIndex, row) => (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${effectiveColumns}, 1fr)`,
+              gap: `${densityConfig.gap}px`,
+              mb: `${densityConfig.gap}px`,
+              px: { xs: 1, sm: 2, md: 3 }
+            }}
+          >
+            {row.map((album, colIndex) => {
+              const key = album?.path || `${rowIndex}-${colIndex}`;
+              return (
+                <Box key={key} sx={{ width: '100%' }}>
+                  <AlbumCard
+                    album={album}
+                    displayPath={album.path}
+                    onClick={() => handleAlbumClick(album.path)}
+                    isCompactMode={userDensity === 'compact'}
+                    isFavoritesPage={true}
+                    isVisible={true}
+                  />
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      />
     );
   };
 
-  // 渲染图片列表
   const renderImages = () => {
-    const images = sortedImages();
-    
-    if (images.length === 0) {
+    if (!sortedImages.length) {
       return (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh', flexDirection: 'column' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
@@ -280,27 +295,45 @@ function FavoritesPage({ colorMode }) {
         </Box>
       );
     }
-    
+
+    const rows = imageRows.length > 0 ? imageRows : [sortedImages];
+    const effectiveColumns = Math.max(columnsCount, 1);
+
     return (
-      <Masonry
-        key={`images-masonry-${userDensity}-${windowWidth}`}
-        breakpointCols={getMasonryBreakpoints()}
-        className="masonry-grid"
-        columnClassName="masonry-grid_column"
-      >
-        {images.map((image, index) => (
-          <div key={image.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
-            <ImageCard
-              image={image}
-              onClick={() => handleImageClick(image, index)}
-              onAlbumClick={() => handleNavigateToAlbum(image.albumPath)}
-              isCompactMode={userDensity === 'compact'}
-              showAlbumLink={true}
-              isFavoritesPage={true}
-            />
-          </div>
-        ))}
-      </Masonry>
+      <Virtuoso
+        key={`favorites-images-${userDensity}-${effectiveColumns}`}
+        data={rows}
+        customScrollParent={virtualScrollParent || undefined}
+        overscan={200}
+        itemContent={(rowIndex, row) => (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${effectiveColumns}, 1fr)`,
+              gap: `${densityConfig.gap}px`,
+              mb: `${densityConfig.gap}px`,
+              px: { xs: 1, sm: 2, md: 3 }
+            }}
+          >
+            {row.map((image, colIndex) => {
+              const key = image?.path || `${rowIndex}-${colIndex}`;
+              const actualIndex = rowIndex * effectiveColumns + colIndex;
+              return (
+                <Box key={key} sx={{ width: '100%' }}>
+                  <ImageCard
+                    image={image}
+                    onClick={() => handleImageClick(actualIndex)}
+                    onAlbumClick={() => handleNavigateToAlbum(image.albumPath)}
+                    isCompactMode={userDensity === 'compact'}
+                    showAlbumLink={true}
+                    isFavoritesPage={true}
+                  />
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      />
     );
   };
 

@@ -3,10 +3,8 @@ import { getBasename, getDirname, getRelativePath, getBreadcrumbPaths, isValidPa
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, 
-  Container,
   Typography, 
   Button, 
-  Grid, 
   AppBar, 
   Toolbar, 
   IconButton, 
@@ -34,26 +32,19 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AlbumCard from '../components/AlbumCard';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
-import Masonry from 'react-masonry-css';
-import './AlbumPage.css';
+import { Virtuoso } from 'react-virtuoso';
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
 import PageLayout from '../components/PageLayout';
+import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
-
-// 优化布局配置 - 采用收藏页面的紧凑设计
-const DENSITY_CONFIG = {
-  compact: { baseWidth: 180, spacing: 8 },
-  standard: { baseWidth: 220, spacing: 10 },
-  comfortable: { baseWidth: 280, spacing: 12 }
-};
 
 function HomePage({
   colorMode,
@@ -78,13 +69,13 @@ function HomePage({
   const [error, setError] = useState('');
   const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
   const [userDensity, setUserDensity] = useState(() => {
-  const savedDensity = localStorage.getItem('userDensity');
-  return (savedDensity && DENSITY_CONFIG[savedDensity]) ? savedDensity : 'standard';
-});
+    const savedDensity = localStorage.getItem('userDensity');
+    return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
+  });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
-  const [forceUpdate, setForceUpdate] = useState(0);
+  const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
   const [browsingPath, setBrowsingPath] = useState(null); // 当前浏览路径（兼容性保留）
   const [useNewArchitecture, setUseNewArchitecture] = useState(true); // 是否使用新架构
@@ -117,28 +108,32 @@ function HomePage({
   };
 
   const [windowStorageKey] = useState(getWindowStorageKey());
-  
+
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
   
   // 获取收藏上下文
   const { favorites } = useFavorites();
-  
-  
+
+
   // 监听窗口大小变化
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
-      
+
       // 添加日志以便调试
       console.log(`窗口大小变化: ${window.innerWidth}x${window.innerHeight}`);
-      
-      // 触发强制更新，确保虚拟列表重新计算
-      setForceUpdate(prev => prev + 1);
+
     };
-    
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      setVirtualScrollParent(scrollContainerRef.current);
+    }
   }, []);
   
   
@@ -552,6 +547,21 @@ function HomePage({
     });
   }, [navigationNodes, sortBy, sortDirection]);
 
+  const displayItems = useMemo(
+    () => (useNewArchitecture ? sortedNodesData : sortedAlbumsData),
+    [useNewArchitecture, sortedNodesData, sortedAlbumsData]
+  );
+
+  const columnsCount = useMemo(
+    () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
+    [windowWidth, userDensity, isSmallScreen]
+  );
+
+  const gridRows = useMemo(
+    () => chunkIntoRows(displayItems, columnsCount),
+    [displayItems, columnsCount]
+  );
+
   // 获取节点显示路径 - 使用 useMemo 缓存路径计算
   const nodeDisplayPaths = useMemo(() => {
     if (!currentPath || !navigationNodes.length) return {};
@@ -614,20 +624,6 @@ function HomePage({
     return relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
   };
   
-  // 优化的响应式瀑布流布局 - 采用收藏页面的断点式设计
-  const getMasonryBreakpoints = useCallback(() => {
-    const config = DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard;
-    const containerPadding = isSmallScreen ? 8 : 12;
-    const scrollbarWidth = 2;
-    const availableWidth = Math.max(0, windowWidth - containerPadding * 2 - scrollbarWidth);
-
-    const columnWidth = config.baseWidth + config.spacing;
-    const columns = Math.max(1, Math.floor((availableWidth + config.spacing) / columnWidth));
-
-    return columns;
-  }, [windowWidth, isSmallScreen, userDensity]);
-  
-  
   // 打开设置对话框
   const handleOpenSettings = () => {
     setTempSettings({...performanceSettings});
@@ -644,22 +640,15 @@ function HomePage({
     setPerformanceSettings(tempSettings);
     localStorage.setItem('performance_settings', JSON.stringify(tempSettings));
     setSettingsDialogOpen(false);
-    
+
     // 自动刷新应用设置
     setError('设置已保存，正在自动应用...');
-    
+
     // 强制重新计算布局
     setTimeout(() => {
       // 强制重新计算列数和网格
       setWindowWidth(prev => prev + 1); // 触发useCallback重新计算
       setTimeout(() => setWindowWidth(window.innerWidth), 50);
-      
-      // 强制重新计算虚拟列表
-      if (listRef.current) {
-        listRef.current.recomputeRowHeights();
-        listRef.current.forceUpdateGrid();
-      }
-      
       setError('');
     }, 100);
   };
@@ -856,69 +845,84 @@ function HomePage({
       </>
     );
   
-    const renderContent = () => {
-      if (useNewArchitecture ? navigationNodes.length === 0 : albums.length === 0) {
-        return (
-          <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
-            <Typography variant="h6" gutterBottom>没有找到相簿</Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              请在设置页面选择一个包含照片相簿的文件夹
-            </Typography>
-            <Button 
-              variant="contained" 
-              startIcon={<SettingsIcon />}
-              onClick={() => navigate('/settings')}
-            >
-              打开设置
-            </Button>
-          </Paper>
-        );
-      }
-  
+  const renderContent = () => {
+    const hasContent = useNewArchitecture ? navigationNodes.length > 0 : albums.length > 0;
+
+    if (!hasContent) {
       return (
-        <Box>
-          {metadata && (
-            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 2 }}>
-              <Typography variant="caption" color="text.secondary">
-                共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                总计 {metadata.totalImages} 张图片
-              </Typography>
+        <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="h6" gutterBottom>没有找到相簿</Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            请在设置页面选择一个包含照片相簿的文件夹
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<SettingsIcon />}
+            onClick={() => navigate('/settings')}
+          >
+            打开设置
+          </Button>
+        </Paper>
+      );
+    }
+
+    const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
+    const rowsToRender = gridRows.length > 0 ? gridRows : [displayItems];
+
+    return (
+      <Box>
+        {metadata && (
+          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              总计 {metadata.totalImages} 张图片
+            </Typography>
+          </Box>
+        )}
+        <Virtuoso
+          data={rowsToRender}
+          customScrollParent={virtualScrollParent || undefined}
+          overscan={200}
+          itemContent={(rowIndex, row) => (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${columnsCount}, 1fr)`,
+                gap: `${densityConfig.gap}px`,
+                mb: `${densityConfig.gap}px`,
+                px: { xs: 1, sm: 2, md: 3 }
+              }}
+            >
+              {row.map((item, colIndex) => {
+                const itemKey = item?.path || `${rowIndex}-${colIndex}`;
+                return (
+                  <Box key={itemKey} sx={{ width: '100%' }}>
+                    {useNewArchitecture ? (
+                      <AlbumCard
+                        node={item}
+                        displayPath={getNodeDisplayPath(item)}
+                        onClick={() => handleNodeClick(item)}
+                        isCompactMode={userDensity === 'compact'}
+                      />
+                    ) : (
+                      <AlbumCard
+                        album={item}
+                        displayPath={getAlbumDisplayPath(item)}
+                        onClick={() => handleAlbumClick(item.path)}
+                        isCompactMode={userDensity === 'compact'}
+                      />
+                    )}
+                  </Box>
+                );
+              })}
             </Box>
           )}
-          <Masonry
-            key={`masonry-${userDensity}-${windowWidth}-${useNewArchitecture ? 'new' : 'old'}`}
-            breakpointCols={getMasonryBreakpoints()}
-            className="masonry-grid"
-            columnClassName="masonry-grid_column"
-          >
-            {(useNewArchitecture ?
-              sortedNodesData.map((node) => (
-                <div key={node.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
-                  <AlbumCard
-                    node={node}
-                    displayPath={getNodeDisplayPath(node)}
-                    onClick={() => handleNodeClick(node)}
-                    isCompactMode={userDensity === 'compact'}
-                  />
-                </div>
-              )) :
-              sortedAlbumsData.map((album) => (
-                <div key={album.path} style={{ marginBottom: `${(DENSITY_CONFIG[userDensity] || DENSITY_CONFIG.standard).spacing}px` }}>
-                  <AlbumCard
-                    album={album}
-                    displayPath={getAlbumDisplayPath(album)}
-                    onClick={() => handleAlbumClick(album.path)}
-                    isCompactMode={userDensity === 'compact'}
-                  />
-                </div>
-              ))
-            )}
-          </Masonry>
-        </Box>
-      );
-    };
+        />
+      </Box>
+    );
+  };
   
     return (
       <PageLayout
