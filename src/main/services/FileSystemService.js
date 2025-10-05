@@ -500,10 +500,82 @@ async function getAlbumImages(albumPath) {
     }
 }
 
+/**
+ * 扫描目录树 - 用于导航面板（递归扫描）
+ * @param {string} rootPath - 根路径
+ * @param {number} depth - 当前深度
+ * @param {number} maxDepth - 最大深度
+ * @returns {Promise<Array>} 目录树结构
+ */
+async function scanDirectoryTree(rootPath, depth = 0, maxDepth = 3) {
+  if (depth > maxDepth) return [];
+
+  try {
+    const entries = await readdir(rootPath);
+    const items = [];
+
+    for (const entry of entries) {
+      const fullPath = path.join(rootPath, entry);
+      try {
+        const entryStats = await stat(fullPath);
+
+        if (entryStats.isDirectory()) {
+          // 检查目录是否包含图片或子目录
+          let hasImages = false;
+          let hasSubDirs = false;
+
+          try {
+            const subEntries = await readdir(fullPath);
+            for (const subEntry of subEntries) {
+              const subFullPath = path.join(fullPath, subEntry);
+              try {
+                const subStats = await stat(subFullPath);
+                if (subStats.isDirectory()) {
+                  hasSubDirs = true;
+                } else if (subStats.isFile() && SUPPORTED_FORMATS.includes(path.extname(subEntry).toLowerCase())) {
+                  hasImages = true;
+                }
+                if (hasImages && hasSubDirs) break; // 找到两种类型就可以停止
+              } catch (err) {
+                // 跳过无法访问的文件
+                continue;
+              }
+            }
+          } catch (err) {
+            // 无法读取目录，跳过
+            continue;
+          }
+
+          // 只包含有内容的目录
+          if (hasImages || hasSubDirs) {
+            const item = {
+              name: entry,
+              path: fullPath,
+              type: 'folder',
+              hasImages,
+              children: depth < maxDepth ? await scanDirectoryTree(fullPath, depth + 1, maxDepth) : []
+            };
+            items.push(item);
+          }
+        }
+      } catch (err) {
+        // 跳过无法访问的文件或目录
+        continue;
+      }
+    }
+
+    return items.sort((a, b) => a.name.localeCompare(b.name));
+  } catch (error) {
+    console.error(`扫描目录树失败 ${rootPath}:`, error);
+    return [];
+  }
+}
+
 module.exports = {
     scanNavigationLevel,
     scanDirectories,
     getAlbumImages,
+    scanDirectoryTree,
     createErrorResponse,
     SUPPORTED_FORMATS
 };
