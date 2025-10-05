@@ -4,6 +4,23 @@ import HomePage from './HomePage';
 import AlbumPage from './AlbumPage';
 
 // URL工具函数
+const normalizeTargetPath = (rawPath) => {
+  if (!rawPath) return '';
+  let normalized = rawPath.replace(/\\/g, '/');
+
+  // Windows 盘符: 保持 "C:/" 形式
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return normalized;
+  }
+
+  // POSIX: 确保以斜杠开头
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+
+  return normalized;
+};
+
 const parseURLPath = (pathname, search) => {
   const searchParams = new URLSearchParams(search);
   const view = searchParams.get('view');
@@ -22,7 +39,7 @@ const parseURLPath = (pathname, search) => {
   if (pathname.startsWith('/browse/')) {
     // 新路由模式: /browse/path?view=album&image=xxx
     const pathPart = pathname.replace('/browse/', '');
-    const decodedPath = pathPart ? decodeURIComponent(pathPart) : '';
+    const decodedPath = pathPart ? normalizeTargetPath(decodeURIComponent(pathPart)) : '';
 
     return {
       targetPath: decodedPath,
@@ -43,7 +60,8 @@ const parseURLPath = (pathname, search) => {
 
 // 生成新的URL
 const generateURL = (targetPath, viewMode = 'folder', initialImage = null) => {
-  const basePath = targetPath ? `/browse/${encodeURIComponent(targetPath)}` : '/browse';
+  const normalizedPath = normalizeTargetPath(targetPath);
+  const basePath = normalizedPath ? `/browse/${encodeURIComponent(normalizedPath)}` : '/browse';
   const params = new URLSearchParams();
 
   if (viewMode !== 'folder') {
@@ -115,7 +133,8 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
   // 导航函数 - 供子组件使用
   const navigateToPath = (targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
-    const newURL = generateURL(targetPath, viewMode, initialImage);
+    const normalizedTargetPath = normalizeTargetPath(targetPath);
+    const newURL = generateURL(normalizedTargetPath, viewMode, initialImage);
     navigate(newURL, { replace });
   };
 
