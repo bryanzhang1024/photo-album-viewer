@@ -79,6 +79,7 @@ function AlbumPage({
   const [rootPath, setRootPath] = useState('');
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
+  const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
 
@@ -226,6 +227,12 @@ function AlbumPage({
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      setVirtualScrollParent(scrollContainerRef.current);
+    }
   }, []);
 
   // 从localStorage中读取密度设置
@@ -880,8 +887,8 @@ function AlbumPage({
       </Box>
       {images.length > 0 ? (
         <Virtuoso
-          style={{ height: 'calc(100vh - 180px)' }}
           data={gridRows}
+          customScrollParent={virtualScrollParent || undefined}
           overscan={200}
           itemContent={(rowIndex, imageRow) => {
             const config = GRID_CONFIG[userDensity];
