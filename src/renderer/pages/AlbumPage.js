@@ -47,6 +47,7 @@ import useBreadcrumbs from '../hooks/useBreadcrumbs';
 import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
 import PageLayout from '../components/PageLayout';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
+import { navigateToBrowsePath } from '../utils/navigation';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -90,6 +91,41 @@ function AlbumPage({
 
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
+
+  const saveScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+    }
+  }, [scrollContext, location.pathname]);
+
+  const navigateToFolderPath = useCallback((targetPath, options = {}) => {
+    saveScrollPosition();
+
+    if (onNavigate) {
+      onNavigate(targetPath, 'folder', null, options.replace ?? false);
+      return;
+    }
+
+    navigateToBrowsePath(navigate, targetPath, {
+      viewMode: 'folder',
+      replace: options.replace ?? false
+    });
+  }, [onNavigate, navigate, saveScrollPosition]);
+
+  const navigateToAlbumPath = useCallback((targetPath, albumName = null, initialImage = null, options = {}) => {
+    saveScrollPosition();
+
+    if (onAlbumClick) {
+      onAlbumClick(targetPath, albumName, initialImage);
+      return;
+    }
+
+    navigateToBrowsePath(navigate, targetPath, {
+      viewMode: 'album',
+      initialImage,
+      replace: options.replace ?? false
+    });
+  }, [onAlbumClick, navigate, saveScrollPosition]);
 
   // 解码路径 - 统一的路径解析逻辑
   const decodedAlbumPath = useMemo(() => {
@@ -392,39 +428,21 @@ function AlbumPage({
       onGoBack();
       return;
     }
-
-    // 传统模式：原有逻辑
-    // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-
-    // 严格计算父目录路径
     const parentPath = getDirname(decodedAlbumPath);
 
-    // 只要存在有效的父目录，就导航到主页并让其显示该父目录
     if (parentPath && parentPath !== decodedAlbumPath && rootPath && parentPath.startsWith(rootPath)) {
       setIsNavigating(true);
-      navigate('/', {
-        state: {
-          navigateToPath: parentPath,
-          fromAlbumPage: true // 保留这个state，以便HomePage知道来源
-        }
-      });
-    } else {
-      // 如果没有有效的父目录（例如已经是根目录的直接子级），则直接导航到主页
-      navigate('/');
+      navigateToFolderPath(parentPath);
+      setTimeout(() => setIsNavigating(false), 0);
+      return;
     }
+
+    navigateToFolderPath('', { replace: false });
   };
 
   // 处理返回首页
   const handleHome = () => {
-    // 保存当前路径到上下文
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition('/album/' + albumPath, scrollContainerRef.current.scrollTop);
-    }
-
-    navigate('/');
+    navigateToFolderPath('', { replace: false });
   };
 
   // 切换密度设置（循环：紧凑->标准->宽松）
@@ -580,11 +598,7 @@ function AlbumPage({
 
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
-    // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-
+    saveScrollPosition();
     navigate('/favorites');
   };
 
@@ -605,26 +619,7 @@ function AlbumPage({
   const handleNavigateToAdjacentAlbum = (direction) => {
     const targetAlbum = direction === 'prev' ? neighboringAlbums.prev : neighboringAlbums.next;
     if (targetAlbum) {
-      // URL模式：使用传入的回调函数
-      if (urlMode && onAlbumClick) {
-        onAlbumClick(targetAlbum.path, targetAlbum.name);
-        return;
-      }
-
-      // 传统模式：原有逻辑
-      // 保存当前滚动位置
-      if (scrollContainerRef.current) {
-        scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-      }
-
-      // 导航到相邻相簿
-      navigate(`/album/${encodeURIComponent(targetAlbum.path)}`, {
-        state: {
-          albumPath: targetAlbum.path,
-          albumName: targetAlbum.name,
-          fromAlbumPage: true
-        }
-      });
+      navigateToAlbumPath(targetAlbum.path, targetAlbum.name);
     }
   };
 
@@ -642,77 +637,35 @@ function AlbumPage({
     // 验证路径有效性 - 放宽验证，让主进程决定路径是否真的无效
     if (!isValidPath(targetPath)) {
       console.warn(`面包屑路径验证失败: ${targetPath}`);
-      // 不直接阻止，而是记录警告并继续尝试
     }
 
-    // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-
-    // 如果点击的是当前路径，无需导航
     if (targetPath === decodedAlbumPath) {
       return;
     }
 
     setIsNavigating(true);
     try {
-      // 如果目标是根路径，跳转到首页
-      if (targetPath === rootPath) {
-        navigate('/', {
-          state: {
-            navigateToPath: rootPath
-          }
-        });
+      if (!targetPath || targetPath === rootPath) {
+        navigateToFolderPath(rootPath || '');
         return;
       }
 
-      // 检测目标路径的类型
       const pathType = await detectPathType(targetPath);
       console.log(`面包屑导航: ${targetPath}, 类型: ${pathType}`);
 
-      // 如果检测为相簿类型，进一步验证是否真的有图片
       if (pathType === 'album') {
         const imageCount = await getPathImageCount(targetPath);
         console.log(`路径 ${targetPath} 实际图片数量: ${imageCount}`);
 
-        // 如果没有图片，当作文件夹处理
         if (imageCount === 0) {
           console.log(`路径 ${targetPath} 检测为相簿但没有图片，当作文件夹处理`);
-          navigate('/', {
-            state: {
-              navigateToPath: targetPath,
-              fromAlbumPage: true
-            }
-          });
+          navigateToFolderPath(targetPath);
           return;
         }
 
-        // 有图片，正常导航到相簿页面
-        const safePath = targetPath.replace(/\//g, '%2F');
-        navigate(`/album/${safePath}`, {
-          state: {
-            albumPath: targetPath,
-            albumName: getBasename(targetPath),
-            fromAlbumPage: true
-          }
-        });
-      } else if (pathType === 'folder' || pathType === 'mixed') {
-        // 文件夹或混合类型：跳转到首页并导航到该文件夹
-        navigate('/', {
-          state: {
-            navigateToPath: targetPath,
-            fromAlbumPage: true
-          }
-        });
+        navigateToAlbumPath(targetPath, getBasename(targetPath));
       } else {
-        // 未知类型：直接跳转到首页文件夹视图
-        navigate('/', {
-          state: {
-            navigateToPath: targetPath,
-            fromAlbumPage: true
-          }
-        });
+        navigateToFolderPath(targetPath);
       }
     } catch (error) {
       console.error('面包屑导航失败:', error);
@@ -720,76 +673,9 @@ function AlbumPage({
     } finally {
       setTimeout(() => setIsNavigating(false), 100);
     }
-  }, [navigate, location.pathname, scrollContext, decodedAlbumPath, rootPath, isNavigating, detectPathType, getPathImageCount]);
+  }, [isNavigating, urlMode, onBreadcrumbNavigate, decodedAlbumPath, rootPath, detectPathType, getPathImageCount, navigateToFolderPath, navigateToAlbumPath]);
 
   // 处理浮动面板导航
-  const handleFloatingPanelNavigate = useCallback((targetPath) => {
-    // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-
-    // 导航到首页，并设置浏览路径
-    navigate('/', {
-      state: {
-        navigateToPath: targetPath
-      }
-    });
-  }, [navigate, location.pathname, scrollContext]);
-
-  // 处理浮动面板相册打开
-  const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
-    // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-
-    // 直接导航到相册页面
-    navigate(`/album/${encodeURIComponent(albumPath)}`, {
-      state: {
-        albumPath: albumPath,
-        albumName: albumName,
-        fromAlbumPage: true
-      }
-    });
-  }, [navigate, location.pathname, scrollContext]);
-
-  // 处理返回到根目录
-  const handleReturnToRoot = useCallback(() => {
-    if (rootPath) {
-      // 保存当前滚动位置
-      if (scrollContainerRef.current) {
-        scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-      }
-      
-      // 导航到首页，并设置浏览路径
-      navigate('/', {
-        state: {
-          navigateToPath: rootPath
-        }
-      });
-    }
-  }, [rootPath, navigate, location.pathname, scrollContext]);
-
-  // 处理返回到父目录
-  const handleGoToParent = useCallback(() => {
-    // 计算父目录路径
-    const parentPath = decodedAlbumPath.substring(0, decodedAlbumPath.lastIndexOf('/'));
-    if (parentPath && parentPath !== decodedAlbumPath) {
-      // 保存当前滚动位置
-      if (scrollContainerRef.current) {
-        scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-      }
-      
-      // 导航到首页，并设置浏览路径
-      navigate('/', {
-        state: {
-          navigateToPath: parentPath
-        }
-      });
-    }
-  }, [decodedAlbumPath, navigate, location.pathname, scrollContext]);
-
   // 处理随机选择相簿
   const handleRandomAlbum = () => {
     if (siblingAlbums.length <= 1) {
@@ -809,19 +695,7 @@ function AlbumPage({
       attempts++;
     } while (randomAlbum.path === decodedAlbumPath && siblingAlbums.length > 1 && attempts < maxAttempts);
 
-    // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-
-    // 导航到随机选择的相簿
-    navigate(`/album/${encodeURIComponent(randomAlbum.path)}`, {
-      state: {
-        albumPath: randomAlbum.path,
-        albumName: randomAlbum.name,
-        fromAlbumPage: true
-      }
-    });
+    navigateToAlbumPath(randomAlbum.path, randomAlbum.name);
   };
 
   const renderHeader = () => (
