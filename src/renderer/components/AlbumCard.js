@@ -222,7 +222,6 @@ function AlbumCard({
                       height: '100%',
                       objectFit: 'cover'
                     }}
-                    loading="lazy"
                     onError={(e) => {
                       e.target.style.display = 'none';
                       e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
@@ -328,13 +327,12 @@ function AlbumCard({
           <img 
             src={previewUrls[0]} 
             alt={cardData.name} 
-            style={{ 
+            style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
               borderRadius: isCompactMode ? '4px' : '4px 4px 0 0'
-            }} 
-            loading="lazy"
+            }}
             onError={(e) => {
               e.target.onerror = null;
               e.target.src = '';
@@ -374,8 +372,7 @@ function AlbumCard({
               objectFit: 'cover',
               borderTopLeftRadius: '4px',
               borderBottomLeftRadius: isCompactMode ? '4px' : '0'
-            }} 
-            loading="lazy"
+            }}
             onError={(e) => {
               e.target.onerror = null;
               e.target.src = '';
@@ -411,8 +408,7 @@ function AlbumCard({
                     objectFit: 'cover',
                     borderTopRightRadius: index === 0 ? '4px' : 0,
                     borderBottomRightRadius: (index === totalSmallImages - 1 && isCompactMode) ? '4px' : 0
-                  }} 
-                  loading="lazy"
+                  }}
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = '';

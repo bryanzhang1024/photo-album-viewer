@@ -703,7 +703,7 @@ function HomePage({
         <Virtuoso
           data={rowsToRender}
           customScrollParent={virtualScrollParent || undefined}
-          overscan={200}
+          overscan={800}
           itemContent={(rowIndex, row) => (
             <Box
               sx={{
