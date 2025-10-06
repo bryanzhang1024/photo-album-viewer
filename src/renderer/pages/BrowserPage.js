@@ -2,24 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import HomePage from './HomePage';
 import AlbumPage from './AlbumPage';
-
-// URL工具函数
-const normalizeTargetPath = (rawPath) => {
-  if (!rawPath) return '';
-  let normalized = rawPath.replace(/\\/g, '/');
-
-  // Windows 盘符: 保持 "C:/" 形式
-  if (/^[A-Za-z]:\//.test(normalized)) {
-    return normalized;
-  }
-
-  // POSIX: 确保以斜杠开头
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-
-  return normalized;
-};
+import { normalizeTargetPath, navigateToBrowsePath } from '../utils/navigation';
 
 const parseURLPath = (pathname, search) => {
   const searchParams = new URLSearchParams(search);
@@ -58,24 +41,6 @@ const parseURLPath = (pathname, search) => {
   };
 };
 
-// 生成新的URL
-const generateURL = (targetPath, viewMode = 'folder', initialImage = null) => {
-  const normalizedPath = normalizeTargetPath(targetPath);
-  const basePath = normalizedPath ? `/browse/${encodeURIComponent(normalizedPath)}` : '/browse';
-  const params = new URLSearchParams();
-
-  if (viewMode !== 'folder') {
-    params.set('view', viewMode);
-  }
-
-  if (initialImage) {
-    params.set('image', encodeURIComponent(initialImage));
-  }
-
-  const queryString = params.toString();
-  return queryString ? `${basePath}?${queryString}` : basePath;
-};
-
 function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -96,8 +61,14 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       const image = searchParams.get('image');
 
       if (albumPath) {
-        const newURL = generateURL(decodeURIComponent(albumPath), 'album', image ? decodeURIComponent(image) : null);
-        navigate(newURL, { replace: true, state: location.state });
+        const targetPath = decodeURIComponent(albumPath);
+        const imagePath = image ? decodeURIComponent(image) : null;
+        navigateToBrowsePath(navigate, targetPath, {
+          viewMode: 'album',
+          initialImage: imagePath,
+          replace: true,
+          state: location.state
+        });
       } else {
         navigate('/', { replace: true, state: location.state });
       }
@@ -146,9 +117,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
   // 导航函数 - 供子组件使用
   const navigateToPath = (targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
-    const normalizedTargetPath = normalizeTargetPath(targetPath);
-    const newURL = generateURL(normalizedTargetPath, viewMode, initialImage);
-    navigate(newURL, { replace });
+    navigateToBrowsePath(navigate, targetPath, { viewMode, initialImage, replace });
   };
 
   // 面包屑导航函数

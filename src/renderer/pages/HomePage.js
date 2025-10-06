@@ -40,6 +40,7 @@ import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
 import PageLayout from '../components/PageLayout';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
+import { navigateToBrowsePath } from '../utils/navigation';
 
 // 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
@@ -438,8 +439,7 @@ function HomePage({
     if (urlMode && onAlbumClick) {
       onAlbumClick(albumPath, albumName);
     } else {
-      // 使用新的URL格式
-      navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
+      navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
     }
   }, [urlMode, onAlbumClick, navigate]);
   
@@ -592,7 +592,7 @@ function HomePage({
     }
 
     // 使用新的URL格式
-    navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
+    navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
   // 获取当前显示的路径信息 - 使用 useMemo 缓存
@@ -694,7 +694,7 @@ function HomePage({
       if (urlMode && onAlbumClick) {
         onAlbumClick(randomAlbum.path, randomAlbum.name);
       } else {
-        navigate(`/browse/${encodeURIComponent(randomAlbum.path)}?view=album`);
+        navigateToBrowsePath(navigate, randomAlbum.path, { viewMode: 'album' });
       }
     } else {
       setError('没有可用的相簿进行随机选择');

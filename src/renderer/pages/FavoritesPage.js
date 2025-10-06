@@ -34,6 +34,7 @@ import ImageCard from '../components/ImageCard';
 import { ScrollPositionContext } from '../App';
 import { Virtuoso } from 'react-virtuoso';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
+import { navigateToBrowsePath } from '../utils/navigation';
 
 // 收藏页面组件
 function FavoritesPage({ colorMode }) {
@@ -138,8 +139,7 @@ function FavoritesPage({ colorMode }) {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    // 使用新的URL格式
-    navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
+    navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
   // 处理图片点击
@@ -164,8 +164,7 @@ function FavoritesPage({ colorMode }) {
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    // 使用新的URL格式
-    navigate(`/browse/${encodeURIComponent(albumPath)}?view=album`);
+    navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
   // 关闭查看器
