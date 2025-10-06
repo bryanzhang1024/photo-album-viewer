@@ -1,13 +1,13 @@
+const LAST_PATH_KEY = 'lastPath';
+
 export const normalizeTargetPath = (rawPath = '') => {
   if (!rawPath) return '';
   let normalized = rawPath.replace(/\\/g, '/');
 
-  // Windows drive letters: keep "C:/" form intact
   if (/^[A-Za-z]:\//.test(normalized)) {
     return normalized;
   }
 
-  // POSIX paths: ensure leading slash
   if (!normalized.startsWith('/')) {
     normalized = `/${normalized}`;
   }
@@ -49,4 +49,38 @@ export const navigateToBrowsePath = (
   }
 
   navigate(url, options);
+};
+
+export const getLastPath = () => localStorage.getItem(LAST_PATH_KEY) || '';
+
+export const clearLastPath = () => localStorage.removeItem(LAST_PATH_KEY);
+
+export const setLastPath = (path) => {
+  const normalized = normalizeTargetPath(path);
+
+  if (normalized) {
+    localStorage.setItem(LAST_PATH_KEY, normalized);
+  } else {
+    clearLastPath();
+  }
+};
+
+export const withLastPathTracking = (navigateFn) => {
+  if (!navigateFn) {
+    throw new Error('navigateFn is required');
+  }
+
+  return (
+    targetPath,
+    { viewMode = 'folder', initialImage = null, replace = false, state } = {}
+  ) => {
+    setLastPath(targetPath);
+
+    navigateToBrowsePath(navigateFn, targetPath, {
+      viewMode,
+      initialImage,
+      replace,
+      state
+    });
+  };
 };

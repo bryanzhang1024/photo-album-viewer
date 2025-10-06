@@ -1,8 +1,13 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import HomePage from './HomePage';
 import AlbumPage from './AlbumPage';
-import { normalizeTargetPath, navigateToBrowsePath } from '../utils/navigation';
+import {
+  normalizeTargetPath,
+  withLastPathTracking,
+  getLastPath,
+  setLastPath
+} from '../utils/navigation';
 
 const parseURLPath = (pathname, search) => {
   const searchParams = new URLSearchParams(search);
@@ -53,6 +58,11 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     [location.pathname, location.search]
   );
 
+  const navigateWithPersist = useMemo(
+    () => withLastPathTracking(navigate),
+    [navigate]
+  );
+
   // 处理旧路由的重定向
   useEffect(() => {
     if (redirectFromOldRoute) {
@@ -63,7 +73,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       if (albumPath) {
         const targetPath = decodeURIComponent(albumPath);
         const imagePath = image ? decodeURIComponent(image) : null;
-        navigateToBrowsePath(navigate, targetPath, {
+        navigateWithPersist(targetPath, {
           viewMode: 'album',
           initialImage: imagePath,
           replace: true,
@@ -73,7 +83,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         navigate('/', { replace: true, state: location.state });
       }
     }
-  }, [redirectFromOldRoute, params, location, navigate]);
+  }, [redirectFromOldRoute, params, location, navigate, navigateWithPersist]);
 
   // 启动时恢复会话
   useEffect(() => {
@@ -96,7 +106,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       return;
     }
 
-    const lastPath = localStorage.getItem('lastPath');
+    const lastPath = getLastPath();
     if (lastPath) {
       hasRestoredSession.current = true;
       // 恢复上次会话的路径
@@ -107,18 +117,21 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   // 路径变化时保存会话
   useEffect(() => {
     if (urlState.targetPath && !urlState.isRoot) {
-      localStorage.setItem('lastPath', urlState.targetPath);
+      setLastPath(urlState.targetPath);
     } else if (urlState.isRoot) {
       // 如果返回到根目录，可以选择清除lastPath，以便下次打开是主页
-      // localStorage.removeItem('lastPath');
+      // clearLastPath();
     }
   }, [urlState.targetPath, urlState.isRoot]);
 
 
   // 导航函数 - 供子组件使用
-  const navigateToPath = (targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
-    navigateToBrowsePath(navigate, targetPath, { viewMode, initialImage, replace });
-  };
+  const navigateToPath = useCallback(
+    (targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
+      navigateWithPersist(targetPath, { viewMode, initialImage, replace });
+    },
+    [navigateWithPersist]
+  );
 
   // 面包屑导航函数
   const navigateToBreadcrumb = (targetPath) => {
