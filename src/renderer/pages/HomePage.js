@@ -61,11 +61,12 @@ function HomePage({
   const location = useLocation();
   const theme = useTheme();
   const [rootPath, setRootPath] = useState('');
-  const [albums, setAlbums] = useState([]);
-  const [navigationNodes, setNavigationNodes] = useState([]); // 新的导航节点数据
-  const [currentPath, setCurrentPath] = useState(''); // 当前导航路径
-  const [breadcrumbs, setBreadcrumbs] = useState([]); // 面包屑导航
-  const [metadata, setMetadata] = useState(null); // 当前层级的元数据
+  const [navigationState, setNavigationState] = useState(() => ({
+    path: '',
+    nodes: [],
+    breadcrumbs: [],
+    metadata: null
+  }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
@@ -78,9 +79,20 @@ function HomePage({
   const scrollContainerRef = useRef(null);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
-  const [browsingPath, setBrowsingPath] = useState(null); // 当前浏览路径（兼容性保留）
-  const [useNewArchitecture, setUseNewArchitecture] = useState(true); // 是否使用新架构
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
+  const { path: currentPath, nodes: navigationNodes, breadcrumbs, metadata } = navigationState;
+  const albumNodes = useMemo(
+    () => navigationNodes.filter(node => node.type === 'album'),
+    [navigationNodes]
+  );
+  const updateNavigationState = useCallback((data, fallbackPath = '') => {
+    setNavigationState({
+      path: data?.currentPath ?? fallbackPath ?? '',
+      nodes: data?.nodes ?? [],
+      breadcrumbs: data?.breadcrumbs ?? [],
+      metadata: data?.metadata ?? null
+    });
+  }, [setNavigationState]);
   
   // 为当前窗口生成唯一的存储键
   const getWindowStorageKey = () => {
@@ -142,22 +154,14 @@ function HomePage({
   useEffect(() => {
     if (urlMode && urlCurrentPath !== null) {
       console.log('URL模式：设置当前路径为', urlCurrentPath);
-      setCurrentPath(urlCurrentPath);
-      setBrowsingPath(urlCurrentPath);
-
-      // 如果有路径，扫描该路径
       if (urlCurrentPath) {
         scanNavigationLevel(urlCurrentPath);
       } else {
-        // 空路径，需要用户选择根目录
-        setNavigationNodes([]);
-        setAlbums([]);
-        setBreadcrumbs([]);
-        setMetadata(null);
+        updateNavigationState({ currentPath: '', nodes: [], breadcrumbs: [], metadata: null }, '');
       }
       return;
     }
-  }, [urlMode, urlCurrentPath]);
+  }, [urlMode, urlCurrentPath, scanNavigationLevel, updateNavigationState]);
 
   // 处理从AlbumPage返回的导航请求 (仅非URL模式)
   useEffect(() => {
@@ -173,11 +177,7 @@ function HomePage({
       // 使用setTimeout确保状态更新后再执行导航
       setTimeout(async () => {
         try {
-          if (useNewArchitecture) {
-            await scanNavigationLevel(targetPath);
-          } else {
-            await scanDirectory(targetPath);
-          }
+          await scanNavigationLevel(targetPath);
           // 只有在导航成功后才清除state
           navigate(location.pathname, { replace: true, state: null });
         } catch (error) {
@@ -187,7 +187,7 @@ function HomePage({
       }, 100);
       return;
     }
-  }, [location.state]);
+  }, [location.state, urlMode, navigate, scanNavigationLevel]);
 
   // 从设置页面接收新的根路径
   useEffect(() => {
@@ -195,15 +195,11 @@ function HomePage({
       const newPath = location.state.newRootPath;
       console.log(`从设置页面接收到新的根路径: ${newPath}`);
       setRootPath(newPath);
-      if (useNewArchitecture) {
-        scanNavigationLevel(newPath);
-      } else {
-        scanDirectory(newPath);
-      }
+      scanNavigationLevel(newPath);
       // 清除state，防止重复触发
       navigate(location.pathname, { replace: true, state: null });
     }
-  }, [location.state, navigate, useNewArchitecture]);
+  }, [location.state, navigate, scanNavigationLevel]);
 
   // 从localStorage中读取上次的路径，并处理URL参数 (仅非URL模式)
   useEffect(() => {
@@ -225,7 +221,7 @@ function HomePage({
       console.log('窗口存储键:', windowStorageKey);
       setRootPath(decodedPath);
       localStorage.setItem(windowStorageKey, decodedPath);
-      scanDirectory(decodedPath);
+      scanNavigationLevel(decodedPath);
       setUrlPathProcessed(true);
     } else if (!urlPathProcessed) {
       // 否则使用localStorage中的路径（仅当URL参数未处理时）
@@ -234,11 +230,11 @@ function HomePage({
         console.log('使用localStorage路径:', savedPath);
         console.log('窗口存储键:', windowStorageKey);
         setRootPath(savedPath);
-        scanDirectory(savedPath);
+        scanNavigationLevel(savedPath);
       }
       setUrlPathProcessed(true);
     }
-  }, [location.search, urlPathProcessed]);
+  }, [location.search, urlMode, urlPathProcessed, windowStorageKey, scanNavigationLevel]);
   
   
   // 在组件挂载后恢复滚动位置
@@ -278,32 +274,22 @@ function HomePage({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [albums, handleGoUp, handleRandomAlbum]); // 添加依赖
+  }, [albumNodes, handleGoUp, handleRandomAlbum]); // 添加依赖
   
 
   
   // 智能导航扫描 - 新架构（使用统一缓存）
-  const scanNavigationLevel = async (targetPath) => {
+  const scanNavigationLevel = useCallback(async (targetPath) => {
     try {
       if (!ipcRenderer) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
         return;
       }
 
-      // 使用统一缓存管理器
       const cachedData = imageCache.get('navigation', targetPath);
       if (cachedData) {
         console.log(`使用缓存数据: ${targetPath}`);
-        setNavigationNodes(cachedData.nodes);
-        setCurrentPath(cachedData.currentPath);
-        setBreadcrumbs(cachedData.breadcrumbs);
-        setMetadata(cachedData.metadata);
-
-        // 兼容性数据
-        const albumNodes = cachedData.nodes.filter(node => node.type === 'album');
-        setAlbums(albumNodes);
-        setBrowsingPath(targetPath);
-
+        updateNavigationState(cachedData, targetPath);
         console.log(`从缓存加载: ${cachedData.metadata.totalNodes} 个节点`);
         return;
       }
@@ -315,19 +301,8 @@ function HomePage({
       const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, targetPath);
 
       if (response.success) {
-        // 缓存结果
         imageCache.set('navigation', targetPath, response);
-
-        setNavigationNodes(response.nodes);
-        setCurrentPath(response.currentPath);
-        setBreadcrumbs(response.breadcrumbs);
-        setMetadata(response.metadata);
-
-        // 同时更新旧数据以保持兼容性
-        const albumNodes = response.nodes.filter(node => node.type === 'album');
-        setAlbums(albumNodes);
-        setBrowsingPath(targetPath);
-
+        updateNavigationState(response, targetPath);
         console.log(`扫描完成: ${response.metadata.totalNodes} 个节点`);
       } else {
         setError(response.error?.message || '扫描失败');
@@ -338,47 +313,7 @@ function HomePage({
     } finally {
       setLoading(false);
     }
-  };
-
-  // 扫描文件夹 - 兼容性保留
-  const scanDirectory = async (path) => {
-    if (useNewArchitecture) {
-      return await scanNavigationLevel(path);
-    }
-
-    // 原有的扫描逻辑（兼容性保留）
-    try {
-      if (!ipcRenderer) {
-        setError('无法访问ipcRenderer, Electron可能没有正确加载');
-        return;
-      }
-
-      setLoading(true);
-      setError('');
-
-      // 更新浏览路径
-      setBrowsingPath(path);
-
-      // 使用统一缓存管理器
-      const cachedData = imageCache.get('albums', path);
-      if (cachedData) {
-        setAlbums(cachedData);
-        setLoading(false);
-        return;
-      }
-
-        const albums = await ipcRenderer.invoke(CHANNELS.SCAN_DIRECTORY, path);
-
-      // 缓存结果
-      imageCache.set('albums', path, result);
-
-      setAlbums(result);
-      setLoading(false);
-    } catch (err) {
-      setError('扫描文件夹时出错: ' + err.message);
-      setLoading(false);
-    }
-  };
+  }, [updateNavigationState]);
 
   // 处理导航点击 - 支持URL模式
   const handleNavigate = async (targetPath) => {
@@ -424,15 +359,13 @@ function HomePage({
       if (urlMode && onAlbumClick) {
         onAlbumClick(node.path, node.name);
       } else {
-        navigate(`/album`, { state: {
-          albumPath: node.path,
-          albumName: node.name,
-          fromHomePage: true,
-          browsingPath: currentPath || rootPath
-        }});
+        if (scrollContainerRef.current) {
+          scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+        }
+        navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
       }
     }
-  }, [urlMode, onFolderClick, onAlbumClick, navigate, currentPath, rootPath, scanNavigationLevel]);
+  }, [urlMode, onFolderClick, onAlbumClick, scanNavigationLevel, scrollContext, location.pathname, navigate]);
 
   // 处理浮动导航面板的相册点击
   const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
@@ -443,84 +376,17 @@ function HomePage({
     }
   }, [urlMode, onAlbumClick, navigate]);
   
-  // 清理旧缓存（兼容性保留）
-  const clearOldCaches = () => {
-    // 遍历localStorage，删除超过1周的缓存
-    const now = Date.now();
-    const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('albums_cache_timestamp_')) {
-        const timestamp = parseInt(localStorage.getItem(key), 10);
-        if (timestamp < oneWeekAgo) {
-          const cacheKey = key.replace('timestamp_', '');
-          localStorage.removeItem(cacheKey);
-          localStorage.removeItem(key);
-        }
-      }
-    }
-  };
-  
-
   // 重新扫描
   const handleRefresh = () => {
     if (rootPath) {
-      // 清除统一缓存
       imageCache.clearType('navigation');
-      imageCache.clearType('albums');
-
-      // 清除旧架构缓存（兼容性）
-      const navCacheKey = `navigation_cache_${rootPath}`;
-      const navCacheTimestampKey = `navigation_cache_timestamp_${rootPath}`;
-      localStorage.removeItem(navCacheKey);
-      localStorage.removeItem(navCacheTimestampKey);
-
-      const cacheKey = `albums_cache_${rootPath}`;
-      const cacheTimestampKey = `albums_cache_timestamp_${rootPath}`;
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(cacheTimestampKey);
-
-      // 清除会话缓存中的预览图缓存
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (key && key.startsWith('album_preview_')) {
-          sessionStorage.removeItem(key);
-        }
-      }
-
-      if (useNewArchitecture) {
-        scanNavigationLevel(rootPath);
-      } else {
-        scanDirectory(rootPath);
-      }
+      scanNavigationLevel(currentPath || rootPath);
     }
   };
   
 
   
-  // 排序相簿 - 使用 useMemo 缓存结果
-  const sortedAlbumsData = useMemo(() => {
-    if (!albums.length) return [];
-
-    return [...albums].sort((a, b) => {
-      let comparison = 0;
-
-      if (sortBy === 'name') {
-        comparison = a.name.localeCompare(b.name);
-      } else if (sortBy === 'imageCount') {
-        comparison = a.imageCount - b.imageCount;
-      } else if (sortBy === 'lastModified') {
-        const aDate = a.previewImages[0]?.lastModified || 0;
-        const bDate = b.previewImages[0]?.lastModified || 0;
-        comparison = new Date(aDate) - new Date(bDate);
-      }
-
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-  }, [albums, sortBy, sortDirection]);
-
-  // 新架构的排序函数 - 使用 useMemo 缓存结果
+  // 排序节点 - 使用 useMemo 缓存结果
   const sortedNodesData = useMemo(() => {
     if (!navigationNodes.length) return [];
 
@@ -547,19 +413,14 @@ function HomePage({
     });
   }, [navigationNodes, sortBy, sortDirection]);
 
-  const displayItems = useMemo(
-    () => (useNewArchitecture ? sortedNodesData : sortedAlbumsData),
-    [useNewArchitecture, sortedNodesData, sortedAlbumsData]
-  );
-
   const columnsCount = useMemo(
     () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
     [windowWidth, userDensity, isSmallScreen]
   );
 
   const gridRows = useMemo(
-    () => chunkIntoRows(displayItems, columnsCount),
-    [displayItems, columnsCount]
+    () => chunkIntoRows(sortedNodesData, columnsCount),
+    [sortedNodesData, columnsCount]
   );
 
   // 获取节点显示路径 - 使用 useMemo 缓存路径计算
@@ -578,52 +439,7 @@ function HomePage({
     return nodeDisplayPaths[node.path] || node.name;
   };
   
-  // 处理相簿点击
-  const handleAlbumClick = (albumPath) => {
-    // URL模式：使用传入的回调函数
-    if (urlMode && onAlbumClick) {
-      onAlbumClick(albumPath);
-      return;
-    }
-
-    // 传统模式：保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
-
-    // 使用新的URL格式
-    navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
-  };
-
   // 获取当前显示的路径信息 - 使用 useMemo 缓存
-  const currentPathInfo = useMemo(() => {
-    if (!rootPath) return null;
-
-    if (browsingPath && browsingPath !== rootPath) {
-      // 显示相对路径
-      const relativePath = getRelativePath(rootPath, browsingPath);
-      return {
-        type: 'browsing',
-        displayPath: relativePath || browsingPath,
-        fullPath: browsingPath
-      };
-    }
-
-    return {
-      type: 'root',
-      displayPath: getBasename(rootPath),
-      fullPath: rootPath
-    };
-  }, [rootPath, browsingPath]);
-  
-  // 计算相簿的路径显示方式
-  const getAlbumDisplayPath = (album) => {
-    if (!browsingPath) return album.name;
-    
-    const relativePath = album.path.replace(browsingPath, '');
-    return relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
-  };
-  
   // 打开设置对话框
   const handleOpenSettings = () => {
     setTempSettings({...performanceSettings});
@@ -679,11 +495,10 @@ function HomePage({
   
   // 处理随机选择相簿
   const handleRandomAlbum = useCallback(() => {
-    const sorted = useNewArchitecture ? sortedNodesData.filter(node => node.type === 'album') : sortedAlbumsData;
-    if (sorted.length > 0) {
+    if (albumNodes.length > 0) {
       // 随机选择一个相簿
-      const randomIndex = Math.floor(Math.random() * sorted.length);
-      const randomAlbum = sorted[randomIndex];
+      const randomIndex = Math.floor(Math.random() * albumNodes.length);
+      const randomAlbum = albumNodes[randomIndex];
       
       // 保存当前滚动位置
       if (scrollContainerRef.current) {
@@ -699,7 +514,7 @@ function HomePage({
     } else {
       setError('没有可用的相簿进行随机选择');
     }
-  }, [urlMode, onAlbumClick, useNewArchitecture, sortedNodesData, sortedAlbumsData, scrollContext, location.pathname, navigate]);
+  }, [urlMode, onAlbumClick, albumNodes, scrollContext, location.pathname, navigate]);
 
   // 处理导航面板的文件夹导航 - 真正的层级浏览
   const handleNavigationPanelNavigate = (folderPath) => {
@@ -710,7 +525,7 @@ function HomePage({
 
     // 导航逻辑：使用统一的currentPath
     if (folderPath && folderPath !== currentPath) {
-      scanDirectory(folderPath);
+      scanNavigationLevel(folderPath);
       console.log('导航到:', folderPath, '根路径:', rootPath);
     }
   };
@@ -720,7 +535,7 @@ function HomePage({
     if (scrollContainerRef.current) {
       scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
     }
-    scanDirectory(rootPath);
+    scanNavigationLevel(rootPath);
   };
 
   // 返回上级目录
@@ -734,7 +549,7 @@ function HomePage({
     if (parentPath && parentPath !== currentPath) {
       setIsNavigating(true);
       try {
-        await scanDirectory(parentPath);
+        await scanNavigationLevel(parentPath);
       } catch (error) {
         console.error('返回上级失败:', error);
         setError(`返回上级失败: ${error.message}`);
@@ -787,7 +602,7 @@ function HomePage({
               onClick={handleRandomAlbum}
               size="small"
               sx={{ mx: 0.5 }}
-              disabled={albums.length === 0}
+              disabled={albumNodes.length === 0}
             >
               <CasinoIcon />
             </IconButton>
@@ -846,7 +661,7 @@ function HomePage({
     );
   
   const renderContent = () => {
-    const hasContent = useNewArchitecture ? navigationNodes.length > 0 : albums.length > 0;
+    const hasContent = navigationNodes.length > 0;
 
     if (!hasContent) {
       return (
@@ -867,7 +682,7 @@ function HomePage({
     }
 
     const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
-    const rowsToRender = gridRows.length > 0 ? gridRows : [displayItems];
+    const rowsToRender = gridRows.length > 0 ? gridRows : [sortedNodesData];
 
     return (
       <Box>
@@ -899,21 +714,12 @@ function HomePage({
                 const itemKey = item?.path || `${rowIndex}-${colIndex}`;
                 return (
                   <Box key={itemKey} sx={{ width: '100%' }}>
-                    {useNewArchitecture ? (
-                      <AlbumCard
-                        node={item}
-                        displayPath={getNodeDisplayPath(item)}
-                        onClick={() => handleNodeClick(item)}
-                        isCompactMode={userDensity === 'compact'}
-                      />
-                    ) : (
-                      <AlbumCard
-                        album={item}
-                        displayPath={getAlbumDisplayPath(item)}
-                        onClick={() => handleAlbumClick(item.path)}
-                        isCompactMode={userDensity === 'compact'}
-                      />
-                    )}
+                    <AlbumCard
+                      node={item}
+                      displayPath={getNodeDisplayPath(item)}
+                      onClick={() => handleNodeClick(item)}
+                      isCompactMode={userDensity === 'compact'}
+                    />
                   </Box>
                 );
               })}
