@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import HomePage from './HomePage';
 import AlbumPage from './AlbumPage';
@@ -80,6 +80,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
+  const hasRestoredSession = useRef(false);
 
   // 解析URL状态
   const urlState = useMemo(() =>
@@ -105,18 +106,30 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
   // 启动时恢复会话
   useEffect(() => {
+    if (hasRestoredSession.current) {
+      return;
+    }
+
+    // 已经有明确的目标路径或处于旧路由重定向流程时，不做会话恢复
+    if (redirectFromOldRoute || urlState.targetPath) {
+      return;
+    }
+
     const searchParams = new URLSearchParams(location.search);
     const commandLinePath = searchParams.get('initialPath');
 
     if (commandLinePath) {
+      hasRestoredSession.current = true;
       // 优先处理命令行传入的路径
       navigateToPath(decodeURIComponent(commandLinePath), 'folder', null, true);
-    } else {
-      // 否则，恢复上次会话的路径
-      const lastPath = localStorage.getItem('lastPath');
-      if (lastPath) {
-        navigateToPath(lastPath, 'folder', null, true);
-      }
+      return;
+    }
+
+    const lastPath = localStorage.getItem('lastPath');
+    if (lastPath) {
+      hasRestoredSession.current = true;
+      // 恢复上次会话的路径
+      navigateToPath(lastPath, 'folder', null, true);
     }
   }, []); // 空依赖数组确保只在挂载时运行一次
 
