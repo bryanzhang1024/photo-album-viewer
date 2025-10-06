@@ -639,14 +639,6 @@ function HomePage({
               <MenuItem value="comfortable">宽松</MenuItem>
             </Select>
           </FormControl>
-          <IconButton
-            color="inherit"
-            onClick={handleRefresh}
-            disabled={!rootPath || loading}
-            size="small"
-          >
-            <RefreshIcon />
-          </IconButton>
           <Tooltip title="设置">
             <IconButton
               color="inherit"
@@ -661,6 +653,18 @@ function HomePage({
     );
   
   const renderContent = () => {
+    // 显示加载状态
+    if (loading) {
+      return (
+        <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
+          <CircularProgress />
+          <Typography variant="body1" sx={{ mt: 2 }}>
+            正在加载文件夹...
+          </Typography>
+        </Paper>
+      );
+    }
+
     const hasContent = navigationNodes.length > 0;
 
     if (!hasContent) {
