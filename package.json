@@ -8,7 +8,8 @@
     "start:renderer": "webpack serve --mode development",
     "build": "cross-env NODE_ENV=production webpack --mode production && electron-builder",
     "build:webpack": "webpack --mode production",
-    "build:electron": "electron-builder"
+    "build:electron": "electron-builder",
+    "test:navigation": "node tests/navigation.test.mjs"
   },
   "build": {
     "appId": "com.photoalbum.viewer",

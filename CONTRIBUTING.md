@@ -17,6 +17,7 @@
 - **UI抽象**: 任何在多个页面或组件之间复用的UI元素（如列表、卡片、布局、面板等），都**必须**被抽象为独立的React组件，并放置在 `src/renderer/components` 目录下。
 - **逻辑抽象 (Hooks)**: 任何重复的、非渲染的业务逻辑（如数据获取、排序、过滤、视图状态管理等），都**必须**被抽象为自定义Hook，并放置在 `src/renderer/hooks` 目录下。
 - **“上帝组件”禁令**: 页面级组件（位于 `src/renderer/pages`）应专注于组合布局组件和业务逻辑Hooks，自身应保持轻量，避免成为包含数百行状态和副作用的“上帝组件”。
+- **路由导航统一**: 所有指向 `/browse` 的导航逻辑（含收藏、相簿跳转、面包屑等）必须使用 `src/renderer/utils/navigation.js` 中的 helper。严禁在页面或组件中手写 `navigate('/browse/...')` 或自行维护最近路径。
 
 ### 3. 共享代码原则 (Shared Code Principle)
 
