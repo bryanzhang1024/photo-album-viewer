@@ -342,12 +342,12 @@ function AlbumCard({
           <Box
             sx={{
               position: 'absolute',
-              bottom: 0,
+              top: 0,
               right: 0,
               bgcolor: 'rgba(0,0,0,0.5)',
               color: 'white',
               padding: '2px 8px',
-              borderRadius: '4px 0 0 0',
+              borderRadius: '0 0 0 4px',
               fontSize: '0.75rem'
             }}
           >
@@ -448,7 +448,7 @@ function AlbumCard({
         <Box
           sx={{
             position: 'absolute',
-            bottom: 8,
+            top: 8,
             right: 8,
             bgcolor: 'rgba(0,0,0,0.6)',
             color: 'white',
