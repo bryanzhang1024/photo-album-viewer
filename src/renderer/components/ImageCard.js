@@ -263,7 +263,7 @@ function ImageCard({
         right: 0,
         background: 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)',
         color: 'white',
-        padding: actualDensity === 'compact' ? '6px 4px 4px' : '8px 6px 6px',
+        padding: actualDensity === 'compact' ? '8px 4px 6px' : '12px 6px 10px',
         zIndex: 2
       }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
