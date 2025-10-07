@@ -53,6 +53,7 @@ function FavoritesPage({ colorMode }) {
     return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
   });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const [refreshCounter, setRefreshCounter] = useState(0);
   const scrollContainerRef = useRef(null);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
@@ -67,6 +68,7 @@ function FavoritesPage({ colorMode }) {
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
+      setWindowHeight(window.innerHeight);
     };
 
     window.addEventListener('resize', handleResize);
@@ -225,7 +227,23 @@ function FavoritesPage({ colorMode }) {
     [sortedImages, columnsCount]
   );
 
-  const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
+  const densityConfig = useMemo(
+    () => GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY],
+    [userDensity]
+  );
+
+  const estimatedRowHeight = useMemo(() => {
+    const baseHeight = (densityConfig.itemWidth * 3) / 2;
+    return Math.round(baseHeight + densityConfig.gap);
+  }, [densityConfig]);
+
+  const overscanConfig = useMemo(() => {
+    const usableHeight = Math.max(windowHeight, 600);
+    return {
+      top: Math.round(usableHeight * 0.75),
+      bottom: Math.round(usableHeight * 1.25)
+    };
+  }, [windowHeight]);
 
   const renderAlbums = () => {
     if (!sortedAlbums.length) {
@@ -249,7 +267,12 @@ function FavoritesPage({ colorMode }) {
         key={`favorites-albums-${userDensity}-${effectiveColumns}`}
         data={rows}
         customScrollParent={virtualScrollParent || undefined}
-        overscan={200}
+        overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
+        increaseViewportBy={overscanConfig}
+        computeItemKey={(rowIndex, row) => {
+          const firstAlbum = Array.isArray(row) ? row[0] : null;
+          return firstAlbum?.path ? `favorites-album-${firstAlbum.path}` : `favorites-album-${rowIndex}`;
+        }}
         itemContent={(rowIndex, row) => (
           <Box
             sx={{
@@ -257,7 +280,8 @@ function FavoritesPage({ colorMode }) {
               gridTemplateColumns: `repeat(${effectiveColumns}, minmax(0, 1fr))`,
               gap: `${densityConfig.gap}px`,
               mb: `${densityConfig.gap}px`,
-              px: { xs: 1, sm: 2, md: 3 }
+              px: { xs: 1, sm: 2, md: 3 },
+              minHeight: `${estimatedRowHeight}px`
             }}
           >
             {row.map((album, colIndex) => {
@@ -303,7 +327,12 @@ function FavoritesPage({ colorMode }) {
         key={`favorites-images-${userDensity}-${effectiveColumns}`}
         data={rows}
         customScrollParent={virtualScrollParent || undefined}
-        overscan={200}
+        overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
+        increaseViewportBy={overscanConfig}
+        computeItemKey={(rowIndex, row) => {
+          const firstImage = Array.isArray(row) ? row[0] : null;
+          return firstImage?.path ? `favorites-image-${firstImage.path}` : `favorites-image-${rowIndex}`;
+        }}
         itemContent={(rowIndex, row) => (
           <Box
             sx={{
@@ -311,7 +340,8 @@ function FavoritesPage({ colorMode }) {
               gridTemplateColumns: `repeat(${effectiveColumns}, minmax(0, 1fr))`,
               gap: `${densityConfig.gap}px`,
               mb: `${densityConfig.gap}px`,
-              px: { xs: 1, sm: 2, md: 3 }
+              px: { xs: 1, sm: 2, md: 3 },
+              minHeight: `${estimatedRowHeight}px`
             }}
           >
             {row.map((image, colIndex) => {

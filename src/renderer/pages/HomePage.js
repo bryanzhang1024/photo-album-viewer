@@ -75,6 +75,7 @@ function HomePage({
     return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
   });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
@@ -133,6 +134,7 @@ function HomePage({
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
+      setWindowHeight(window.innerHeight);
 
       // 添加日志以便调试
       console.log(`窗口大小变化: ${window.innerWidth}x${window.innerHeight}`);
@@ -148,6 +150,20 @@ function HomePage({
       setVirtualScrollParent(scrollContainerRef.current);
     }
   }, []);
+
+  const overscanConfig = useMemo(() => {
+    const usableHeight = Math.max(windowHeight, 600);
+    return {
+      top: Math.round(usableHeight * 0.75),
+      bottom: Math.round(usableHeight * 1.25)
+    };
+  }, [windowHeight]);
+
+  const estimatedRowHeight = useMemo(() => {
+    const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
+    const baseHeight = densityConfig.itemWidth;
+    return Math.round(baseHeight + densityConfig.gap);
+  }, [userDensity]);
   
   
   // URL模式初始化 - 处理来自BrowserPage的props
@@ -703,7 +719,12 @@ function HomePage({
         <Virtuoso
           data={rowsToRender}
           customScrollParent={virtualScrollParent || undefined}
-          overscan={800}
+          overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
+          increaseViewportBy={overscanConfig}
+          computeItemKey={(rowIndex, row) => {
+            const firstItem = Array.isArray(row) ? row[0] : null;
+            return firstItem?.path ? `row-${firstItem.path}` : `row-${rowIndex}`;
+          }}
           itemContent={(rowIndex, row) => (
             <Box
               sx={{
@@ -711,7 +732,8 @@ function HomePage({
                 gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`,
                 gap: `${densityConfig.gap}px`,
                 mb: `${densityConfig.gap}px`,
-                px: { xs: 1, sm: 2, md: 3 }
+                px: { xs: 1, sm: 2, md: 3 },
+                minHeight: `${estimatedRowHeight}px`
               }}
             >
               {row.map((item, colIndex) => {

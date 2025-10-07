@@ -80,6 +80,7 @@ function AlbumPage({
     return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
   });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const [rootPath, setRootPath] = useState('');
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
@@ -263,6 +264,7 @@ function AlbumPage({
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
+      setWindowHeight(window.innerHeight);
     };
 
     window.addEventListener('resize', handleResize);
@@ -515,6 +517,24 @@ function AlbumPage({
     () => chunkIntoRows(sortedImages, columnsCount),
     [sortedImages, columnsCount]
   );
+
+  const densityConfig = useMemo(
+    () => GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY],
+    [userDensity]
+  );
+
+  const estimatedRowHeight = useMemo(() => {
+    const baseHeight = (densityConfig.itemWidth * 3) / 2;
+    return Math.round(baseHeight + densityConfig.gap);
+  }, [densityConfig]);
+
+  const overscanConfig = useMemo(() => {
+    const usableHeight = Math.max(windowHeight, 600);
+    return {
+      top: Math.round(usableHeight * 0.75),
+      bottom: Math.round(usableHeight * 1.25)
+    };
+  }, [windowHeight]);
 
   const prefetchThumbnails = useCallback(async (paths, priority = 1) => {
     if (!ipcRenderer || !Array.isArray(paths) || paths.length === 0) return;
@@ -835,10 +855,15 @@ function AlbumPage({
         <Virtuoso
           data={gridRows}
           customScrollParent={virtualScrollParent || undefined}
-          overscan={200}
+          overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
+          increaseViewportBy={overscanConfig}
+          computeItemKey={(rowIndex, imageRow) => {
+            const firstImage = Array.isArray(imageRow) ? imageRow[0] : null;
+            return firstImage?.path ? `row-${firstImage.path}` : `row-${rowIndex}`;
+          }}
           rangeChanged={handleRangeChanged}
           itemContent={(rowIndex, imageRow) => {
-            const config = GRID_CONFIG[userDensity];
+            const config = densityConfig;
             const columns = columnsCount;
 
             return (
@@ -848,7 +873,8 @@ function AlbumPage({
                   gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
                   gap: `${config.gap}px`,
                   mb: `${config.gap}px`,
-                  px: { xs: 2, sm: 3 }
+                  px: { xs: 2, sm: 3 },
+                  minHeight: `${estimatedRowHeight}px`
                 }}
               >
                 {imageRow.map((image, colIndex) => {
