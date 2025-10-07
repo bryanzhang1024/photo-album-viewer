@@ -261,7 +261,7 @@ function ImageCard({
         bottom: 0,
         left: 0,
         right: 0,
-        height: '15%', // 更少的高度范围
+        height: '5%', // 更少的高度范围
         background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)', // 简单渐变，快速透明
         display: 'flex',
         flexDirection: 'column',
