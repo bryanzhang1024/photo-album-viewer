@@ -1,4 +1,4 @@
-const { app } = require('electron');
+const { app, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { promisify } = require('util');
@@ -9,6 +9,7 @@ const mkdir = promisify(fs.mkdir);
 const stat = promisify(fs.stat);
 const readdir = promisify(fs.readdir);
 const unlink = promisify(fs.unlink);
+const writeFile = promisify(fs.writeFile);
 
 const THUMBNAIL_CACHE_DIR = path.join(app.getPath('userData'), 'thumbnail-cache');
 
@@ -71,9 +72,9 @@ class ThumbnailService {
   /**
    * 生成缓存文件名
    */
-  generateCacheFilename(imagePath, width, height) {
+  generateCacheFilename(imagePath, width, height, format = 'webp') {
     const hash = crypto.createHash('md5').update(imagePath + width + height).digest('hex');
-    return path.join(this.cacheDir, `${hash}.webp`);
+    return path.join(this.cacheDir, `${hash}.${format}`);
   }
 
   /**
@@ -85,21 +86,28 @@ class ThumbnailService {
       await this.ensureCacheDir();
     }
 
-    const cacheFilename = this.generateCacheFilename(imagePath, width, height);
+    const cacheFilenames = {
+      webp: this.generateCacheFilename(imagePath, width, height, 'webp'),
+      png: this.generateCacheFilename(imagePath, width, height, 'png')
+    };
 
     // 问题2解决: 同步检查缓存
-    if (fs.existsSync(cacheFilename)) {
-      return `file://${cacheFilename}`;
+    if (fs.existsSync(cacheFilenames.webp)) {
+      return `file://${cacheFilenames.webp}`;
+    }
+
+    if (fs.existsSync(cacheFilenames.png)) {
+      return `file://${cacheFilenames.png}`;
     }
 
     // 问题3+4解决: 任务队列 + 并发控制
-    return this.enqueueTask(imagePath, width, height, cacheFilename);
+    return this.enqueueTask(imagePath, width, height, cacheFilenames);
   }
 
   /**
    * 任务队列 - 去重和并发控制
    */
-  async enqueueTask(imagePath, width, height, cacheFilename) {
+  async enqueueTask(imagePath, width, height, cacheFilenames) {
     const key = `${imagePath}:${width}:${height}`;
 
     // 去重: 相同请求合并
@@ -107,11 +115,48 @@ class ThumbnailService {
       return this.pendingTasks.get(key);
     }
 
-    const promise = this.waitAndGenerate(imagePath, width, height, cacheFilename);
+    const promise = this.processThumbnail(imagePath, width, height, cacheFilenames);
     this.pendingTasks.set(key, promise);
 
     promise.finally(() => this.pendingTasks.delete(key));
     return promise;
+  }
+
+  async processThumbnail(imagePath, width, height, cacheFilenames) {
+    const systemThumbnail = await this.trySystemThumbnail(imagePath, width, height, cacheFilenames);
+    if (systemThumbnail) {
+      return systemThumbnail;
+    }
+
+    return this.waitAndGenerate(imagePath, width, height, cacheFilenames.webp);
+  }
+
+  async trySystemThumbnail(imagePath, width, height, cacheFilenames) {
+    if (!nativeImage || typeof nativeImage.createThumbnailFromPath !== 'function') {
+      return null;
+    }
+
+    const platformSupportsNative =
+      process.platform === 'darwin' ||
+      process.platform === 'win32';
+
+    if (!platformSupportsNative) {
+      return null;
+    }
+
+    try {
+      const image = await nativeImage.createThumbnailFromPath(imagePath, { width, height });
+      if (!image || image.isEmpty()) {
+        return null;
+      }
+
+      const buffer = image.toPNG();
+      await writeFile(cacheFilenames.png, buffer);
+      return `file://${cacheFilenames.png}`;
+    } catch (error) {
+      console.warn('系统缩略图获取失败，回退到Sharp:', error?.message || error);
+      return null;
+    }
   }
 
   /**
