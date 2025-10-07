@@ -261,13 +261,16 @@ function ImageCard({
         bottom: 0,
         left: 0,
         right: 0,
-        background: 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)',
-        color: 'white',
-        padding: actualDensity === 'compact' ? '8px 4px 6px' : '12px 6px 10px',
+        height: '15%', // 更少的高度范围
+        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)', // 简单渐变，快速透明
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end', // 内容贴底
+        padding: 0, // 完全无内边距，文字紧贴底部
         zIndex: 2
       }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box sx={{ flexGrow: 1, overflow: 'hidden', mr: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ flexGrow: 1, overflow: 'hidden', mr: 1, ml: 1 }}>
             <Typography
               variant="subtitle2"
               component="div"
