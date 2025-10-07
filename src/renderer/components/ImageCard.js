@@ -142,13 +142,7 @@ function ImageCard({
     };
   }, [image, retryCount, isVisible, lazyLoad]);
   
-  // 格式化文件大小
-  const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-  
+    
   // 处理图片加载完成
   const handleImageLoaded = () => {
     setImageLoaded(true);
@@ -201,10 +195,11 @@ function ImageCard({
   return (
     <Paper
       ref={cardRef}
-      sx={{ 
+      sx={{
         width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
+        height: 'auto',
+        aspectRatio: '2/3',
+        position: 'relative',
         cursor: 'pointer',
         transition: 'all 0.2s ease-in-out',
         '&:hover': {
@@ -212,19 +207,14 @@ function ImageCard({
           boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
         },
         overflow: 'hidden',
-        borderRadius: 1,
-        marginBottom: 0 // 移除底部边距，由masonry-item控制
+        borderRadius: 1
       }}
       onClick={handleClick}
       elevation={1}
     >
-      <Box sx={{ position: 'relative', width: '100%', paddingTop: '150%' }}>
-        {/* 150% = 2:3 固定比例 */}
+      <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         {loading ? (
           <Box sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
             width: '100%',
             height: '100%',
             bgcolor: 'rgba(0,0,0,0.05)',
@@ -236,9 +226,6 @@ function ImageCard({
           </Box>
         ) : imageError ? (
           <Box sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
             width: '100%',
             height: '100%',
             bgcolor: 'rgba(0,0,0,0.05)',
@@ -256,14 +243,10 @@ function ImageCard({
             alt={image.name}
             className={imageLoaded ? 'loaded' : ''}
             style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
               width: '100%',
               height: '100%',
-              objectFit: 'cover', // 覆盖填充，与后端 Sharp fit.cover 一致
-              display: 'block',
-              borderRadius: actualDensity === 'compact' ? '2px' : actualDensity === 'standard' ? '4px' : '6px'
+              objectFit: 'cover',
+              display: 'block'
             }}
             loading="lazy"
             onLoad={handleImageLoaded}
@@ -272,57 +255,73 @@ function ImageCard({
         )}
       </Box>
       
-      {actualDensity !== 'compact' && (
-        <Box sx={{ p: 1, flexGrow: 0, bgcolor: 'background.paper' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-              <Typography 
-                variant="subtitle2" 
-                component="div" 
-                noWrap 
-                title={image.name}
-                sx={{ fontSize: '0.8rem' }}
-              >
-                {image.name}
-              </Typography>
-              
-              <Typography 
-                variant="caption" 
-                color="text.secondary" 
-                sx={{ 
-                  display: 'block', 
-                  fontSize: '0.7rem',
-                  cursor: showAlbumLink ? 'pointer' : 'default',
-                  '&:hover': showAlbumLink ? { color: 'primary.main' } : {}
-                }}
-                onClick={showAlbumLink ? handleAlbumClick : undefined}
-                title={showAlbumLink ? `点击跳转到相册: ${image.albumName || '未知相册'}` : ''}
-              >
-                {image.albumName || (image.size ? formatFileSize(image.size) : '')}
-              </Typography>
-            </Box>
-            
-            <IconButton 
-              size="small" 
-              sx={{ 
-                ml: 0.5, 
-                p: 0.5,
-                color: isFavoritesPage ? 'error.main' : (isFavorited ? 'error.main' : 'primary.main'),
-                '&:hover': {
-                  color: 'error.main'
-                }
+      {/* 底部信息覆盖层 - 所有模式都显示 */}
+      <Box sx={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)',
+        color: 'white',
+        padding: actualDensity === 'compact' ? '6px 4px 4px' : '8px 6px 6px',
+        zIndex: 2
+      }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ flexGrow: 1, overflow: 'hidden', mr: 1 }}>
+            <Typography
+              variant="subtitle2"
+              component="div"
+              noWrap
+              title={image.name}
+              sx={{
+                fontSize: actualDensity === 'compact' ? '0.7rem' : '0.8rem',
+                fontWeight: 'medium',
+                textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
               }}
-              onClick={handleFavoriteClick}
-              aria-label={isFavoritesPage ? "取消收藏" : (isFavorited ? "取消收藏" : "添加收藏")}
             >
-              {isFavoritesPage ? 
-                <DeleteIcon fontSize="small" /> : 
-                (isFavorited ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />)
-              }
-            </IconButton>
+              {image.name}
+            </Typography>
+
+            {showAlbumLink && image.albumName && (
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  fontSize: '0.65rem',
+                  cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.8)',
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+                  '&:hover': { color: 'rgba(255,255,255,1)' }
+                }}
+                onClick={handleAlbumClick}
+                title={`点击跳转到相册: ${image.albumName}`}
+              >
+                {image.albumName}
+              </Typography>
+            )}
           </Box>
+
+          <IconButton
+            size="small"
+            sx={{
+              p: 0.5,
+              color: 'white',
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              '&:hover': {
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                color: isFavoritesPage ? 'error.main' : (isFavorited ? 'error.main' : 'white')
+              }
+            }}
+            onClick={handleFavoriteClick}
+            aria-label={isFavoritesPage ? "取消收藏" : (isFavorited ? "取消收藏" : "添加收藏")}
+          >
+            {isFavoritesPage ?
+              <DeleteIcon fontSize="small" /> :
+              (isFavorited ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />)
+            }
+          </IconButton>
         </Box>
-      )}
+      </Box>
     </Paper>
   );
 }
