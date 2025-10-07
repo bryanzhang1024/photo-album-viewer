@@ -14,16 +14,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--scrollbar-track, #f1f1f1);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #fff;
+  background: var(--scrollbar-thumb, #c1c1c1);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #f0f0f0;
+  background: var(--scrollbar-thumb-hover, #a8a8a8);
 }
 
 /* 优化大屏幕空间利用 */

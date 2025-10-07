@@ -20,15 +20,29 @@ export const ScrollPositionContext = createContext({
 function App() {
   // 检测系统偏好的颜色方案
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
-  
+
   // 从本地存储获取用户设置的主题模式
   const [mode, setMode] = useState(() => {
     const savedMode = localStorage.getItem('themeMode');
     return savedMode || (prefersDarkMode ? 'dark' : 'light');
   });
-  
+
   // 保存滚动位置的状态
   const [scrollPositions, setScrollPositions] = useState({});
+
+  // 动态设置CSS变量以支持主题切换的滚动条样式
+  useEffect(() => {
+    const root = document.documentElement;
+    if (mode === 'dark') {
+      root.style.setProperty('--scrollbar-track', '#2a2a2a');
+      root.style.setProperty('--scrollbar-thumb', '#555555');
+      root.style.setProperty('--scrollbar-thumb-hover', '#777777');
+    } else {
+      root.style.setProperty('--scrollbar-track', '#f1f1f1');
+      root.style.setProperty('--scrollbar-thumb', '#c1c1c1');
+      root.style.setProperty('--scrollbar-thumb-hover', '#a8a8a8');
+    }
+  }, [mode]);
   
   // 当系统偏好变化时更新主题（如果用户没有明确设置）
   useEffect(() => {
