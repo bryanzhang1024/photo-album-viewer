@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Card, 
-  CardContent, 
-  Typography, 
+import {
+  Card,
+  Typography,
   Box,
   Grid,
   Skeleton,
@@ -651,9 +650,8 @@ function AlbumCard({
   return (
     <Card 
       ref={cardRef}
-      sx={{ 
+      sx={{
         height: 'auto',
-        minHeight: isCompactMode ? 'unset' : 320,
         display: 'flex',
         flexDirection: 'column',
         cursor: 'pointer',
@@ -669,11 +667,10 @@ function AlbumCard({
       onContextMenu={handleContextMenu}
       elevation={1}
     >
-      <Box sx={{ 
-        height: isCompactMode ? 'auto' : 'auto',
-        aspectRatio: isCompactMode ? '16/13' : '6/5',
+      <Box sx={{
+        height: 'auto',
+        aspectRatio: '1/1',
         position: 'relative',
-        minHeight: isCompactMode ? 160 : 220,
         width: '100%',
         // 保持固定比例，确保图片不会变形
         overflow: 'hidden'
@@ -681,54 +678,82 @@ function AlbumCard({
         <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
           {renderPreview()}
         </Box>
-      </Box>
-      
-      {!isCompactMode && (
-        <CardContent sx={{ flexGrow: 1, p: 1.5, pb: '8px !important', bgcolor: 'background.paper', minHeight: isCompactMode ? 0 : 60 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-              <Typography 
-                variant="subtitle2" 
-                component="div" 
-                noWrap 
+
+        {/* 底部信息覆盖层 - 所有模式都显示 */}
+        <Box sx={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)',
+          color: 'white',
+          padding: isCompactMode ? '8px 6px 6px' : '12px 8px 8px',
+          zIndex: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <Box sx={{ flexGrow: 1, overflow: 'hidden', minWidth: 0 }}>
+              <Typography
+                variant="subtitle2"
+                component="div"
+                noWrap
                 title={cardData.name}
-                sx={{ fontWeight: 'medium' }}
+                sx={{
+                  fontWeight: 'medium',
+                  fontSize: isCompactMode ? '0.75rem' : '0.9rem',
+                  lineHeight: 1.2,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                }}
               >
                 {cardData.name}
               </Typography>
-              
-              <Typography 
-                variant="caption" 
-                color="text.secondary" 
-                noWrap 
-                title={displayPath}
-                sx={{ display: 'block', mt: 0.5, fontSize: '0.7rem' }}
-              >
-                {displayPath}
-              </Typography>
+
+              {/* 只有当displayPath与name不同时才显示路径，避免重复显示 */}
+              {displayPath && displayPath !== cardData.name && !isCompactMode && (
+                <Typography
+                  variant="caption"
+                  noWrap
+                  title={displayPath}
+                  sx={{
+                    display: 'block',
+                    mt: 0.25,
+                    fontSize: '0.65rem',
+                    opacity: 0.9,
+                    lineHeight: 1.1,
+                    textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                  }}
+                >
+                  {displayPath}
+                </Typography>
+              )}
             </Box>
-            
-            <IconButton 
-              size="small" 
-              sx={{ 
-                ml: 0.5, 
-                p: 0.5,
-                color: isFavoritesPage ? 'error.main' : (isFavorited ? 'error.main' : 'primary.main'),
+
+            <IconButton
+              size="small"
+              sx={{
+                ml: 0.5,
+                p: 0.25,
+                color: 'white',
+                backgroundColor: 'rgba(0,0,0,0.3)',
+                borderRadius: '50%',
+                width: isCompactMode ? 24 : 28,
+                height: isCompactMode ? 24 : 28,
+                flexShrink: 0,
                 '&:hover': {
-                  color: 'error.main'
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  color: isFavoritesPage ? '#ff6b6b' : '#ff6b6b'
                 }
               }}
               onClick={handleFavoriteClick}
               aria-label={isFavoritesPage ? "取消收藏" : (isFavorited ? "取消收藏" : "添加收藏")}
             >
-              {isFavoritesPage ? 
-                <DeleteIcon fontSize="small" /> : 
-                (isFavorited ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />)
-              }
+              {isFavoritesPage ?
+                <DeleteIcon fontSize="small" sx={{ fontSize: isCompactMode ? '0.8rem' : '0.9rem' }} /> :
+                (isFavorited ? <FavoriteIcon fontSize="small" sx={{ fontSize: isCompactMode ? '0.8rem' : '0.9rem' }} /> : <FavoriteBorderIcon fontSize="small" sx={{ fontSize: isCompactMode ? '0.8rem' : '0.9rem' }} />)
+                }
             </IconButton>
           </Box>
-        </CardContent>
-      )}
+        </Box>
+      </Box>
     </Card>
   );
 }
