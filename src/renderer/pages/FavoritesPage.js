@@ -232,7 +232,12 @@ function FavoritesPage({ colorMode }) {
     [userDensity]
   );
 
-  const estimatedRowHeight = useMemo(() => {
+  const albumRowHeight = useMemo(() => {
+    const baseHeight = densityConfig.itemWidth;
+    return Math.round(baseHeight + densityConfig.gap);
+  }, [densityConfig]);
+
+  const imageRowHeight = useMemo(() => {
     const baseHeight = (densityConfig.itemWidth * 3) / 2;
     return Math.round(baseHeight + densityConfig.gap);
   }, [densityConfig]);
@@ -281,7 +286,7 @@ function FavoritesPage({ colorMode }) {
               gap: `${densityConfig.gap}px`,
               mb: `${densityConfig.gap}px`,
               px: { xs: 1, sm: 2, md: 3 },
-              minHeight: `${estimatedRowHeight}px`
+              minHeight: `${albumRowHeight}px`
             }}
           >
             {row.map((album, colIndex) => {
@@ -341,7 +346,7 @@ function FavoritesPage({ colorMode }) {
               gap: `${densityConfig.gap}px`,
               mb: `${densityConfig.gap}px`,
               px: { xs: 1, sm: 2, md: 3 },
-              minHeight: `${estimatedRowHeight}px`
+              minHeight: `${imageRowHeight}px`
             }}
           >
             {row.map((image, colIndex) => {
