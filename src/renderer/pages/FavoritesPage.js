@@ -23,7 +23,6 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import SortIcon from '@mui/icons-material/Sort';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -54,7 +53,6 @@ function FavoritesPage({ colorMode }) {
   });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
-  const [refreshCounter, setRefreshCounter] = useState(0);
   const scrollContainerRef = useRef(null);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   
@@ -241,6 +239,35 @@ function FavoritesPage({ colorMode }) {
     const baseHeight = (densityConfig.itemWidth * 3) / 2;
     return Math.round(baseHeight + densityConfig.gap);
   }, [densityConfig]);
+
+  const tabStyles = useMemo(() => ({
+    flex: 1,
+    minWidth: 0,
+    minHeight: 36,
+    px: { xs: 1.5, sm: 2 },
+    py: 0.5,
+    borderRadius: '999px',
+    textTransform: 'none',
+    fontWeight: 600,
+    fontSize: { xs: '0.75rem', sm: '0.85rem' },
+    lineHeight: 1.2,
+    color: 'rgba(255,255,255,0.72)',
+    border: '1px solid rgba(255,255,255,0.16)',
+    transition: 'background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease',
+    '&.Mui-selected': {
+      color: '#ffffff',
+      backgroundColor: 'rgba(255,255,255,0.28)',
+      borderColor: 'transparent',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+    },
+    '&:hover': {
+      backgroundColor: 'rgba(255,255,255,0.16)'
+    },
+    '&.Mui-focusVisible': {
+      outline: '2px solid rgba(255,255,255,0.5)',
+      outlineOffset: 2
+    }
+  }), []);
 
   const overscanConfig = useMemo(() => {
     const usableHeight = Math.max(windowHeight, 600);
@@ -446,16 +473,6 @@ function FavoritesPage({ colorMode }) {
                 <MenuItem value="comfortable">宽松</MenuItem>
               </Select>
             </FormControl>
-
-
-            <IconButton 
-              color="inherit" 
-              onClick={() => setRefreshCounter(prev => prev + 1)} 
-              size="small"
-            >
-              <RefreshIcon sx={{ fontSize: '1.2rem' }} />
-            </IconButton>
-            
             <Tooltip title="设置">
               <IconButton 
                 color="inherit" 
@@ -468,18 +485,44 @@ function FavoritesPage({ colorMode }) {
           </Box>
         </Toolbar>
         
-        <Tabs
-          value={tabValue}
-          onChange={handleTabChange}
-          indicatorColor="secondary"
-          textColor="inherit"
-          variant="fullWidth"
-          aria-label="收藏内容标签页"
-          sx={{ bgcolor: 'primary.dark' }}
+        <Box
+          sx={{
+            mx: { xs: 1, sm: 2, md: 3 },
+            mt: { xs: 0.5, sm: 1 },
+            mb: { xs: 0.5, sm: 1 },
+            bgcolor: 'rgba(255,255,255,0.08)',
+            borderRadius: '999px',
+            border: '1px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(6px)',
+            p: { xs: 0.5, sm: 0.75 }
+          }}
         >
-          <Tab label={`相簿 (${favorites.albums.length})`} />
-          <Tab label={`图片 (${favorites.images.length})`} />
-        </Tabs>
+          <Tabs
+            value={tabValue}
+            onChange={handleTabChange}
+            textColor="inherit"
+            variant="fullWidth"
+            aria-label="收藏内容标签页"
+            TabIndicatorProps={{ sx: { display: 'none' } }}
+            sx={{
+              minHeight: 'auto',
+              '& .MuiTabs-flexContainer': {
+                gap: 0.5
+              }
+            }}
+          >
+            <Tab
+              label={`相簿 (${favorites.albums.length})`}
+              disableRipple
+              sx={tabStyles}
+            />
+            <Tab
+              label={`图片 (${favorites.images.length})`}
+              disableRipple
+              sx={tabStyles}
+            />
+          </Tabs>
+        </Box>
       </AppBar>
       
       <Box 
