@@ -97,7 +97,23 @@ class ThumbnailService {
     }
 
     if (fs.existsSync(cacheFilenames.png)) {
-      return `file://${cacheFilenames.png}`;
+      try {
+        const cachedImage = nativeImage.createFromPath(cacheFilenames.png);
+        if (cachedImage && !cachedImage.isEmpty()) {
+          const looksLikeIcon = await this.isSystemFileIcon(imagePath, cachedImage);
+          if (!looksLikeIcon) {
+            return `file://${cacheFilenames.png}`;
+          }
+        }
+      } catch (err) {
+        console.warn('读取缓存缩略图失败，尝试重新生成:', err?.message || err);
+      }
+
+      try {
+        await unlink(cacheFilenames.png);
+      } catch (err) {
+        console.warn('删除失效缓存失败:', err?.message || err);
+      }
     }
 
     // 问题3+4解决: 任务队列 + 并发控制
@@ -123,12 +139,13 @@ class ThumbnailService {
   }
 
   async processThumbnail(imagePath, width, height, cacheFilenames) {
-    const systemThumbnail = await this.trySystemThumbnail(imagePath, width, height, cacheFilenames);
-    if (systemThumbnail) {
-      return systemThumbnail;
+    const sharpResult = await this.waitAndGenerate(imagePath, width, height, cacheFilenames.webp);
+    if (sharpResult) {
+      return sharpResult;
     }
 
-    return this.waitAndGenerate(imagePath, width, height, cacheFilenames.webp);
+    console.warn(`Sharp生成缩略图失败，尝试系统缩略图: ${imagePath}`);
+    return this.trySystemThumbnail(imagePath, width, height, cacheFilenames);
   }
 
   async trySystemThumbnail(imagePath, width, height, cacheFilenames) {
@@ -150,12 +167,81 @@ class ThumbnailService {
         return null;
       }
 
+      if (await this.isSystemFileIcon(imagePath, image)) {
+        console.warn(`系统缩略图是文件图标，使用Sharp重新生成: ${imagePath}`);
+        return null;
+      }
+
       const buffer = image.toPNG();
       await writeFile(cacheFilenames.png, buffer);
       return `file://${cacheFilenames.png}`;
     } catch (error) {
       console.warn('系统缩略图获取失败，回退到Sharp:', error?.message || error);
       return null;
+    }
+  }
+
+  /**
+   * 检查系统返回的缩略图是否只是默认文件图标
+   */
+  async isSystemFileIcon(imagePath, thumbnailImage) {
+    if (!thumbnailImage || thumbnailImage.isEmpty()) {
+      return true;
+    }
+
+    if (!app || typeof app.getFileIcon !== 'function') {
+      return false;
+    }
+
+    if (!app.isReady()) {
+      try {
+        await app.whenReady();
+      } catch (err) {
+        return false;
+      }
+    }
+
+    try {
+      const fileIcon = await app.getFileIcon(imagePath, { size: 'large' });
+      if (!fileIcon || fileIcon.isEmpty()) {
+        return false;
+      }
+
+      const { width, height } = thumbnailImage.getSize();
+      if (!width || !height) {
+        return false;
+      }
+
+      const resizedIcon = fileIcon.resize({ width, height, quality: 'best' });
+      const thumbBitmap = thumbnailImage.toBitmap();
+      const iconBitmap = resizedIcon.toBitmap();
+
+      if (!thumbBitmap || !iconBitmap || thumbBitmap.length !== iconBitmap.length || thumbBitmap.length === 0) {
+        return false;
+      }
+
+      const totalPixels = thumbBitmap.length / 4;
+      const mismatchThreshold = Math.ceil(totalPixels * 0.2); // 允许20%的像素差异
+      let mismatchedPixels = 0;
+
+      for (let i = 0; i < thumbBitmap.length; i += 4) {
+        if (
+          thumbBitmap[i] !== iconBitmap[i] ||
+          thumbBitmap[i + 1] !== iconBitmap[i + 1] ||
+          thumbBitmap[i + 2] !== iconBitmap[i + 2] ||
+          thumbBitmap[i + 3] !== iconBitmap[i + 3]
+        ) {
+          mismatchedPixels++;
+          if (mismatchedPixels > mismatchThreshold) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('比对系统文件图标失败，跳过检测:', err?.message || err);
+      return false;
     }
   }
 
