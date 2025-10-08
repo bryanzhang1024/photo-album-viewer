@@ -3,7 +3,9 @@ CLAUDE.md
 GEMINI.md
 AGENTS.md
 agents/
-.spec-workflow/
+.serena
+doc
+
 # 依赖
 node_modules/
 npm-debug.log*
