@@ -12,6 +12,8 @@ import {
   FormControl,
   Select,
   InputLabel,
+  TextField,
+  InputAdornment,
   CircularProgress,
   Alert,
   Snackbar,
@@ -24,6 +26,8 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import SortIcon from '@mui/icons-material/Sort';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
@@ -81,6 +85,8 @@ function HomePage({
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHasFocus, setSearchHasFocus] = useState(false);
   const { path: currentPath, nodes: navigationNodes, breadcrumbs, metadata } = navigationState;
   const albumNodes = useMemo(
     () => navigationNodes.filter(node => node.type === 'album'),
@@ -94,6 +100,43 @@ function HomePage({
       metadata: data?.metadata ?? null
     });
   }, [setNavigationState]);
+
+  const normalizedSearchQuery = useMemo(
+    () => searchQuery.trim().toLowerCase(),
+    [searchQuery]
+  );
+
+  useEffect(() => {
+    setSearchQuery('');
+    setSearchHasFocus(false);
+  }, [currentPath]);
+
+  const filteredNodes = useMemo(() => {
+    if (!navigationNodes.length) {
+      return [];
+    }
+
+    if (!normalizedSearchQuery) {
+      return navigationNodes;
+    }
+
+    return navigationNodes.filter((node) => {
+      const nodeName = (node.name || '').toLowerCase();
+      if (nodeName.includes(normalizedSearchQuery)) {
+        return true;
+      }
+
+      const relativePath = currentPath
+        ? getRelativePath(currentPath, node.path) || node.name
+        : node.name;
+
+      if (relativePath && relativePath.toLowerCase().includes(normalizedSearchQuery)) {
+        return true;
+      }
+
+      return (node.path || '').toLowerCase().includes(normalizedSearchQuery);
+    });
+  }, [navigationNodes, normalizedSearchQuery, currentPath]);
   
   // 为当前窗口生成唯一的存储键
   const getWindowStorageKey = () => {
@@ -268,6 +311,10 @@ function HomePage({
   // 添加键盘快捷键监听
   useEffect(() => {
     const handleKeyDown = (event) => {
+      if (searchHasFocus) {
+        return;
+      }
+
       if (document.activeElement.tagName === 'INPUT' || 
           document.activeElement.tagName === 'TEXTAREA' ||
           document.activeElement.isContentEditable) {
@@ -290,7 +337,7 @@ function HomePage({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [albumNodes, handleGoUp, handleRandomAlbum]); // 添加依赖
+  }, [albumNodes, handleGoUp, handleRandomAlbum, searchHasFocus]); // 添加依赖
   
 
   
@@ -404,9 +451,9 @@ function HomePage({
   
   // 排序节点 - 使用 useMemo 缓存结果
   const sortedNodesData = useMemo(() => {
-    if (!navigationNodes.length) return [];
+    if (!filteredNodes.length) return [];
 
-    return [...navigationNodes].sort((a, b) => {
+    return [...filteredNodes].sort((a, b) => {
       // 文件夹总是排在相册前面
       if (a.type !== b.type) {
         if (a.type === 'folder' && b.type === 'album') return -1;
@@ -427,7 +474,7 @@ function HomePage({
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [navigationNodes, sortBy, sortDirection]);
+  }, [filteredNodes, sortBy, sortDirection]);
 
   const columnsCount = useMemo(
     () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
@@ -438,6 +485,10 @@ function HomePage({
     () => chunkIntoRows(sortedNodesData, columnsCount),
     [sortedNodesData, columnsCount]
   );
+
+  const hasActiveSearch = Boolean(normalizedSearchQuery);
+  const totalNodesCount = navigationNodes.length;
+  const filteredNodesCount = sortedNodesData.length;
 
   // 获取节点显示路径 - 使用 useMemo 缓存路径计算
   const nodeDisplayPaths = useMemo(() => {
@@ -585,7 +636,60 @@ function HomePage({
           compact={isSmallScreen}
           sx={{ flexGrow: 1, minWidth: 0 }}
         />
-        <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            flexShrink: 0,
+            ml: 2,
+            gap: 1,
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+            justifyContent: { xs: 'flex-start', sm: 'flex-end' }
+          }}
+        >
+          <TextField
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="搜索当前文件夹"
+            size="small"
+            variant="outlined"
+            sx={{
+              minWidth: { xs: '100%', sm: 200 },
+              maxWidth: { xs: '100%', sm: 260 },
+              mr: { xs: 0, sm: 1 },
+              mb: { xs: 1, sm: 0 },
+              '& .MuiInputBase-root': {
+                bgcolor: 'rgba(0,0,0,0.04)'
+              }
+            }}
+            onFocus={() => setSearchHasFocus(true)}
+            onBlur={() => setSearchHasFocus(false)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+              endAdornment: searchQuery ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    aria-label="清除搜索"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setSearchQuery('')}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ) : null
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setSearchQuery('');
+                event.currentTarget.blur();
+              }
+            }}
+          />
 
           <FormControl variant="outlined" size="small" sx={{
             minWidth: { xs: 80, sm: 120 },
@@ -702,7 +806,18 @@ function HomePage({
     }
 
     const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
-    const rowsToRender = gridRows.length > 0 ? gridRows : [sortedNodesData];
+    const rowsToRender = gridRows.length > 0 ? gridRows : (sortedNodesData.length ? [sortedNodesData] : []);
+
+    if (hasActiveSearch && filteredNodesCount === 0) {
+      return (
+        <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="h6" gutterBottom>没有匹配的项目</Typography>
+          <Typography variant="body2" color="text.secondary">
+            换个关键词或者清空搜索看看
+          </Typography>
+        </Paper>
+      );
+    }
 
     return (
       <Box>
@@ -715,6 +830,11 @@ function HomePage({
               总计 {metadata.totalImages} 张图片
             </Typography>
           </Box>
+        )}
+        {hasActiveSearch && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            匹配 {filteredNodesCount} / {totalNodesCount} 项
+          </Typography>
         )}
         <Virtuoso
           data={rowsToRender}

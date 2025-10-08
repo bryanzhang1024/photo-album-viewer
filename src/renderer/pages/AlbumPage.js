@@ -18,6 +18,8 @@ import {
   Select,
   MenuItem,
   InputLabel,
+  TextField,
+  InputAdornment,
   useMediaQuery,
   useTheme,
   Badge
@@ -32,6 +34,8 @@ import TuneIcon from '@mui/icons-material/Tune';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import ImageViewer from '../components/ImageViewer';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import ImageCard from '../components/ImageCard';
@@ -75,6 +79,7 @@ function AlbumPage({
   const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const [userDensity, setUserDensity] = useState(() => {
     const savedDensity = localStorage.getItem('userDensity');
     return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
@@ -88,6 +93,7 @@ function AlbumPage({
   const initialImagePath = useRef(null); // 存储初始要显示的图片路径
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
   const thumbnailPrefetchInFlight = useRef(new Set());
+  const [searchHasFocus, setSearchHasFocus] = useState(false);
 
 
   // 获取滚动位置上下文
@@ -139,6 +145,26 @@ function AlbumPage({
   const { images, loading, error, loadImages } = useAlbumImages(decodedAlbumPath);
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
+
+  useEffect(() => {
+    setSearchQuery('');
+    setSearchHasFocus(false);
+  }, [decodedAlbumPath]);
+
+  const normalizedSearchQuery = useMemo(
+    () => searchQuery.trim().toLowerCase(),
+    [searchQuery]
+  );
+
+  const filteredImages = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return images;
+    }
+
+    return images.filter((image) =>
+      (image.name || '').toLowerCase().includes(normalizedSearchQuery)
+    );
+  }, [images, normalizedSearchQuery]);
 
   // 检测路径类型（文件夹 vs 相簿）
   const detectPathType = useCallback(async (path) => {
@@ -288,6 +314,10 @@ function AlbumPage({
   // 添加键盘事件监听
   useEffect(() => {
     const handleKeyDown = (event) => {
+      if (searchHasFocus) {
+        return;
+      }
+
       // 如果按下ESC或Backspace键且没有打开查看器
       if ((event.key === 'Escape' || event.key === 'Backspace') && !viewerOpen) {
         handleBack();
@@ -348,7 +378,7 @@ function AlbumPage({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [viewerOpen, neighboringAlbums]);
+  }, [viewerOpen, neighboringAlbums, searchHasFocus]);
 
 
   // 加载根路径信息
@@ -476,9 +506,9 @@ function AlbumPage({
 
   // 排序图片
   const sortedImages = useMemo(() => {
-    if (!images.length) return [];
+    if (!filteredImages.length) return [];
 
-    const sorted = [...images].sort((a, b) => {
+    const sorted = [...filteredImages].sort((a, b) => {
       let comparison = 0;
 
       if (sortBy === 'name') {
@@ -493,7 +523,23 @@ function AlbumPage({
     });
 
     return sorted;
-  }, [images, sortBy, sortDirection]);
+  }, [filteredImages, sortBy, sortDirection]);
+
+  useEffect(() => {
+    if (!sortedImages.length) {
+      setViewerOpen(false);
+      setSelectedImageIndex(0);
+      return;
+    }
+
+    if (selectedImageIndex >= sortedImages.length) {
+      setSelectedImageIndex(0);
+    }
+  }, [sortedImages.length, selectedImageIndex]);
+
+  const hasActiveSearch = Boolean(normalizedSearchQuery);
+  const totalImagesCount = images.length;
+  const filteredImagesCount = sortedImages.length;
 
   // 处理图片点击
   const handleImageClick = (index) => {
@@ -728,7 +774,60 @@ function AlbumPage({
         compact={isSmallScreen}
         sx={{ flexGrow: 1, minWidth: 0 }}
       />
-      <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          flexShrink: 0,
+          ml: 2,
+          gap: 1,
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          justifyContent: { xs: 'flex-start', sm: 'flex-end' }
+        }}
+      >
+        <TextField
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="搜索当前相簿"
+          size="small"
+          variant="outlined"
+          sx={{
+            minWidth: { xs: '100%', sm: 200 },
+            maxWidth: { xs: '100%', sm: 260 },
+            mr: { xs: 0, sm: 1 },
+            mb: { xs: 1, sm: 0 },
+            '& .MuiInputBase-root': {
+              bgcolor: 'rgba(0,0,0,0.04)'
+            }
+          }}
+          onFocus={() => setSearchHasFocus(true)}
+          onBlur={() => setSearchHasFocus(false)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery ? (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="清除搜索"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => setSearchQuery('')}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ) : null
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              setSearchQuery('');
+              event.currentTarget.blur();
+            }
+          }}
+        />
         <FormControl variant="outlined" size="small" sx={{
           minWidth: { xs: 80, sm: 120 },
           mr: 1,
@@ -847,11 +946,16 @@ function AlbumPage({
   const renderContent = () => (
     <>
       <Box sx={{ mb: 2 }}>
-        <Typography variant="caption" color="text.secondary">
-          共 {images.length} 张照片
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+          共 {totalImagesCount} 张照片
         </Typography>
+        {hasActiveSearch && (
+          <Typography variant="caption" color="text.secondary">
+            匹配 {filteredImagesCount} 张
+          </Typography>
+        )}
       </Box>
-      {images.length > 0 ? (
+      {filteredImagesCount > 0 ? (
         <Virtuoso
           data={gridRows}
           customScrollParent={virtualScrollParent || undefined}
@@ -904,10 +1008,10 @@ function AlbumPage({
       ) : (
         <Box sx={{ textAlign: 'center', mt: 8 }}>
           <Typography variant="h6" color="text.secondary">
-            未找到图片
+            {totalImagesCount === 0 ? '未找到图片' : '没有匹配的照片'}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            此相簿中没有支持的图片文件
+            {totalImagesCount === 0 ? '此相簿中没有支持的图片文件' : '换个关键词或者清空搜索再试'}
           </Typography>
         </Box>
       )}
