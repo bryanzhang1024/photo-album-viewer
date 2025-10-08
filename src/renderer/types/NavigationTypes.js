@@ -19,7 +19,7 @@ export const NODE_TYPES = {
  * @property {string} name - 显示名称
  * @property {NODE_TYPES} type - 节点类型
  * @property {boolean} hasImages - 是否直接包含图片
- * @property {number} imageCount - 图片总数（预估）
+ * @property {number} imageCount - 图片总数（相册为精确值，文件夹固定为0）
  * @property {number} childFolders - 子文件夹数量
  * @property {Array<string>} samples - 预览图样本（最多4张）
  * @property {Object} stats - 统计信息
@@ -31,7 +31,6 @@ export const NODE_TYPES = {
  * @typedef {Object} FolderNode
  * @property {NODE_TYPES.FOLDER} type
  * @property {number} childFolders - 子文件夹数量
- * @property {number} estimatedImages - 预估图片总数
  * @property {Array<string>} previewSamples - 从子目录采样的预览图
  * @property {boolean} hasSubAlbums - 是否包含子相册
  * @property {Object} quickStats - 快速统计信息
@@ -107,12 +106,11 @@ export const createFolderNode = (path, name, stats = {}) => ({
   name,
   type: NODE_TYPES.FOLDER,
   hasImages: false,
-  imageCount: stats.estimatedImages || 0,
+  imageCount: 0,
   childFolders: stats.childFolders || 0,
   samples: stats.previewSamples || [],
   lastModified: stats.lastModified || new Date(),
   // 文件夹特有属性
-  estimatedImages: stats.estimatedImages || 0,
   previewSamples: stats.previewSamples || [],
   hasSubAlbums: stats.hasSubAlbums || false,
   quickStats: {
@@ -163,7 +161,6 @@ export const createNavigationResponse = (nodes, currentPath, parentPath, breadcr
     totalNodes: nodes.length,
     folderCount: nodes.filter(n => n.type === NODE_TYPES.FOLDER).length,
     albumCount: nodes.filter(n => n.type === NODE_TYPES.ALBUM).length,
-    totalImages: nodes.reduce((sum, n) => sum + (n.imageCount || 0), 0),
     scanTime: Date.now()
   }
 });

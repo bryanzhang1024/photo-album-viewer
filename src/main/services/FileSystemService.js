@@ -247,7 +247,6 @@ async function getFolderStats(dirPath) {
     const sampleEntries = entries.slice(0, sampleSize);
     
     let folderCount = 0;
-    let estimatedImages = 0;
     let previewSamples = [];
     let hasSubAlbums = false;
     let lastModified = new Date(0);
@@ -266,7 +265,6 @@ async function getFolderStats(dirPath) {
           const quickCheck = await quickScanForImages(entryPath);
           if (quickCheck.hasImages) {
             hasSubAlbums = true;
-            estimatedImages += quickCheck.imageCount;
             previewSamples.push(...quickCheck.samples.slice(0, 2));
           } else {
             nestedScanCandidates.push(entryPath);
@@ -298,23 +296,12 @@ async function getFolderStats(dirPath) {
       if (deepSamples.length > 0) {
         hasSubAlbums = true;
         previewSamples.push(...deepSamples);
-        if (estimatedImages === 0) {
-          estimatedImages = deepSamples.length;
-        } else {
-          estimatedImages += deepSamples.length;
-        }
       }
     }
 
     if (previewSamples.length > 0) {
       const uniqueSamples = Array.from(new Set(previewSamples));
       previewSamples = uniqueSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
-    }
-    
-    // 基于采样估算总数
-    if (folderCount > 0 && sampleSize < entries.length) {
-      const ratio = entries.length / sampleSize;
-      estimatedImages = Math.round(estimatedImages * ratio);
     }
     
     return {
@@ -325,7 +312,6 @@ async function getFolderStats(dirPath) {
           return false;
         }
       }).length,
-      estimatedImages,
       previewSamples: previewSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES),
       hasSubAlbums,
       hasMore: entries.length > sampleSize,
@@ -337,7 +323,6 @@ async function getFolderStats(dirPath) {
     console.warn(`获取文件夹统计失败 ${dirPath}:`, error.message);
     return {
       childFolders: 0,
-      estimatedImages: 0,
       previewSamples: [],
       hasSubAlbums: false,
       hasMore: false,
@@ -356,7 +341,6 @@ async function quickScanForImages(dirPath) {
     const sampleEntries = entries.slice(0, 10); // 只检查前10个
     
     const samples = [];
-    let imageCount = 0;
     
     for (const entry of sampleEntries) {
       const entryPath = path.join(dirPath, entry);
@@ -365,7 +349,6 @@ async function quickScanForImages(dirPath) {
         
         if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
           samples.push(entryPath);
-          imageCount++;
           
           if (samples.length >= 2) break; // 只需要2个样本
         }
@@ -374,21 +357,14 @@ async function quickScanForImages(dirPath) {
       }
     }
     
-    // 如果样本不足，估算总数
-    if (imageCount > 0 && sampleEntries.length === 10 && entries.length > 10) {
-      imageCount = Math.round(imageCount * (entries.length / 10));
-    }
-    
     return {
       hasImages: samples.length > 0,
-      imageCount,
       samples
     };
     
   } catch {
     return {
       hasImages: false,
-      imageCount: 0,
       samples: []
     };
   }
@@ -481,7 +457,6 @@ function createNavigationResponse(nodes, currentPath, parentPath, breadcrumbs) {
       totalNodes: nodes.length,
       folderCount: nodes.filter(n => n.type === NODE_TYPES.FOLDER).length,
       albumCount: nodes.filter(n => n.type === NODE_TYPES.ALBUM).length,
-      totalImages: nodes.reduce((sum, n) => sum + (n.imageCount || 0), 0),
       scanTime: 0 // 将在调用处设置
     }
   };
@@ -514,12 +489,11 @@ function createFolderNode(path, name, stats) {
     name,
     type: NODE_TYPES.FOLDER,
     hasImages: false,
-    imageCount: stats.estimatedImages || 0,
+    imageCount: 0,
     childFolders: stats.childFolders || 0,
     samples: stats.previewSamples || [],
     lastModified: stats.lastModified || new Date(),
     // 文件夹特有属性
-    estimatedImages: stats.estimatedImages || 0,
     previewSamples: stats.previewSamples || [],
     hasSubAlbums: stats.hasSubAlbums || false,
     quickStats: {

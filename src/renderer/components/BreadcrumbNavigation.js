@@ -73,10 +73,10 @@ function BreadcrumbNavigation({
   const renderStats = () => {
     if (!showStats || !metadata) return null;
 
-    const { folderCount, albumCount, totalImages } = metadata;
+    const { folderCount, albumCount } = metadata;
 
     // 如果没有任何统计数据，不显示
-    if (folderCount === 0 && albumCount === 0 && totalImages === 0) return null;
+    if (folderCount === 0 && albumCount === 0) return null;
 
     return (
       <Box
@@ -112,20 +112,8 @@ function BreadcrumbNavigation({
             </Typography>
           </Box>
         )}
-
-        {/* 图片统计 */}
-        {totalImages > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-              🖼️
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-              {totalImages}
-            </Typography>
-          </Box>
-        )}
-      </Box>
-    );
+     </Box>
+   );
   };
 
   // 核心面包屑渲染逻辑

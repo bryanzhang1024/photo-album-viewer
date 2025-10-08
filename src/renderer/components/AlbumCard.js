@@ -63,8 +63,7 @@ function AlbumCard({
         imageCount: node.imageCount,
         samples: node.samples || node.previewSamples || [],
         hasImages: node.hasImages,
-        childFolders: node.childFolders,
-        estimatedImages: node.estimatedImages
+        childFolders: node.childFolders
       };
     } else if (album) {
       return {
@@ -74,8 +73,7 @@ function AlbumCard({
         imageCount: album.imageCount,
         samples: album.previewImages?.map(img => img.path) || [],
         hasImages: true,
-        childFolders: 0,
-        estimatedImages: 0
+        childFolders: 0
       };
     }
     return null;
@@ -261,25 +259,6 @@ function AlbumCard({
           {cardData.childFolders || 0}
         </Box>
 
-        {/* 图片数量标签（如果有的话） */}
-        {cardData.estimatedImages > 0 && (
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 8,
-              right: 8,
-              bgcolor: 'rgba(25, 118, 210, 0.8)', // primary.main with opacity
-              color: 'white',
-              borderRadius: '12px',
-              px: 1,
-              py: 0.5,
-              fontSize: '0.7rem',
-              fontWeight: 'medium'
-            }}
-          >
-            ~{cardData.estimatedImages} 张
-          </Box>
-        )}
       </Box>
     );
   };

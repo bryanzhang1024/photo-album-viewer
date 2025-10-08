@@ -827,9 +827,6 @@ function HomePage({
             <Typography variant="caption" color="text.secondary">
               共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
             </Typography>
-            <Typography variant="caption" color="text.secondary">
-              总计 {metadata.totalImages} 张图片
-            </Typography>
           </Box>
         )}
         {hasActiveSearch && (
