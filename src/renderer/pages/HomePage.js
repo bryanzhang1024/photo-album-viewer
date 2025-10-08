@@ -716,6 +716,29 @@ function HomePage({
               transition: 'transform 0.3s'
             }} />
           </IconButton>
+          <FormControl variant="outlined" size="small" sx={{
+            minWidth: { xs: 80, sm: 100 },
+            ml: 0.5,
+            mr: 1,
+            bgcolor: 'rgba(0,0,0,0.05)',
+            borderRadius: 1
+          }}>
+            <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
+            <Select
+              labelId="density-select-label"
+              value={userDensity}
+              onChange={(e) => {
+                setUserDensity(e.target.value);
+                localStorage.setItem('userDensity', e.target.value);
+              }}
+              label="密度"
+              sx={{ fontSize: '0.8rem' }}
+            >
+              <MenuItem value="compact">紧凑</MenuItem>
+              <MenuItem value="standard">标准</MenuItem>
+              <MenuItem value="comfortable">宽松</MenuItem>
+            </Select>
+          </FormControl>
           <Tooltip title="随机选择相簿 (R)">
             <IconButton
               color="inherit"
@@ -737,28 +760,6 @@ function HomePage({
               <FavoriteIcon />
             </IconButton>
           </Tooltip>
-          <FormControl variant="outlined" size="small" sx={{
-            minWidth: { xs: 80, sm: 100 },
-            mr: 1,
-            bgcolor: 'rgba(0,0,0,0.05)',
-            borderRadius: 1
-          }}>
-            <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
-            <Select
-              labelId="density-select-label"
-              value={userDensity}
-              onChange={(e) => {
-                setUserDensity(e.target.value);
-                localStorage.setItem('userDensity', e.target.value);
-              }}
-              label="密度"
-              sx={{ fontSize: '0.8rem' }}
-            >
-              <MenuItem value="compact">紧凑</MenuItem>
-              <MenuItem value="standard">标准</MenuItem>
-              <MenuItem value="comfortable">宽松</MenuItem>
-            </Select>
-          </FormControl>
           <Tooltip title="设置">
             <IconButton
               color="inherit"
