@@ -16,6 +16,13 @@ const SCAN_CONFIG = {
   PARALLEL_LIMIT: 5      // 并行限制
 };
 
+const DEEP_SCAN_CONFIG = {
+  MAX_DEPTH: 3,             // 最大递归深度
+  MAX_VISITED_DIRS: 40,     // 最大遍历目录数
+  MAX_PREVIEW_SAMPLES: 4,   // 需要的样本数量
+  MAX_ENTRIES_PER_DIR: 20   // 每个目录检查的最大条目数
+};
+
 const NODE_TYPES = {
   FOLDER: 'folder',
   ALBUM: 'album', 
@@ -244,6 +251,7 @@ async function getFolderStats(dirPath) {
     let previewSamples = [];
     let hasSubAlbums = false;
     let lastModified = new Date(0);
+    const nestedScanCandidates = [];
     
     // 并行处理样本
     const promises = sampleEntries.map(async (entry) => {
@@ -260,6 +268,8 @@ async function getFolderStats(dirPath) {
             hasSubAlbums = true;
             estimatedImages += quickCheck.imageCount;
             previewSamples.push(...quickCheck.samples.slice(0, 2));
+          } else {
+            nestedScanCandidates.push(entryPath);
           }
           
           if (stats.mtime > lastModified) {
@@ -272,6 +282,34 @@ async function getFolderStats(dirPath) {
     });
     
     await Promise.all(promises);
+
+    if (previewSamples.length < SCAN_CONFIG.MAX_PREVIEW_SAMPLES && nestedScanCandidates.length > 0) {
+      const remaining = SCAN_CONFIG.MAX_PREVIEW_SAMPLES - previewSamples.length;
+      const deepSamples = await collectNestedImageSamples(
+        nestedScanCandidates,
+        remaining,
+        {
+          maxDepth: DEEP_SCAN_CONFIG.MAX_DEPTH,
+          maxVisited: DEEP_SCAN_CONFIG.MAX_VISITED_DIRS,
+          maxEntriesPerDir: DEEP_SCAN_CONFIG.MAX_ENTRIES_PER_DIR
+        }
+      );
+
+      if (deepSamples.length > 0) {
+        hasSubAlbums = true;
+        previewSamples.push(...deepSamples);
+        if (estimatedImages === 0) {
+          estimatedImages = deepSamples.length;
+        } else {
+          estimatedImages += deepSamples.length;
+        }
+      }
+    }
+
+    if (previewSamples.length > 0) {
+      const uniqueSamples = Array.from(new Set(previewSamples));
+      previewSamples = uniqueSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
+    }
     
     // 基于采样估算总数
     if (folderCount > 0 && sampleSize < entries.length) {
@@ -354,6 +392,57 @@ async function quickScanForImages(dirPath) {
       samples: []
     };
   }
+}
+
+async function collectNestedImageSamples(rootDirs, maxSamples, options = {}) {
+  const maxDepth = options.maxDepth ?? DEEP_SCAN_CONFIG.MAX_DEPTH;
+  const maxVisited = options.maxVisited ?? DEEP_SCAN_CONFIG.MAX_VISITED_DIRS;
+  const maxEntriesPerDir = options.maxEntriesPerDir ?? DEEP_SCAN_CONFIG.MAX_ENTRIES_PER_DIR;
+  const targetSamples = Math.min(maxSamples, DEEP_SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
+
+  const queue = rootDirs.map(dir => ({ dir, depth: 1 }));
+  const samples = [];
+  const visited = new Set();
+
+  while (queue.length > 0 && samples.length < targetSamples && visited.size < maxVisited) {
+    const { dir, depth } = queue.shift();
+    if (visited.has(dir) || depth > maxDepth) {
+      continue;
+    }
+
+    visited.add(dir);
+
+    let entries;
+    try {
+      entries = await readdir(dir);
+    } catch {
+      continue;
+    }
+
+    const limitedEntries = entries.slice(0, maxEntriesPerDir);
+
+    for (const entry of limitedEntries) {
+      const entryPath = path.join(dir, entry);
+      let stats;
+
+      try {
+        stats = await stat(entryPath);
+      } catch {
+        continue;
+      }
+
+      if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+        samples.push(entryPath);
+        if (samples.length >= targetSamples) {
+          break;
+        }
+      } else if (stats.isDirectory() && depth < maxDepth) {
+        queue.push({ dir: entryPath, depth: depth + 1 });
+      }
+    }
+  }
+
+  return samples;
 }
 
 /**
