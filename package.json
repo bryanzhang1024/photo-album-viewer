@@ -9,7 +9,9 @@
     "build": "cross-env NODE_ENV=production webpack --mode production && electron-builder",
     "build:webpack": "webpack --mode production",
     "build:electron": "electron-builder",
-    "test:navigation": "node tests/navigation.test.mjs"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:navigation": "jest tests/unit/navigation.test.js"
   },
   "build": {
     "appId": "com.photoalbum.viewer",
@@ -71,6 +73,11 @@
     "@babel/core": "^7.23.5",
     "@babel/preset-env": "^7.23.5",
     "@babel/preset-react": "^7.23.3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
+    "babel-jest": "^30.2.0",
     "babel-loader": "^9.1.3",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
@@ -81,6 +88,9 @@
     "electron-reload": "^1.5.0",
     "file-loader": "^6.2.0",
     "html-webpack-plugin": "^5.5.3",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0",
     "style-loader": "^3.3.3",
     "wait-on": "^7.2.0",
     "webpack": "^5.89.0",
