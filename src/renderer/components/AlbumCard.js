@@ -49,12 +49,18 @@ function AlbumCard({
   isCompactMode, 
   isFavoritesPage = false 
 }) {
-  const [previewUrls, setPreviewUrls] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // 同步从缓存初始化，消除首次渲染的骨架屏闪烁
+  const initialPath = node?.path || album?.path;
+  const [previewUrls, setPreviewUrls] = useState(() =>
+    initialPath ? (imageCache.get('preview', initialPath) || []) : []
+  );
+  const [loading, setLoading] = useState(() =>
+    initialPath ? !imageCache.get('preview', initialPath) : true
+  );
   const cardRef = useRef(null);
   const ipcFallbackAttempted = useRef(false);
   const theme = useTheme();
-  const isVisible = useIsVisible(cardRef); // 使用新的Hook
+  const isVisible = useIsVisible(cardRef);
   
   // 数据兼容性处理：优先使用新的node数据，回退到旧的album数据
   const cardData = useMemo(() => {

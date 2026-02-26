@@ -50,16 +50,23 @@ function ImageCard({
   const isVisible = useIsVisible(cardRef);
   const ipcFallbackAttempted = useRef(false);
 
-  const [imageUrl, setImageUrl] = useState('');
+  // 同步从缓存或预算 URL 初始化，消除首次渲染的空白闪烁
+  const [imageUrl, setImageUrl] = useState(() => {
+    if (!image) return '';
+    return imageCache.get('thumbnail', image.path) || getThumbnailUrl(image.path) || '';
+  });
   const [loading, setLoading] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(() => {
+    if (!image) return false;
+    return !!imageCache.get('thumbnail', image.path);
+  });
   const [imageError, setImageError] = useState(false);
 
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const isFavorited = image ? isImageFavorited(image.path) : false;
   const actualDensity = density || 'standard';
 
-  // 初始化或图片变化时重置状态
+  // image 变化时重置状态（组件复用场景）
   useEffect(() => {
     if (!image) {
       setImageUrl('');
@@ -71,7 +78,7 @@ function ImageCard({
 
     ipcFallbackAttempted.current = false;
 
-    // 1. 内存缓存命中
+    // 内存缓存命中
     const cached = imageCache.get('thumbnail', image.path);
     if (cached) {
       setImageUrl(cached);
@@ -81,20 +88,21 @@ function ImageCard({
       return;
     }
 
-    // 2. 预算 URL（快速路径，零 IPC）
+    // 预算 URL（快速路径，零 IPC）
     const predicted = getThumbnailUrl(image.path);
     if (predicted && (!lazyLoad || isVisible)) {
       setImageUrl(predicted);
       setLoading(false);
       setImageLoaded(false);
       setImageError(false);
-    } else {
-      // 懒加载且不在视口：等待可见再加载
+    } else if (lazyLoad && !isVisible) {
+      // 懒加载且不在视口：清空等待可见
       setImageUrl('');
       setLoading(true);
       setImageLoaded(false);
       setImageError(false);
     }
+    // 已有预算 URL 且不是 lazyLoad 的情况：useState 初始值已处理，无需重复 set
   }, [image?.path]);
 
   // 懒加载：进入视口时触发
