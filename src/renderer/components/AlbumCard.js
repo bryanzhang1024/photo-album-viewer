@@ -648,7 +648,7 @@ function AlbumCard({
     >
       <Box sx={{
         height: 'auto',
-        aspectRatio: '1/1',
+        aspectRatio: '2/3',
         position: 'relative',
         width: '100%',
         // 保持固定比例，确保图片不会变形
