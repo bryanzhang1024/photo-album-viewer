@@ -13,23 +13,28 @@ import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
 import { getBasename } from '../utils/pathUtils';
 import useIsVisible from '../hooks/useIsVisible';
+import { getThumbnailUrl } from '../utils/thumbnailUrl';
 
-// 安全地获取electron对象
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
 /**
  * 图片卡片组件 - 固定 2:3 宽高比显示
  *
+ * 加载策略（快速路径优先）：
+ *   1. 内存缓存命中 → 直接显示，零 IPC
+ *   2. 内存缓存未命中 → 用预算 URL 直接加载（thumbnail-protocol），零 IPC
+ *   3. 预算 URL 加载失败（文件不在磁盘）→ IPC 生成缩略图，缓存后显示
+ *
  * @param {Object} props
- * @param {Object} props.image - 图片对象 {path, name, size}
- * @param {Function} props.onClick - 点击卡片的回调
- * @param {string} props.density - 显示密度 'compact' | 'standard' | 'comfortable'
- * @param {string} props.albumPath - 相簿路径
- * @param {boolean} props.lazyLoad - 是否启用懒加载 (默认false)
- * @param {boolean} props.isFavoritesPage - 是否在收藏页面 (默认false)
- * @param {Function} props.onAlbumClick - 点击相册名称的回调
- * @param {boolean} props.showAlbumLink - 是否显示相册链接 (默认false)
+ * @param {Object} props.image        - 图片对象 {path, name, size}
+ * @param {Function} props.onClick    - 点击卡片的回调
+ * @param {string} props.density      - 显示密度 'compact' | 'standard' | 'comfortable'
+ * @param {string} props.albumPath    - 相簿路径
+ * @param {boolean} props.lazyLoad    - 是否启用懒加载（默认 false）
+ * @param {boolean} props.isFavoritesPage - 是否在收藏页面（默认 false）
+ * @param {Function} props.onAlbumClick   - 点击相册名称的回调
+ * @param {boolean} props.showAlbumLink   - 是否显示相册链接（默认 false）
  */
 function ImageCard({
   image,
@@ -43,155 +48,148 @@ function ImageCard({
 }) {
   const cardRef = useRef(null);
   const isVisible = useIsVisible(cardRef);
-  const initialCachedUrl = image ? imageCache.get('thumbnail', image.path) : null;
-  const [imageUrl, setImageUrl] = useState(initialCachedUrl || '');
-  const [loading, setLoading] = useState(lazyLoad && !initialCachedUrl);
-  const [imageLoaded, setImageLoaded] = useState(!!initialCachedUrl);
-  const [imageError, setImageError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const maxRetries = 2; // 最大重试次数
+  const ipcFallbackAttempted = useRef(false);
 
-  // 使用收藏上下文
+  const [imageUrl, setImageUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const isFavorited = image ? isImageFavorited(image.path) : false;
-
-  // 使用密度设置
   const actualDensity = density || 'standard';
 
+  // 初始化或图片变化时重置状态
   useEffect(() => {
-    let isMounted = true; // 组件挂载标志
-
-    const loadImage = async () => {
-      if (!image || !ipcRenderer || !isMounted) return;
-
-      try {
-        setLoading(true);
-        setImageLoaded(false);
-        setImageError(false);
-
-        // 设置优先级 - 根据文件名排序，常见的首图文件名排在前面
-        const filename = image.name.toLowerCase();
-        const isPriority =
-          filename.includes('cover') ||
-          filename.includes('folder') ||
-          filename.startsWith('0') ||
-          filename.startsWith('1') ||
-          filename.startsWith('a') ||
-          filename.startsWith('front') ||
-          filename.startsWith('main');
-
-        // 获取缩略图 - 使用主进程中配置的分辨率
-        const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, isPriority ? 0 : 1);
-
-        if (!isMounted) return; // 组件已卸载，忽略结果
-
-        if (!url) {
-          console.error(`无法获取缩略图: ${image.path}`);
-          setImageError(true);
-          setLoading(false);
-          return;
-        }
-
-        // 将文件路径转换为自定义协议URL
-        const thumbnailUrl = `thumbnail-protocol://${getBasename(url)}`;
-
-        // 缓存到统一缓存管理器
-        imageCache.set('thumbnail', image.path, thumbnailUrl);
-
-        setImageUrl(thumbnailUrl);
-        setImageLoaded(true);
-      } catch (err) {
-        if (!isMounted) return; // 组件已卸载，忽略错误
-        console.error('加载图片出错:', err);
-        setImageError(true);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    if (!image || !ipcRenderer) {
+    if (!image) {
       setImageUrl('');
       setLoading(false);
       setImageLoaded(false);
-      return () => {
-        isMounted = false;
-      };
+      setImageError(false);
+      return;
     }
 
-    const cachedUrl = imageCache.get('thumbnail', image.path);
-    if (cachedUrl) {
-      setImageUrl(cachedUrl);
+    ipcFallbackAttempted.current = false;
+
+    // 1. 内存缓存命中
+    const cached = imageCache.get('thumbnail', image.path);
+    if (cached) {
+      setImageUrl(cached);
+      setLoading(false);
       setImageLoaded(true);
       setImageError(false);
-      setLoading(false);
-    } else if (lazyLoad && !isVisible) {
-      setImageUrl('');
-      setImageLoaded(false);
-      setLoading(true);
-    } else {
-      setImageUrl('');
-      setImageLoaded(false);
-      loadImage();
+      return;
     }
 
-    // Cleanup函数：组件卸载时执行
-    return () => {
-      isMounted = false;
-    };
-  }, [image, retryCount, isVisible, lazyLoad]);
-  
-    
-  // 处理图片加载完成
+    // 2. 预算 URL（快速路径，零 IPC）
+    const predicted = getThumbnailUrl(image.path);
+    if (predicted && (!lazyLoad || isVisible)) {
+      setImageUrl(predicted);
+      setLoading(false);
+      setImageLoaded(false);
+      setImageError(false);
+    } else {
+      // 懒加载且不在视口：等待可见再加载
+      setImageUrl('');
+      setLoading(true);
+      setImageLoaded(false);
+      setImageError(false);
+    }
+  }, [image?.path]);
+
+  // 懒加载：进入视口时触发
+  useEffect(() => {
+    if (!lazyLoad || !isVisible || !image) return;
+    if (imageUrl || imageError) return;
+
+    const cached = imageCache.get('thumbnail', image.path);
+    if (cached) {
+      setImageUrl(cached);
+      setLoading(false);
+      setImageLoaded(true);
+      return;
+    }
+
+    const predicted = getThumbnailUrl(image.path);
+    if (predicted) {
+      setImageUrl(predicted);
+      setLoading(false);
+    }
+  }, [isVisible]);
+
+  // 图片加载成功：存入内存缓存
   const handleImageLoaded = () => {
+    if (image && imageUrl && !imageCache.get('thumbnail', image.path)) {
+      imageCache.set('thumbnail', image.path, imageUrl);
+    }
     setImageLoaded(true);
   };
-  
-  // 处理图片加载错误
-  const handleImageError = (e) => {
-    console.error(`图片加载失败: ${image.path}`);
 
-    // 尝试重试加载
-    if (retryCount < maxRetries) {
-      console.log(`重试加载图片(${retryCount + 1}/${maxRetries}): ${image.path}`);
-      // 清除缓存
-      imageCache.clearType('thumbnail');
-      // 增加重试计数并触发重新加载
-      setRetryCount(prev => prev + 1);
-    } else {
-      // 重试次数用尽，显示错误状态
+  // 图片加载失败：第一次失败走 IPC 生成，第二次视为真正失败
+  const handleImageError = async () => {
+    if (!image) return;
+
+    if (ipcFallbackAttempted.current) {
       setImageError(true);
-      e.target.onerror = null;
-      e.target.style.display = 'none';
-      e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
+      setLoading(false);
+      return;
+    }
+
+    ipcFallbackAttempted.current = true;
+    setLoading(true);
+    setImageUrl('');
+
+    if (!ipcRenderer) {
+      setImageError(true);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const filename = image.name.toLowerCase();
+      const isPriority =
+        filename.includes('cover') ||
+        filename.includes('folder') ||
+        filename.startsWith('0') ||
+        filename.startsWith('1') ||
+        filename.startsWith('a') ||
+        filename.startsWith('front') ||
+        filename.startsWith('main');
+
+      const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, isPriority ? 0 : 1);
+
+      if (!url) {
+        setImageError(true);
+        return;
+      }
+
+      const thumbnailUrl = `thumbnail-protocol://${getBasename(url)}`;
+      imageCache.set('thumbnail', image.path, thumbnailUrl);
+      setImageUrl(thumbnailUrl);
+      setImageLoaded(false);
+    } catch (err) {
+      console.error('缩略图生成失败:', err);
+      setImageError(true);
+    } finally {
+      setLoading(false);
     }
   };
-  
-  // 点击处理
-  const handleClick = (e) => {
-    // 即使缩略图加载失败，也允许点击查看原图
-    onClick(e);
-  };
 
-  // 处理相册点击
+  const handleClick = (e) => onClick(e);
+
   const handleAlbumClick = (e) => {
-    e.stopPropagation(); // 阻止事件冒泡，避免触发卡片点击
-    if (onAlbumClick && image) {
-      onAlbumClick();
-    }
+    e.stopPropagation();
+    if (onAlbumClick && image) onAlbumClick();
   };
 
-  // 处理收藏点击
   const handleFavoriteClick = (e) => {
-    e.stopPropagation(); // 阻止事件冒泡，避免触发卡片点击
+    e.stopPropagation();
     if (image) {
-      // 获取相簿名称
       const albumName = albumPath ? albumPath.split('/').pop() : image.albumName;
       toggleImageFavorite(image, albumPath || image.albumPath, albumName);
     }
   };
-  
+
   return (
     <Paper
       ref={cardRef}
@@ -246,7 +244,7 @@ function ImageCard({
         ) : (
           <img
             src={imageUrl}
-            alt={image.name}
+            alt={image?.name}
             className={imageLoaded ? 'loaded' : ''}
             style={{
               width: '100%',
@@ -276,7 +274,7 @@ function ImageCard({
             variant="caption"
             component="div"
             noWrap
-            title={image.name}
+            title={image?.name}
             sx={{
               fontWeight: 'medium',
               fontSize: actualDensity === 'compact' ? '0.7rem' : '0.78rem',
@@ -284,10 +282,10 @@ function ImageCard({
               lineHeight: 1
             }}
           >
-            {image.name}
+            {image?.name}
           </Typography>
 
-          {showAlbumLink && image.albumName && (
+          {showAlbumLink && image?.albumName && (
             <Typography
               variant="caption"
               noWrap
@@ -334,4 +332,4 @@ function ImageCard({
   );
 }
 
-export default React.memo(ImageCard); 
+export default React.memo(ImageCard);

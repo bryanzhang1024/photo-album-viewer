@@ -32,6 +32,8 @@ try {
 
 import useIsVisible from '../hooks/useIsVisible';
 import CHANNELS from '../../common/ipc-channels';
+import { getThumbnailUrl } from '../utils/thumbnailUrl';
+import { getBasename } from '../utils/pathUtils';
 
 // 观察器已移除 - 使用isVisible属性替代
 
@@ -50,6 +52,7 @@ function AlbumCard({
   const [previewUrls, setPreviewUrls] = useState([]);
   const [loading, setLoading] = useState(true);
   const cardRef = useRef(null);
+  const ipcFallbackAttempted = useRef(false);
   const theme = useTheme();
   const isVisible = useIsVisible(cardRef); // 使用新的Hook
   
@@ -96,12 +99,14 @@ function AlbumCard({
   
   // 根据可见性加载预览图
   useEffect(() => {
-    if (!cardData || !ipcRenderer) {
+    if (!cardData) {
       setLoading(false);
       return;
     }
-    
-    // 使用统一缓存管理器
+
+    ipcFallbackAttempted.current = false;
+
+    // 内存缓存命中
     const cachedUrls = imageCache.get('preview', cacheKey);
     if (cachedUrls) {
       setPreviewUrls(cachedUrls);
@@ -109,60 +114,77 @@ function AlbumCard({
       return;
     }
 
-    // 如果不在可视区域内，暂时不加载预览图
-    if (!isVisible) {
+    if (!isVisible) return;
+
+    const isFolder = cardData.type === 'folder';
+
+    if (!isFolder) {
+      // 相册类型（单图）：直接用预算 URL，零 IPC
+      const sample = cardData.samples?.[0];
+      const predicted = sample ? getThumbnailUrl(sample) : null;
+      if (predicted) {
+        setPreviewUrls([predicted]);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 文件夹类型（2×2）或相册无法预算时：走 IPC
+    if (!ipcRenderer) {
+      setLoading(false);
       return;
     }
 
-    // 预览图请求的唯一标识，用于防止重复请求
     const requestId = `req_${cardData.path}`;
-    
-    // 检查是否已经发起了请求
-    if (thumbnailRequests.has(requestId)) {
-      return;
-    }
-    
-    // 标记已经发起请求
+    if (thumbnailRequests.has(requestId)) return;
     thumbnailRequests.set(requestId, true);
-    
-    const loadPreviewImages = async () => {
+
+    const loadViaIpc = async () => {
       try {
         setLoading(true);
-        
-        // 获取预览图路径：文件夹类型需要4张（2×2网格），相册类型只需1张
-        const maxSamples = cardData.type === 'folder' ? 4 : 1;
+        const maxSamples = isFolder ? 4 : 1;
         const imagePaths = cardData.samples ? cardData.samples.slice(0, maxSamples) : [];
-        
-        if (imagePaths.length === 0) {
-          setLoading(false);
-          return;
-        }
-        
-        // 使用批量API请求预览图，优先级根据可见性决定
-        const priority = isVisible ? 0 : 1;
-        const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, imagePaths, priority);
-        
-        // 过滤有效的URL
-        const validUrls = imagePaths
-          .map(path => results[path])
-          .filter(Boolean);
-        
-        // 缓存到统一缓存管理器
+        if (imagePaths.length === 0) return;
+
+        const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, imagePaths, 0);
+        const validUrls = imagePaths.map(p => results[p]).filter(Boolean);
         imageCache.set('preview', cacheKey, validUrls);
-        
         setPreviewUrls(validUrls);
       } catch (err) {
         console.error('加载预览图出错:', err);
       } finally {
         setLoading(false);
-        
-        // 请求完成后从映射中移除
         thumbnailRequests.delete(requestId);
       }
     };
-    
-    loadPreviewImages();
+
+    loadViaIpc();
   }, [cardData, cacheKey, isVisible]);
+
+  // 相册封面图加载失败（磁盘无缓存）→ IPC fallback 生成
+  const handleAlbumPreviewError = async () => {
+    if (ipcFallbackAttempted.current || !ipcRenderer || !cardData) return;
+    ipcFallbackAttempted.current = true;
+
+    const sample = cardData.samples?.[0];
+    if (!sample) return;
+
+    try {
+      setPreviewUrls([]);
+      setLoading(true);
+      const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, [sample], 0);
+      const url = results[sample];
+      if (url) {
+        const thumbnailUrl = `thumbnail-protocol://${getBasename(url)}`;
+        imageCache.set('preview', cacheKey, [thumbnailUrl]);
+        setPreviewUrls([thumbnailUrl]);
+      }
+    } catch (err) {
+      console.error('预览图 IPC fallback 失败:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // 清理旧的会话缓存（兼容性保留）
   const clearOldSessionCache = () => {
@@ -295,12 +317,7 @@ function AlbumCard({
               height: '100%',
               objectFit: 'cover'
             }}
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src = '';
-              e.target.style.display = 'none';
-              e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
-            }}
+            onError={handleAlbumPreviewError}
           />
         ) : (
           <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0.05)' }}>
