@@ -54,6 +54,7 @@ describe('BrowserPage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
   });
 
   test('renders HomePage for root folder view', () => {
@@ -103,6 +104,30 @@ describe('BrowserPage', () => {
       initialImage: null,
       replace: true,
       viewMode: 'folder'
+    });
+  });
+
+  test('restores tabs session with album view mode', () => {
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+
+    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
+      tabs: [
+        {
+          id: 'tab_album_1',
+          targetPath: '/albums/wedding',
+          viewMode: 'album',
+          initialImage: 'cover.jpg'
+        }
+      ],
+      activeTabId: 'tab_album_1'
+    }));
+
+    render(<BrowserPage colorMode="dark" />);
+
+    expect(navigateMock).toHaveBeenCalledWith('/albums/wedding', {
+      viewMode: 'album',
+      initialImage: 'cover.jpg',
+      replace: true
     });
   });
 

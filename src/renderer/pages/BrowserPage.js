@@ -64,6 +64,7 @@ const parseURLPath = (pathname, search) => {
   };
 };
 
+const TABS_SESSION_KEY = 'browser_tabs_session_v1';
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 const getPathDisplayName = (targetPath) => {
@@ -84,6 +85,52 @@ const createTabFromState = (state) => ({
   title: getPathDisplayName(state?.targetPath || '')
 });
 
+const sanitizeTabFromSession = (tab) => {
+  if (!tab || typeof tab !== 'object') return null;
+
+  const targetPath = normalizeTargetPath(tab.targetPath || '');
+  const viewMode = tab.viewMode === 'album' ? 'album' : 'folder';
+
+  return {
+    id: typeof tab.id === 'string' && tab.id ? tab.id : createTabId(),
+    targetPath,
+    viewMode,
+    initialImage: typeof tab.initialImage === 'string' && tab.initialImage ? tab.initialImage : null,
+    title: getPathDisplayName(targetPath)
+  };
+};
+
+const loadTabsSession = () => {
+  try {
+    const raw = localStorage.getItem(TABS_SESSION_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.tabs) || parsed.tabs.length === 0) {
+      return null;
+    }
+
+    const sanitizedTabs = parsed.tabs
+      .map(sanitizeTabFromSession)
+      .filter(Boolean);
+
+    if (!sanitizedTabs.length) {
+      return null;
+    }
+
+    const requestedActiveId = typeof parsed.activeTabId === 'string' ? parsed.activeTabId : null;
+    const hasRequestedActive = requestedActiveId && sanitizedTabs.some((tab) => tab.id === requestedActiveId);
+
+    return {
+      tabs: sanitizedTabs,
+      activeTabId: hasRequestedActive ? requestedActiveId : sanitizedTabs[0].id
+    };
+  } catch (error) {
+    console.warn('恢复标签会话失败:', error);
+    return null;
+  }
+};
+
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
@@ -92,6 +139,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const navigate = useNavigate();
   const params = useParams();
   const hasRestoredSession = useRef(false);
+  const hasInitializedTabsSession = useRef(false);
   const initialTabRef = useRef(null);
   const [openFolderMenuAnchorEl, setOpenFolderMenuAnchorEl] = useState(null);
   const [tabsMenuAnchorEl, setTabsMenuAnchorEl] = useState(null);
@@ -113,6 +161,27 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     () => withLastPathTracking(navigate),
     [navigate]
   );
+
+  useEffect(() => {
+    if (!hasInitializedTabsSession.current) return;
+    if (redirectFromOldRoute) return;
+
+    try {
+      const serializedTabs = tabs.map((tab) => ({
+        id: tab.id,
+        targetPath: tab.targetPath || '',
+        viewMode: tab.viewMode || 'folder',
+        initialImage: tab.initialImage || null
+      }));
+      localStorage.setItem(TABS_SESSION_KEY, JSON.stringify({
+        tabs: serializedTabs,
+        activeTabId,
+        savedAt: Date.now()
+      }));
+    } catch (error) {
+      console.warn('保存标签会话失败:', error);
+    }
+  }, [tabs, activeTabId, redirectFromOldRoute]);
 
   // 处理旧路由的重定向
   useEffect(() => {
@@ -144,6 +213,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
     // 已经有明确的目标路径或处于旧路由重定向流程时，不做会话恢复
     if (redirectFromOldRoute || urlState.targetPath) {
+      hasInitializedTabsSession.current = true;
       return;
     }
 
@@ -152,18 +222,63 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
     if (commandLinePath) {
       hasRestoredSession.current = true;
-      // 优先处理命令行传入的路径
-      navigateToPath(decodeURIComponent(commandLinePath), 'folder', null, true);
+      hasInitializedTabsSession.current = true;
+      const decodedPath = decodeURIComponent(commandLinePath);
+      const commandLineTab = createTabFromState({
+        targetPath: decodedPath,
+        viewMode: 'folder',
+        initialImage: null
+      });
+      setTabs([commandLineTab]);
+      setActiveTabId(commandLineTab.id);
+      navigateWithPersist(decodedPath, {
+        viewMode: 'folder',
+        initialImage: null,
+        replace: true
+      });
+      return;
+    }
+
+    const restoredTabsSession = loadTabsSession();
+    if (restoredTabsSession) {
+      hasRestoredSession.current = true;
+      hasInitializedTabsSession.current = true;
+      setTabs(restoredTabsSession.tabs);
+      setActiveTabId(restoredTabsSession.activeTabId);
+
+      const activeTab = restoredTabsSession.tabs.find((tab) => tab.id === restoredTabsSession.activeTabId)
+        || restoredTabsSession.tabs[0];
+
+      navigateWithPersist(activeTab.targetPath, {
+        viewMode: activeTab.viewMode,
+        initialImage: activeTab.initialImage,
+        replace: true
+      });
       return;
     }
 
     const lastPath = getLastPath();
     if (lastPath) {
       hasRestoredSession.current = true;
+      hasInitializedTabsSession.current = true;
       // 恢复上次会话的路径
-      navigateToPath(lastPath, 'folder', null, true);
+      const fallbackTab = createTabFromState({
+        targetPath: lastPath,
+        viewMode: 'folder',
+        initialImage: null
+      });
+      setTabs([fallbackTab]);
+      setActiveTabId(fallbackTab.id);
+      navigateWithPersist(lastPath, {
+        viewMode: 'folder',
+        initialImage: null,
+        replace: true
+      });
+      return;
     }
-  }, []); // 空依赖数组确保只在挂载时运行一次
+
+    hasInitializedTabsSession.current = true;
+  }, [redirectFromOldRoute, urlState.targetPath, location.search, navigateWithPersist]);
 
   // 路径变化时保存会话
   useEffect(() => {
