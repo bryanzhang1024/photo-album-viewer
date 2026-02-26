@@ -129,8 +129,9 @@ function AlbumCard({
       try {
         setLoading(true);
         
-        // 获取预览图路径
-        const imagePaths = cardData.samples ? cardData.samples.slice(0, 4) : [];
+        // 获取预览图路径：文件夹类型需要4张（2×2网格），相册类型只需1张
+        const maxSamples = cardData.type === 'folder' ? 4 : 1;
+        const imagePaths = cardData.samples ? cardData.samples.slice(0, maxSamples) : [];
         
         if (imagePaths.length === 0) {
           setLoading(false);
@@ -282,34 +283,17 @@ function AlbumCard({
       return renderFolderPreview();
     }
     
-    // 相册类型的原有逻辑
-    if (previewUrls.length === 0) {
-      return (
-        <Box 
-          sx={{ 
-            height: '100%', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            bgcolor: 'rgba(0,0,0,0.05)'
-          }}
-        >
-          <ImageIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
-        </Box>
-      );
-    }
-    
-    if (previewUrls.length === 1) {
-      return (
-        <Box sx={{ height: '100%', position: 'relative' }}>
-          <img 
-            src={previewUrls[0]} 
-            alt={cardData.name} 
+    // 相册类型：单张封面图铺满
+    return (
+      <Box sx={{ height: '100%', position: 'relative' }}>
+        {previewUrls.length > 0 ? (
+          <img
+            src={previewUrls[0]}
+            alt={cardData.name}
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
-              borderRadius: isCompactMode ? '4px' : '4px 4px 0 0'
+              objectFit: 'cover'
             }}
             onError={(e) => {
               e.target.onerror = null;
@@ -318,112 +302,11 @@ function AlbumCard({
               e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
             }}
           />
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              bgcolor: 'rgba(0,0,0,0.5)',
-              color: 'white',
-              padding: '2px 8px',
-              borderRadius: '0 0 0 4px',
-              fontSize: '0.75rem'
-            }}
-          >
-            {cardData.imageCount || 0} 张
+        ) : (
+          <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0.05)' }}>
+            <ImageIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
           </Box>
-        </Box>
-      );
-    }
-    
-    // 新的预览布局 - 主图 + 侧边小图
-    return (
-      <Box sx={{ height: '100%', position: 'relative', display: 'flex' }}>
-        {/* 主图 */}
-        <Box sx={{ flexGrow: 3, height: '100%', position: 'relative' }}>
-          <img 
-            src={previewUrls[0]} 
-            alt={`${cardData.name} 预览 1`} 
-            style={{ 
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              borderTopLeftRadius: '4px',
-              borderBottomLeftRadius: isCompactMode ? '4px' : '0'
-            }}
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src = '';
-              e.target.style.display = 'none';
-              e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
-            }}
-          />
-        </Box>
-        
-        {/* 侧边小图 - 使用绝对定位确保与主图对齐 */}
-        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', ml: '1px', height: '100%' }}>
-          {previewUrls.slice(1, 4).map((url, index) => {
-            // 计算每个小图的高度和位置
-            const totalSmallImages = Math.min(3, previewUrls.length - 1);
-            const smallImageHeight = `${100 / totalSmallImages}%`;
-            const marginBottom = index < totalSmallImages - 1 ? '1px' : 0;
-            
-            return (
-              <Box 
-                key={index} 
-                sx={{ 
-                  height: smallImageHeight,
-                  mb: marginBottom,
-                  position: 'relative'
-                }}
-              >
-                <img 
-                  src={url} 
-                  alt={`预览 ${index + 2}`} 
-                  style={{ 
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    borderTopRightRadius: index === 0 ? '4px' : 0,
-                    borderBottomRightRadius: (index === totalSmallImages - 1 && isCompactMode) ? '4px' : 0
-                  }}
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = '';
-                    e.target.style.display = 'none';
-                    e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
-                  }}
-                />
-              </Box>
-            );
-          })}
-          
-          {/* 如果预览图不足4张，添加空白占位 */}
-          {previewUrls.length < 4 && Array.from({ length: Math.min(3, 4 - previewUrls.length) }).map((_, index) => {
-            const totalEmptySpaces = Math.min(3, 4 - previewUrls.length);
-            const emptySpaceHeight = `${100 / totalEmptySpaces}%`;
-            const marginBottom = index < totalEmptySpaces - 1 ? '1px' : 0;
-            
-            return (
-              <Box 
-                key={`empty-${index}`}
-                sx={{ 
-                  height: emptySpaceHeight,
-                  mb: marginBottom,
-                  bgcolor: 'rgba(0,0,0,0.05)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderBottomRightRadius: (index === totalEmptySpaces - 1 && isCompactMode) ? '4px' : 0
-                }}
-              >
-                <ImageIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
-              </Box>
-            );
-          })}
-        </Box>
-        
-        {/* 图片计数标签 - 只显示数字 */}
+        )}
         <Box
           sx={{
             position: 'absolute',
