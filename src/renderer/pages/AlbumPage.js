@@ -70,7 +70,8 @@ function AlbumPage({
   onBreadcrumbNavigate = null,
   onAlbumClick = null,
   onGoBack = null,
-  urlMode = false
+  urlMode = false,
+  tabsHeaderContent = null
 }) {
   const { albumPath } = useParams();
   const navigate = useNavigate();
@@ -1035,6 +1036,7 @@ function AlbumPage({
       loading={loading}
       error={error}
       headerContent={renderHeader()}
+      subHeaderContent={tabsHeaderContent}
       scrollContainerRef={scrollContainerRef}
     >
       {renderContent()}

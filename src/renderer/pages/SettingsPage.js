@@ -52,6 +52,7 @@ function SettingsPage({ colorMode }) {
   const { settings, updateSetting, resetSettings } = useSettings();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [cacheStatsLoading, setCacheStatsLoading] = useState(false);
   const [cacheStats, setCacheStats] = useState({
     renderer: null,
@@ -71,10 +72,9 @@ function SettingsPage({ colorMode }) {
     try {
       const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
       if (selectedDir) {
-        // Save to localStorage for persistence, using the default key
+        // 仅更新默认目录，不触发导航，避免打断标签页会话
         localStorage.setItem('lastRootPath_default', selectedDir);
-        // Navigate to home and pass the new path in state to trigger a refresh
-        navigate('/', { state: { newRootPath: selectedDir } });
+        setSuccessMessage('默认启动目录已更新。浏览文件夹请在主界面标签栏使用“打开文件夹”。');
       }
     } catch (err) {
       setError('选择文件夹时出错: ' + err.message);
@@ -88,7 +88,7 @@ function SettingsPage({ colorMode }) {
       if (selectedDir) {
         const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, selectedDir);
         if (result.success) {
-          console.log('新实例已启动');
+          setSuccessMessage('已在新窗口打开所选文件夹。');
         } else {
           setError('启动新实例失败: ' + result.error);
         }
@@ -164,7 +164,7 @@ function SettingsPage({ colorMode }) {
               startIcon={<FolderOpenIcon />}
               onClick={handleSelectDirectory}
             >
-              打开文件夹
+              设置默认目录
             </Button>
             <Button
               variant="outlined"
@@ -174,6 +174,9 @@ function SettingsPage({ colorMode }) {
               在新窗口中打开
             </Button>
           </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            这里用于设置默认启动目录。日常浏览建议在主界面标签栏使用“打开文件夹”，可选择在当前标签、新标签或新窗口打开。
+          </Typography>
         </Paper>
 
         <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
@@ -328,6 +331,28 @@ function SettingsPage({ colorMode }) {
         </Box>
       </Paper>
     </Container>
+
+    <Snackbar
+      open={!!successMessage}
+      autoHideDuration={3500}
+      onClose={() => setSuccessMessage('')}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    >
+      <Alert onClose={() => setSuccessMessage('')} severity="success" sx={{ width: '100%' }}>
+        {successMessage}
+      </Alert>
+    </Snackbar>
+
+    <Snackbar
+      open={!!error}
+      autoHideDuration={5000}
+      onClose={() => setError('')}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    >
+      <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
+        {error}
+      </Alert>
+    </Snackbar>
     </Box>
   );
 }

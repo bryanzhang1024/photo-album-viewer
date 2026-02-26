@@ -1,7 +1,25 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import {
+  Box,
+  Tabs,
+  Tab,
+  IconButton,
+  Tooltip,
+  Typography,
+  Menu,
+  MenuItem,
+  Divider
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import FolderIcon from '@mui/icons-material/Folder';
+import PhotoAlbumIcon from '@mui/icons-material/PhotoAlbum';
 import HomePage from './HomePage';
 import AlbumPage from './AlbumPage';
+import CHANNELS from '../../common/ipc-channels';
 import {
   normalizeTargetPath,
   withLastPathTracking,
@@ -46,17 +64,50 @@ const parseURLPath = (pathname, search) => {
   };
 };
 
+const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const getPathDisplayName = (targetPath) => {
+  const normalized = normalizeTargetPath(targetPath || '').replace(/\/+$/g, '');
+  if (!normalized) return '主页';
+
+  const segments = normalized.split('/').filter(Boolean);
+  if (!segments.length) return normalized;
+
+  return decodeURIComponent(segments[segments.length - 1]);
+};
+
+const createTabFromState = (state) => ({
+  id: createTabId(),
+  targetPath: normalizeTargetPath(state?.targetPath || ''),
+  viewMode: state?.viewMode || 'folder',
+  initialImage: state?.initialImage || null,
+  title: getPathDisplayName(state?.targetPath || '')
+});
+
+const electron = window.require ? window.require('electron') : null;
+const ipcRenderer = electron ? electron.ipcRenderer : null;
+
 function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
   const hasRestoredSession = useRef(false);
+  const initialTabRef = useRef(null);
+  const [openFolderMenuAnchorEl, setOpenFolderMenuAnchorEl] = useState(null);
+  const [tabsMenuAnchorEl, setTabsMenuAnchorEl] = useState(null);
 
   // 解析URL状态
   const urlState = useMemo(() =>
     parseURLPath(location.pathname, location.search),
     [location.pathname, location.search]
   );
+
+  if (!initialTabRef.current) {
+    initialTabRef.current = createTabFromState(urlState);
+  }
+
+  const [tabs, setTabs] = useState(() => [initialTabRef.current]);
+  const [activeTabId, setActiveTabId] = useState(() => initialTabRef.current.id);
 
   const navigateWithPersist = useMemo(
     () => withLastPathTracking(navigate),
@@ -124,13 +175,65 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     }
   }, [urlState.targetPath, urlState.isRoot]);
 
+  // URL变化时，将当前URL同步回激活标签
+  useEffect(() => {
+    if (redirectFromOldRoute) return;
+
+    setTabs((prevTabs) => {
+      const activeIndex = prevTabs.findIndex((tab) => tab.id === activeTabId);
+      if (activeIndex === -1) {
+        return prevTabs;
+      }
+
+      const activeTab = prevTabs[activeIndex];
+      const normalizedTargetPath = normalizeTargetPath(urlState.targetPath || '');
+      const nextTitle = getPathDisplayName(normalizedTargetPath);
+
+      if (
+        activeTab.targetPath === normalizedTargetPath &&
+        activeTab.viewMode === urlState.viewMode &&
+        activeTab.initialImage === (urlState.initialImage || null) &&
+        activeTab.title === nextTitle
+      ) {
+        return prevTabs;
+      }
+
+      const nextTabs = [...prevTabs];
+      nextTabs[activeIndex] = {
+        ...activeTab,
+        targetPath: normalizedTargetPath,
+        viewMode: urlState.viewMode,
+        initialImage: urlState.initialImage || null,
+        title: nextTitle
+      };
+      return nextTabs;
+    });
+  }, [urlState.targetPath, urlState.viewMode, urlState.initialImage, activeTabId, redirectFromOldRoute]);
+
+  const navigateTab = useCallback((tabId, targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
+    const normalizedTargetPath = normalizeTargetPath(targetPath || '');
+    setTabs((prevTabs) => prevTabs.map((tab) => (
+      tab.id === tabId
+        ? {
+            ...tab,
+            targetPath: normalizedTargetPath,
+            viewMode,
+            initialImage: initialImage || null,
+            title: getPathDisplayName(normalizedTargetPath)
+          }
+        : tab
+    )));
+
+    setActiveTabId(tabId);
+    navigateWithPersist(normalizedTargetPath, { viewMode, initialImage, replace });
+  }, [navigateWithPersist]);
 
   // 导航函数 - 供子组件使用
   const navigateToPath = useCallback(
     (targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
-      navigateWithPersist(targetPath, { viewMode, initialImage, replace });
+      navigateTab(activeTabId, targetPath, viewMode, initialImage, replace);
     },
-    [navigateWithPersist]
+    [activeTabId, navigateTab]
   );
 
   // 面包屑导航函数
@@ -161,6 +264,221 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     navigateToPath(parentPath, 'folder');
   };
 
+  const openNewTab = useCallback((targetPath = '', viewMode = 'folder', initialImage = null) => {
+    const newTab = createTabFromState({ targetPath, viewMode, initialImage });
+    setTabs((prevTabs) => [...prevTabs, newTab]);
+    navigateTab(newTab.id, newTab.targetPath, newTab.viewMode, newTab.initialImage, false);
+  }, [navigateTab]);
+
+  const handleTabChange = useCallback((event, nextTabId) => {
+    if (!nextTabId || nextTabId === activeTabId) return;
+    const targetTab = tabs.find((tab) => tab.id === nextTabId);
+    if (!targetTab) return;
+
+    navigateTab(
+      targetTab.id,
+      targetTab.targetPath,
+      targetTab.viewMode,
+      targetTab.initialImage,
+      true
+    );
+  }, [activeTabId, tabs, navigateTab]);
+
+  const closeTabById = useCallback((tabId) => {
+    let fallbackTab = null;
+    let shouldNavigate = false;
+
+    setTabs((prevTabs) => {
+      const closingIndex = prevTabs.findIndex((tab) => tab.id === tabId);
+      if (closingIndex === -1) return prevTabs;
+
+      if (prevTabs.length === 1) {
+        const resetTab = {
+          ...prevTabs[0],
+          targetPath: '',
+          viewMode: 'folder',
+          initialImage: null,
+          title: '主页'
+        };
+        fallbackTab = resetTab;
+        shouldNavigate = true;
+        return [resetTab];
+      }
+
+      const nextTabs = prevTabs.filter((tab) => tab.id !== tabId);
+      if (tabId === activeTabId) {
+        fallbackTab = nextTabs[Math.max(0, closingIndex - 1)] || nextTabs[0];
+        shouldNavigate = true;
+      }
+      return nextTabs;
+    });
+
+    if (shouldNavigate && fallbackTab) {
+      navigateTab(
+        fallbackTab.id,
+        fallbackTab.targetPath,
+        fallbackTab.viewMode,
+        fallbackTab.initialImage,
+        true
+      );
+    }
+  }, [activeTabId, navigateTab]);
+
+  const handleCloseOthers = useCallback(() => {
+    const activeTab = tabs.find((tab) => tab.id === activeTabId);
+    if (!activeTab) return;
+
+    setTabs([activeTab]);
+    setTabsMenuAnchorEl(null);
+  }, [tabs, activeTabId]);
+
+  const handleOpenFolderToTarget = useCallback(async (target) => {
+    setOpenFolderMenuAnchorEl(null);
+    if (!ipcRenderer) return;
+
+    try {
+      const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
+      if (!selectedDir) return;
+
+      if (target === 'current') {
+        navigateTab(activeTabId, selectedDir, 'folder', null, false);
+        return;
+      }
+
+      if (target === 'new-tab') {
+        openNewTab(selectedDir, 'folder', null);
+        return;
+      }
+
+      if (target === 'new-window') {
+        const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, selectedDir);
+        if (!result?.success) {
+          throw new Error(result?.error || '创建新窗口失败');
+        }
+      }
+    } catch (error) {
+      console.error('打开文件夹失败:', error);
+    }
+  }, [activeTabId, navigateTab, openNewTab]);
+
+  const renderTabsHeader = useMemo(() => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+      <Tooltip title="打开文件夹">
+        <span>
+          <IconButton
+            size="small"
+            onClick={(event) => setOpenFolderMenuAnchorEl(event.currentTarget)}
+            aria-label="打开文件夹"
+            disabled={!ipcRenderer}
+          >
+            <FolderOpenIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+
+      <Tooltip title="新建标签页">
+        <IconButton
+          size="small"
+          onClick={() => openNewTab('', 'folder', null)}
+          aria-label="新建标签页"
+        >
+          <AddIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+
+      <Tabs
+        value={activeTabId}
+        onChange={handleTabChange}
+        variant="scrollable"
+        scrollButtons="auto"
+        sx={{ minHeight: 34, flex: 1, minWidth: 0 }}
+      >
+        {tabs.map((tab) => (
+          <Tab
+            key={tab.id}
+            value={tab.id}
+            disableRipple
+            sx={{ minHeight: 34, textTransform: 'none', minWidth: 120, maxWidth: 260, px: 1 }}
+            label={(
+              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
+                {tab.viewMode === 'album'
+                  ? <PhotoAlbumIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />
+                  : <FolderIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />}
+                <Typography variant="caption" noWrap sx={{ flex: 1, textAlign: 'left' }}>
+                  {tab.title}
+                </Typography>
+                <IconButton
+                  size="small"
+                  sx={{ ml: 0.25, p: 0.25, flexShrink: 0 }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeTabById(tab.id);
+                  }}
+                  aria-label={`关闭标签页 ${tab.title}`}
+                >
+                  <CloseIcon sx={{ fontSize: 13 }} />
+                </IconButton>
+              </Box>
+            )}
+          />
+        ))}
+      </Tabs>
+
+      <Tooltip title="标签页列表">
+        <IconButton
+          size="small"
+          onClick={(event) => setTabsMenuAnchorEl(event.currentTarget)}
+          aria-label="标签页列表"
+        >
+          <KeyboardArrowDownIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+
+      <Menu
+        anchorEl={openFolderMenuAnchorEl}
+        open={Boolean(openFolderMenuAnchorEl)}
+        onClose={() => setOpenFolderMenuAnchorEl(null)}
+      >
+        <MenuItem onClick={() => handleOpenFolderToTarget('current')}>
+          在当前标签打开文件夹
+        </MenuItem>
+        <MenuItem onClick={() => handleOpenFolderToTarget('new-tab')}>
+          在新标签打开文件夹
+        </MenuItem>
+        <MenuItem onClick={() => handleOpenFolderToTarget('new-window')}>
+          在新窗口打开文件夹
+        </MenuItem>
+      </Menu>
+
+      <Menu
+        anchorEl={tabsMenuAnchorEl}
+        open={Boolean(tabsMenuAnchorEl)}
+        onClose={() => setTabsMenuAnchorEl(null)}
+      >
+        {tabs.map((tab) => (
+          <MenuItem
+            key={`menu-${tab.id}`}
+            selected={tab.id === activeTabId}
+            onClick={() => {
+              setTabsMenuAnchorEl(null);
+              navigateTab(tab.id, tab.targetPath, tab.viewMode, tab.initialImage, true);
+            }}
+          >
+            {tab.title}
+          </MenuItem>
+        ))}
+        <Divider />
+        <MenuItem
+          onClick={handleCloseOthers}
+          disabled={tabs.length <= 1}
+        >
+          关闭其他标签页
+        </MenuItem>
+      </Menu>
+    </Box>
+  ), [activeTabId, closeTabById, handleCloseOthers, handleOpenFolderToTarget, handleTabChange, navigateTab, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
+
   // 如果是重定向，不渲染内容
   if (redirectFromOldRoute) {
     return null;
@@ -181,6 +499,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         onGoBack={handleGoBack}
         // 保持兼容性
         urlMode={true}
+        tabsHeaderContent={renderTabsHeader}
       />
     );
   } else {
@@ -196,6 +515,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         onFolderClick={handleFolderClick}
         // 保持兼容性
         urlMode={true}
+        tabsHeaderContent={renderTabsHeader}
       />
     );
   }

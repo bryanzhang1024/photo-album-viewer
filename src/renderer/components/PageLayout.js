@@ -8,13 +8,18 @@ import {
   Container
 } from '@mui/material';
 
-function PageLayout({ loading, error, headerContent, children, scrollContainerRef }) {
+function PageLayout({ loading, error, headerContent, subHeaderContent = null, children, scrollContainerRef }) {
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar variant="dense">
           {headerContent}
         </Toolbar>
+        {subHeaderContent ? (
+          <Box sx={{ borderTop: 1, borderColor: 'divider', px: { xs: 0.5, sm: 1 }, py: 0.5 }}>
+            {subHeaderContent}
+          </Box>
+        ) : null}
       </AppBar>
 
       <Box

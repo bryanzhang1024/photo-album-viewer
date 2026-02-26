@@ -59,7 +59,8 @@ function HomePage({
   onBreadcrumbNavigate = null,
   onAlbumClick = null,
   onFolderClick = null,
-  urlMode = false
+  urlMode = false,
+  tabsHeaderContent = null
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -247,18 +248,6 @@ function HomePage({
       return;
     }
   }, [location.state, urlMode, navigate, scanNavigationLevel]);
-
-  // 从设置页面接收新的根路径
-  useEffect(() => {
-    if (location.state?.newRootPath) {
-      const newPath = location.state.newRootPath;
-      console.log(`从设置页面接收到新的根路径: ${newPath}`);
-      setRootPath(newPath);
-      scanNavigationLevel(newPath);
-      // 清除state，防止重复触发
-      navigate(location.pathname, { replace: true, state: null });
-    }
-  }, [location.state, navigate, scanNavigationLevel]);
 
   // 从localStorage中读取上次的路径，并处理URL参数 (仅非URL模式)
   useEffect(() => {
@@ -887,6 +876,7 @@ function HomePage({
         loading={loading}
         error={error}
         headerContent={renderHeader()}
+        subHeaderContent={tabsHeaderContent}
         scrollContainerRef={scrollContainerRef}
       >
         {renderContent()}
