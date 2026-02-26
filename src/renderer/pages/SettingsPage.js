@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -26,15 +26,37 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../contexts/SettingsContext';
 import { clearAllCache } from '../utils/cacheUtils';
+import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 
 const electron = window.require ? window.require('electron') : null;
 const ipcRenderer = electron ? electron.ipcRenderer : null;
 
+const formatBytes = (bytes = 0) => {
+  const numeric = Number(bytes);
+  if (!Number.isFinite(numeric) || numeric <= 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = numeric;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+};
+
 function SettingsPage({ colorMode }) {
   const { settings, updateSetting, resetSettings } = useSettings();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const [cacheStatsLoading, setCacheStatsLoading] = useState(false);
+  const [cacheStats, setCacheStats] = useState({
+    renderer: null,
+    main: null
+  });
 
   const handleToggle = (key) => (event) => {
     updateSetting(key, event.target.checked);
@@ -75,6 +97,42 @@ function SettingsPage({ colorMode }) {
       setError('启动新实例时出错: ' + err.message);
     }
   };
+
+  const loadCacheStats = async () => {
+    setCacheStatsLoading(true);
+    try {
+      const rendererStats = imageCache.getStats();
+      let mainStats = null;
+
+      if (ipcRenderer) {
+        const response = await ipcRenderer.invoke(CHANNELS.GET_CACHE_STATS);
+        if (response?.success) {
+          mainStats = response;
+        }
+      }
+
+      setCacheStats({
+        renderer: rendererStats,
+        main: mainStats
+      });
+    } catch (err) {
+      console.error('加载缓存统计失败:', err);
+      setError('加载缓存统计失败: ' + err.message);
+    } finally {
+      setCacheStatsLoading(false);
+    }
+  };
+
+  const handleClearCache = () => {
+    clearAllCache();
+    setTimeout(() => {
+      loadCacheStats();
+    }, 300);
+  };
+
+  useEffect(() => {
+    loadCacheStats();
+  }, []);
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -206,16 +264,52 @@ function SettingsPage({ colorMode }) {
           <Typography variant="h6" gutterBottom>
             缓存管理
           </Typography>
-          <Button
-            variant="contained"
-            color="warning"
-            onClick={clearAllCache}
-          >
-            清除所有缓存
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={handleClearCache}
+            >
+              清除所有缓存
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={loadCacheStats}
+              disabled={cacheStatsLoading}
+            >
+              {cacheStatsLoading ? '刷新中...' : '刷新缓存统计'}
+            </Button>
+          </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             此操作将清除所有缩略图、相册和导航缓存。在遇到显示问题时使用。
           </Typography>
+
+          {cacheStats.renderer && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">渲染进程内存缓存</Typography>
+              <Typography variant="body2" color="text.secondary">
+                占用: {formatBytes(cacheStats.renderer.totalBytes)} / {formatBytes(cacheStats.renderer.maxBytes)}（{cacheStats.renderer.usage}）
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                请求: {cacheStats.renderer.requests?.totalGets ?? 0}，命中: {cacheStats.renderer.requests?.totalHits ?? 0}，未命中: {cacheStats.renderer.requests?.totalMisses ?? 0}，命中率: {cacheStats.renderer.requests?.hitRate ?? '0.00%'}
+              </Typography>
+            </Box>
+          )}
+
+          {cacheStats.main?.thumbnailService?.disk && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">主进程缩略图缓存</Typography>
+              <Typography variant="body2" color="text.secondary">
+                磁盘占用: {formatBytes(cacheStats.main.thumbnailService.disk.size)} / {formatBytes(cacheStats.main.thumbnailService.disk.maxSize)}（{cacheStats.main.thumbnailService.disk.usage}）
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                服务请求: {cacheStats.main.thumbnailService.runtime.requestCount}，命中率: {cacheStats.main.thumbnailService.runtime.hitRate}%，去重命中: {cacheStats.main.thumbnailService.runtime.dedupHits}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                协议命中率: {cacheStats.main.protocol.hitRate}%（请求 {cacheStats.main.protocol.requestCount}，命中 {cacheStats.main.protocol.hitCount}，未命中 {cacheStats.main.protocol.missCount}）
+              </Typography>
+            </Box>
+          )}
         </Box>
 
         <Divider sx={{ my: 2 }} />

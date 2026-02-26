@@ -35,6 +35,54 @@ const DEFAULT_PERFORMANCE_SETTINGS = {
 let performanceSettings = {...DEFAULT_PERFORMANCE_SETTINGS};
 ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
 
+const thumbnailProtocolStats = {
+  requestCount: 0,
+  hitCount: 0,
+  missCount: 0
+};
+
+const THUMBNAIL_PROTOCOL_PREFIX = 'thumbnail-protocol://';
+
+function normalizePerformanceSettings(settings = {}, fallback = DEFAULT_PERFORMANCE_SETTINGS) {
+  const resolved = { ...fallback };
+
+  if (settings && typeof settings === 'object') {
+    if (typeof settings.concurrentTasks !== 'undefined') {
+      const numeric = Number(settings.concurrentTasks);
+      if (Number.isFinite(numeric)) {
+        resolved.concurrentTasks = Math.max(1, Math.min(8, Math.floor(numeric)));
+      }
+    }
+
+    if (typeof settings.preloadDistance !== 'undefined') {
+      const numeric = Number(settings.preloadDistance);
+      if (Number.isFinite(numeric)) {
+        resolved.preloadDistance = Math.max(0, Math.min(20, Math.floor(numeric)));
+      }
+    }
+
+    if (typeof settings.cacheTimeout !== 'undefined') {
+      const numeric = Number(settings.cacheTimeout);
+      if (Number.isFinite(numeric)) {
+        resolved.cacheTimeout = Math.max(1, Math.min(24 * 60, Math.floor(numeric)));
+      }
+    }
+
+    if (typeof settings.cacheEnabled === 'boolean') {
+      resolved.cacheEnabled = settings.cacheEnabled;
+    }
+
+    if (typeof settings.thumbnailResolution !== 'undefined') {
+      const numeric = Number(settings.thumbnailResolution);
+      if (Number.isFinite(numeric)) {
+        resolved.thumbnailResolution = Math.max(100, Math.min(3000, Math.floor(numeric)));
+      }
+    }
+  }
+
+  return resolved;
+}
+
 // 单实例锁定 - 允许多窗口
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -115,9 +163,22 @@ app.whenReady().then(async () => {
 
   // 注册一个安全的自定义文件协议来提供缩略图
   session.defaultSession.protocol.registerFileProtocol('thumbnail-protocol', (request, callback) => {
-    const url = request.url.substr(21); // 移除 'thumbnail-protocol://'
-    const filePath = path.join(ThumbnailService.THUMBNAIL_CACHE_DIR, url);
-    callback({ path: path.normalize(filePath) });
+    thumbnailProtocolStats.requestCount++;
+
+    const encodedPath = request.url.startsWith(THUMBNAIL_PROTOCOL_PREFIX)
+      ? request.url.slice(THUMBNAIL_PROTOCOL_PREFIX.length)
+      : request.url;
+    const decodedPath = decodeURIComponent(encodedPath);
+    const filePath = path.join(ThumbnailService.THUMBNAIL_CACHE_DIR, decodedPath);
+
+    if (fs.existsSync(filePath)) {
+      thumbnailProtocolStats.hitCount++;
+      callback({ path: path.normalize(filePath) });
+      return;
+    }
+
+    thumbnailProtocolStats.missCount++;
+    callback(-6); // FILE_NOT_FOUND
   });
   
   // 处理命令行参数，使用指定的文件夹路径
@@ -220,18 +281,43 @@ ipcMain.handle(CHANNELS.GET_ALBUM_IMAGES, async (event, albumPath) => {
 ipcMain.handle(CHANNELS.UPDATE_PERFORMANCE_SETTINGS, async (event, settings) => {
   try {
     console.log('更新性能设置:', settings);
-    performanceSettings = {
-      ...performanceSettings,
-      ...settings
-    };
-    if (settings && typeof settings.concurrentTasks !== 'undefined') {
-      ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
-    }
+    performanceSettings = normalizePerformanceSettings(
+      { ...performanceSettings, ...(settings || {}) },
+      DEFAULT_PERFORMANCE_SETTINGS
+    );
+    ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
     // Also pass the settings to the service if it needs to react instantly
     // ThumbnailService.init(performanceSettings);
-    return { success: true };
+    return { success: true, settings: performanceSettings };
   } catch (error) {
     console.error('更新性能设置失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle(CHANNELS.GET_CACHE_STATS, async () => {
+  try {
+    const diskStats = await ThumbnailService.thumbnailService.getCacheStats();
+    const runtimeStats = ThumbnailService.thumbnailService.getRuntimeStats();
+    const protocolHitRate = thumbnailProtocolStats.requestCount > 0
+      ? Number(((thumbnailProtocolStats.hitCount / thumbnailProtocolStats.requestCount) * 100).toFixed(2))
+      : 0;
+
+    return {
+      success: true,
+      timestamp: Date.now(),
+      performanceSettings,
+      protocol: {
+        ...thumbnailProtocolStats,
+        hitRate: protocolHitRate
+      },
+      thumbnailService: {
+        disk: diskStats,
+        runtime: runtimeStats
+      }
+    };
+  } catch (error) {
+    console.error('获取缓存统计失败:', error);
     return { success: false, error: error.message };
   }
 });

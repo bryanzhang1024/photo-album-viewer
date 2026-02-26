@@ -26,6 +26,38 @@ class ImageCacheManager {
 
         // LRU队列
         this.lruQueue = [];
+
+        this.requestMetrics = {
+            totalGets: 0,
+            totalHits: 0,
+            totalMisses: 0,
+            byType: {}
+        };
+    }
+
+    getTypeMetrics(type) {
+        if (!this.requestMetrics.byType[type]) {
+            this.requestMetrics.byType[type] = {
+                gets: 0,
+                hits: 0,
+                misses: 0
+            };
+        }
+        return this.requestMetrics.byType[type];
+    }
+
+    recordGet(type, isHit) {
+        this.requestMetrics.totalGets += 1;
+        const typeMetrics = this.getTypeMetrics(type);
+        typeMetrics.gets += 1;
+
+        if (isHit) {
+            this.requestMetrics.totalHits += 1;
+            typeMetrics.hits += 1;
+        } else {
+            this.requestMetrics.totalMisses += 1;
+            typeMetrics.misses += 1;
+        }
     }
 
     /**
@@ -163,11 +195,32 @@ class ImageCacheManager {
      * 获取缓存统计
      */
     getStats() {
+        const hitRate = this.requestMetrics.totalGets > 0
+            ? ((this.requestMetrics.totalHits / this.requestMetrics.totalGets) * 100).toFixed(2) + '%'
+            : '0.00%';
+        const requestByType = {};
+
+        for (const [type, metrics] of Object.entries(this.requestMetrics.byType)) {
+            requestByType[type] = {
+                ...metrics,
+                hitRate: metrics.gets > 0
+                    ? ((metrics.hits / metrics.gets) * 100).toFixed(2) + '%'
+                    : '0.00%'
+            };
+        }
+
         const stats = {
             totalBytes: this.currentMemoryBytes,
             maxBytes: this.maxMemoryBytes,
             usage: ((this.currentMemoryBytes / this.maxMemoryBytes) * 100).toFixed(2) + '%',
-            types: {}
+            types: {},
+            requests: {
+                totalGets: this.requestMetrics.totalGets,
+                totalHits: this.requestMetrics.totalHits,
+                totalMisses: this.requestMetrics.totalMisses,
+                hitRate,
+                byType: requestByType
+            }
         };
 
         for (const [key, item] of this.memoryCache.entries()) {
@@ -199,6 +252,16 @@ class ImageCacheManager {
         this.memoryCache.clear();
         this.lruQueue = [];
         this.currentMemoryBytes = 0;
+        this.resetRequestMetrics();
+    }
+
+    resetRequestMetrics() {
+        this.requestMetrics = {
+            totalGets: 0,
+            totalHits: 0,
+            totalMisses: 0,
+            byType: {}
+        };
     }
 
     /**
@@ -260,11 +323,15 @@ class ImageCacheManager {
         const key = this.generateCacheKey(type, identifier, options);
         const item = this.memoryCache.get(key);
 
-        if (!item) return null;
+        if (!item) {
+            this.recordGet(type, false);
+            return null;
+        }
 
         // 检查是否过期
         if (Date.now() > item.expiry) {
             this.delete(key);
+            this.recordGet(type, false);
             return null;
         }
 
@@ -277,6 +344,7 @@ class ImageCacheManager {
             this.updateLRU(key);
         }
 
+        this.recordGet(type, true);
         return item.data;
     }
 }

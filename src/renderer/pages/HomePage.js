@@ -522,6 +522,14 @@ function HomePage({
   const handleSaveSettings = () => {
     setPerformanceSettings(tempSettings);
     localStorage.setItem('performance_settings', JSON.stringify(tempSettings));
+
+    if (ipcRenderer) {
+      ipcRenderer.invoke(CHANNELS.UPDATE_PERFORMANCE_SETTINGS, tempSettings)
+        .catch((err) => {
+          console.warn('同步性能设置失败:', err);
+        });
+    }
+
     setSettingsDialogOpen(false);
 
     // 自动刷新应用设置

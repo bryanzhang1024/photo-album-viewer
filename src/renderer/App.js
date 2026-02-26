@@ -9,6 +9,53 @@ import TestPage from './pages/TestPage';
 import SettingsPage from './pages/SettingsPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SettingsProvider } from './contexts/SettingsContext';
+import CHANNELS from '../common/ipc-channels';
+
+const electron = window.require ? window.require('electron') : null;
+const ipcRenderer = electron ? electron.ipcRenderer : null;
+const PERFORMANCE_SETTINGS_KEY = 'performance_settings';
+
+function sanitizePerformanceSettings(settings) {
+  if (!settings || typeof settings !== 'object') {
+    return null;
+  }
+
+  const sanitized = {};
+
+  if (typeof settings.concurrentTasks !== 'undefined') {
+    const numeric = Number(settings.concurrentTasks);
+    if (Number.isFinite(numeric)) {
+      sanitized.concurrentTasks = Math.max(1, Math.min(8, Math.floor(numeric)));
+    }
+  }
+
+  if (typeof settings.preloadDistance !== 'undefined') {
+    const numeric = Number(settings.preloadDistance);
+    if (Number.isFinite(numeric)) {
+      sanitized.preloadDistance = Math.max(0, Math.min(20, Math.floor(numeric)));
+    }
+  }
+
+  if (typeof settings.cacheTimeout !== 'undefined') {
+    const numeric = Number(settings.cacheTimeout);
+    if (Number.isFinite(numeric)) {
+      sanitized.cacheTimeout = Math.max(1, Math.min(24 * 60, Math.floor(numeric)));
+    }
+  }
+
+  if (typeof settings.cacheEnabled === 'boolean') {
+    sanitized.cacheEnabled = settings.cacheEnabled;
+  }
+
+  if (typeof settings.thumbnailResolution !== 'undefined') {
+    const numeric = Number(settings.thumbnailResolution);
+    if (Number.isFinite(numeric)) {
+      sanitized.thumbnailResolution = Math.max(100, Math.min(3000, Math.floor(numeric)));
+    }
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+}
 
 // 创建一个上下文来保存滚动位置
 export const ScrollPositionContext = createContext({
@@ -43,6 +90,26 @@ function App() {
       root.style.setProperty('--scrollbar-thumb-hover', '#a8a8a8');
     }
   }, [mode]);
+
+  useEffect(() => {
+    if (!ipcRenderer) return;
+
+    const raw = localStorage.getItem(PERFORMANCE_SETTINGS_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw);
+      const sanitized = sanitizePerformanceSettings(parsed);
+      if (!sanitized) return;
+
+      ipcRenderer.invoke(CHANNELS.UPDATE_PERFORMANCE_SETTINGS, sanitized)
+        .catch((err) => {
+          console.warn('同步性能设置到主进程失败:', err);
+        });
+    } catch (error) {
+      console.warn('解析性能设置失败，已忽略:', error);
+    }
+  }, []);
   
   // 当系统偏好变化时更新主题（如果用户没有明确设置）
   useEffect(() => {

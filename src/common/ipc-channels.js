@@ -7,6 +7,7 @@ module.exports = {
     GET_BATCH_THUMBNAILS: 'get-batch-thumbnails',
     GET_ALBUM_IMAGES: 'get-album-images',
     UPDATE_PERFORMANCE_SETTINGS: 'update-performance-settings',
+    GET_CACHE_STATS: 'get-cache-stats',
     SAVE_FAVORITES: 'save-favorites',
     LOAD_FAVORITES: 'load-favorites',
     CLEAR_THUMBNAIL_CACHE: 'clear-thumbnail-cache',

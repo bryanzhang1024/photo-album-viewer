@@ -20,7 +20,7 @@ const THUMBNAIL_CACHE_DIR = path.join(app.getPath('userData'), 'thumbnail-cache'
  * - 初始化时检查目录，避免重复检查
  * - 并发控制，最多3个Sharp进程
  * - 请求去重，相同请求合并
- * - 自动清理，7天TTL + 500MB限制
+ * - 自动清理，7天TTL + 2GB限制
  */
 class ThumbnailService {
   constructor() {
@@ -29,8 +29,21 @@ class ThumbnailService {
     this.pendingTasks = new Map(); // 请求去重
     this.activeWorkers = 0;
     this.MAX_WORKERS = 3; // 最大并发Sharp进程
-    this.MAX_CACHE_SIZE = 500 * 1024 * 1024; // 500MB
+    this.MAX_CACHE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
     this.CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7天
+    this.metrics = {
+      requestCount: 0,
+      cacheHits: {
+        total: 0,
+        webp: 0,
+        png: 0
+      },
+      cacheMisses: 0,
+      dedupHits: 0,
+      generatedWithSharp: 0,
+      generatedWithSystem: 0,
+      generationFailures: 0
+    };
   }
 
   /**
@@ -81,6 +94,8 @@ class ThumbnailService {
    * 生成缩略图 - 带并发控制和请求去重
    */
   async generateThumbnail(imagePath, width = 300, height = 300) {
+    this.metrics.requestCount++;
+
     // 问题1解决: 初始化时检查一次
     if (!this.cacheDirReady) {
       await this.ensureCacheDir();
@@ -93,6 +108,8 @@ class ThumbnailService {
 
     // 问题2解决: 同步检查缓存
     if (fs.existsSync(cacheFilenames.webp)) {
+      this.metrics.cacheHits.total++;
+      this.metrics.cacheHits.webp++;
       return `file://${cacheFilenames.webp}`;
     }
 
@@ -102,6 +119,8 @@ class ThumbnailService {
         if (cachedImage && !cachedImage.isEmpty()) {
           const looksLikeIcon = await this.isSystemFileIcon(imagePath, cachedImage);
           if (!looksLikeIcon) {
+            this.metrics.cacheHits.total++;
+            this.metrics.cacheHits.png++;
             return `file://${cacheFilenames.png}`;
           }
         }
@@ -117,6 +136,7 @@ class ThumbnailService {
     }
 
     // 问题3+4解决: 任务队列 + 并发控制
+    this.metrics.cacheMisses++;
     return this.enqueueTask(imagePath, width, height, cacheFilenames);
   }
 
@@ -128,6 +148,7 @@ class ThumbnailService {
 
     // 去重: 相同请求合并
     if (this.pendingTasks.has(key)) {
+      this.metrics.dedupHits++;
       return this.pendingTasks.get(key);
     }
 
@@ -145,7 +166,11 @@ class ThumbnailService {
     }
 
     console.warn(`Sharp生成缩略图失败，尝试系统缩略图: ${imagePath}`);
-    return this.trySystemThumbnail(imagePath, width, height, cacheFilenames);
+    const systemResult = await this.trySystemThumbnail(imagePath, width, height, cacheFilenames);
+    if (!systemResult) {
+      this.metrics.generationFailures++;
+    }
+    return systemResult;
   }
 
   async trySystemThumbnail(imagePath, width, height, cacheFilenames) {
@@ -174,6 +199,7 @@ class ThumbnailService {
 
       const buffer = image.toPNG();
       await writeFile(cacheFilenames.png, buffer);
+      this.metrics.generatedWithSystem++;
       return `file://${cacheFilenames.png}`;
     } catch (error) {
       console.warn('系统缩略图获取失败，回退到Sharp:', error?.message || error);
@@ -280,6 +306,7 @@ class ThumbnailService {
         .webp({ quality: 80 })
         .toFile(cacheFilename);
 
+      this.metrics.generatedWithSharp++;
       return `file://${cacheFilename}`;
     } catch (err) {
       console.error(`处理图片失败: ${imagePath}`, err);
@@ -397,6 +424,20 @@ class ThumbnailService {
       console.error('获取缓存统计失败:', err);
       return { count: 0, size: 0 };
     }
+  }
+
+  getRuntimeStats() {
+    const hitRate = this.metrics.requestCount > 0
+      ? Number(((this.metrics.cacheHits.total / this.metrics.requestCount) * 100).toFixed(2))
+      : 0;
+
+    return {
+      ...this.metrics,
+      hitRate,
+      pendingTasks: this.pendingTasks.size,
+      activeWorkers: this.activeWorkers,
+      maxWorkers: this.MAX_WORKERS
+    };
   }
 }
 
