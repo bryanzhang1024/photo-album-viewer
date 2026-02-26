@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Dialog,
   AppBar,
@@ -54,6 +54,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const imgRef = useRef(null);
   
   const currentImage = images[currentIndex];
+
+  const handleCopyCurrentImage = useCallback(async (mode = 'file') => {
+    if (!currentImage?.path) return;
+
+    try {
+      const result = await ipcRenderer.invoke(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, currentImage.path, mode);
+      if (!result?.success) {
+        throw new Error(result?.error || '复制失败');
+      }
+    } catch (error) {
+      console.error('复制到剪贴板失败:', error);
+    }
+  }, [currentImage?.path]);
   
   // 使用收藏上下文和设置上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
@@ -158,6 +171,20 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   // 添加键盘导航支持
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Cmd/Ctrl + C 复制当前文件（保留原文件名/后缀）
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopyCurrentImage('file');
+        return;
+      }
+
+      // Cmd/Ctrl + Shift + C 复制当前图片像素
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopyCurrentImage('image');
+        return;
+      }
+
       switch (e.key) {
         case 'ArrowLeft':
         case 'a':
@@ -191,7 +218,9 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           handleShowInFolder();
           break;
         case 'c':
-          handleToggleFavorite();
+          if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+            handleToggleFavorite();
+          }
           break;
         case 'r':
           handleRandomImage();
@@ -209,7 +238,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, images.length]);
+  }, [currentIndex, images.length, handleCopyCurrentImage]);
   
   // 监听全屏变化
   useEffect(() => {

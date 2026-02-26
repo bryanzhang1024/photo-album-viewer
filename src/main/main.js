@@ -4,10 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const isDev = require('electron-is-dev');
 const { promisify } = require('util');
+const { pathToFileURL } = require('url');
 const http = require('http');
 const sharp = require('sharp');
 const crypto = require('crypto');
-const url = require('url');
 const { createWindow, getMainWindow, windows } = require('./services/WindowService');
 const FileSystemService = require('./services/FileSystemService');
 const ThumbnailService = require('./services/ThumbnailService');
@@ -375,7 +375,7 @@ ipcMain.handle(CHANNELS.SHOW_IN_FOLDER, async (event, filePath) => {
 });
 
 // 复制图片到剪贴板
-ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath) => {
+ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 'image') => {
   try {
     const { clipboard, nativeImage } = require('electron');
     
@@ -389,11 +389,70 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath) => {
     if (image.isEmpty()) {
       throw new Error('无法读取图片文件');
     }
-    
-    // 复制到剪贴板
-    clipboard.writeImage(image);
-    
-    return { success: true };
+
+    const normalizedMode = mode === 'file' ? 'file' : 'image';
+
+    if (normalizedMode === 'file') {
+      // 写入文件引用，便于聊天工具保留原始文件名和后缀
+      if (process.platform === 'darwin') {
+        const fileUrl = pathToFileURL(filePath).toString();
+        const fileName = path.basename(filePath);
+        clipboard.clear();
+
+        // Finder 常见文件复制类型：多写几种以提升第三方聊天软件识别率
+        const fileReferenceFormats = [
+          ['NSFilenamesPboardType', Buffer.from(JSON.stringify([filePath]), 'utf8')],
+          ['public.file-url', Buffer.from(fileUrl, 'utf8')],
+          ['public.url', Buffer.from(fileUrl, 'utf8')],
+          ['text/uri-list', Buffer.from(fileUrl, 'utf8')]
+        ];
+
+        for (const [format, buffer] of fileReferenceFormats) {
+          try {
+            clipboard.writeBuffer(format, buffer);
+          } catch (error) {
+            console.warn(`写入 ${format} 失败:`, error?.message || error);
+          }
+        }
+
+        try {
+          clipboard.writeBookmark(fileName, fileUrl);
+        } catch (error) {
+          console.warn('写入 bookmark 失败:', error?.message || error);
+        }
+      } else {
+        clipboard.clear();
+        clipboard.writeText(filePath);
+      }
+
+      return {
+        success: true,
+        filePath,
+        mode: normalizedMode,
+        platform: process.platform,
+        formats: clipboard.availableFormats()
+      };
+    }
+
+    const pngBuffer = image.toPNG();
+    const pngImage = nativeImage.createFromBuffer(pngBuffer);
+
+    if (!pngImage || pngImage.isEmpty()) {
+      throw new Error('图片转换为 PNG 失败');
+    }
+
+    // 仅写入图片数据，优先兼容聊天框粘贴图片
+    clipboard.clear();
+    clipboard.writeImage(pngImage);
+
+    return {
+      success: true,
+      filePath,
+      mode: normalizedMode,
+      platform: process.platform,
+      formats: clipboard.availableFormats(),
+      hasImage: !clipboard.readImage().isEmpty()
+    };
   } catch (error) {
     console.error('复制图片到剪贴板失败:', error);
     return { success: false, error: error.message };
