@@ -77,7 +77,6 @@ function AlbumPage({
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -141,6 +140,17 @@ function AlbumPage({
     if (location.state?.albumPath) return location.state.albumPath;
     return albumPath ? safeDecodeURIPath(albumPath) : '';
   }, [urlMode, urlAlbumPath, albumPath, location.state]);
+  const albumSortFields = useMemo(() => ['name', 'size', 'lastModified'], []);
+  const albumLegacySortKeys = useMemo(
+    () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
+    []
+  );
+  const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc', {
+    scopeKey: decodedAlbumPath || '__root__',
+    storageNamespace: 'sorting:album',
+    allowedSortBy: albumSortFields,
+    legacyKeys: albumLegacySortKeys
+  });
 
   // 使用自定义 Hooks
   const { images, loading, error, loadImages } = useAlbumImages(decodedAlbumPath);

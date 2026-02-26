@@ -74,7 +74,6 @@ function HomePage({
   }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc');
   const [userDensity, setUserDensity] = useState(() => {
     const savedDensity = localStorage.getItem('userDensity');
     return (savedDensity && GRID_CONFIG[savedDensity]) ? savedDensity : DEFAULT_DENSITY;
@@ -89,6 +88,17 @@ function HomePage({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHasFocus, setSearchHasFocus] = useState(false);
   const { path: currentPath, nodes: navigationNodes, breadcrumbs, metadata } = navigationState;
+  const homeSortFields = useMemo(() => ['name', 'imageCount', 'lastModified'], []);
+  const homeLegacySortKeys = useMemo(
+    () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
+    []
+  );
+  const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc', {
+    scopeKey: currentPath || '__root__',
+    storageNamespace: 'sorting:folder',
+    allowedSortBy: homeSortFields,
+    legacyKeys: homeLegacySortKeys
+  });
   const albumNodes = useMemo(
     () => navigationNodes.filter(node => node.type === 'album'),
     [navigationNodes]
