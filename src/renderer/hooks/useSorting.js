@@ -1,6 +1,13 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 
-function loadScopedSorting(storageKey, initialSortBy, initialSortDirection, allowedSortBy = null, legacyKeys = null) {
+function loadScopedSorting(
+  storageKey,
+  initialSortBy,
+  initialSortDirection,
+  allowedSortBy = null,
+  legacyKeys = null,
+  scopeKey = '__root__'
+) {
   try {
     const raw = localStorage.getItem(storageKey);
     if (raw) {
@@ -21,7 +28,9 @@ function loadScopedSorting(storageKey, initialSortBy, initialSortDirection, allo
     console.warn(`读取排序配置失败(${storageKey}):`, error);
   }
 
-  if (legacyKeys) {
+  // 兼容旧版全局排序键时，仅在根作用域应用回退；
+  // 非根路径应使用当前页面默认值（通常为 asc），避免新目录继承历史倒序。
+  if (legacyKeys && scopeKey === '__root__') {
     const legacySortBy = localStorage.getItem(legacyKeys.sortByKey);
     const legacyDirection = localStorage.getItem(legacyKeys.sortDirectionKey);
     const isValidLegacySortBy = !allowedSortBy || allowedSortBy.includes(legacySortBy);
@@ -62,17 +71,38 @@ function useSorting(initialSortBy = 'name', initialSortDirection = 'asc', option
     [storageNamespace, normalizedScopeKey]
   );
   const [sortBy, setSortBy] = useState(() =>
-    loadScopedSorting(storageKey, initialSortBy, initialSortDirection, allowedSortBy, legacyKeys).sortBy
+    loadScopedSorting(
+      storageKey,
+      initialSortBy,
+      initialSortDirection,
+      allowedSortBy,
+      legacyKeys,
+      normalizedScopeKey
+    ).sortBy
   );
   const [sortDirection, setSortDirection] = useState(() =>
-    loadScopedSorting(storageKey, initialSortBy, initialSortDirection, allowedSortBy, legacyKeys).sortDirection
+    loadScopedSorting(
+      storageKey,
+      initialSortBy,
+      initialSortDirection,
+      allowedSortBy,
+      legacyKeys,
+      normalizedScopeKey
+    ).sortDirection
   );
 
   useEffect(() => {
-    const loaded = loadScopedSorting(storageKey, initialSortBy, initialSortDirection, allowedSortBy, legacyKeys);
+    const loaded = loadScopedSorting(
+      storageKey,
+      initialSortBy,
+      initialSortDirection,
+      allowedSortBy,
+      legacyKeys,
+      normalizedScopeKey
+    );
     setSortBy(loaded.sortBy);
     setSortDirection(loaded.sortDirection);
-  }, [storageKey, initialSortBy, initialSortDirection, allowedSortBy, legacyKeys]);
+  }, [storageKey, initialSortBy, initialSortDirection, allowedSortBy, legacyKeys, normalizedScopeKey]);
 
   const handleSortChange = useCallback((event) => {
     const newSortBy = event.target.value;

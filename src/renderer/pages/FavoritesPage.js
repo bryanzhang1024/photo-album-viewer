@@ -43,7 +43,7 @@ function FavoritesPage({ colorMode }) {
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const [tabValue, setTabValue] = useState(0);
   const [sortBy, setSortBy] = useState('date');
-  const [sortDirection, setSortDirection] = useState('desc');
+  const [sortDirection, setSortDirection] = useState('asc');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [viewerImages, setViewerImages] = useState([]);
