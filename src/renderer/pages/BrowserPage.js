@@ -65,7 +65,12 @@ const parseURLPath = (pathname, search) => {
 };
 
 const TABS_SESSION_KEY = 'browser_tabs_session_v1';
+const DEFAULT_ROOT_PATH_KEY = 'lastRootPath_default';
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const DRAG_INSERT_BEFORE = 'before';
+const DRAG_INSERT_AFTER = 'after';
+
+const getDefaultRootPath = () => normalizeTargetPath(localStorage.getItem(DEFAULT_ROOT_PATH_KEY) || '');
 
 const getPathDisplayName = (targetPath) => {
   const normalized = normalizeTargetPath(targetPath || '').replace(/\/+$/g, '');
@@ -98,6 +103,24 @@ const sanitizeTabFromSession = (tab) => {
     initialImage: typeof tab.initialImage === 'string' && tab.initialImage ? tab.initialImage : null,
     title: getPathDisplayName(targetPath)
   };
+};
+
+export const reorderTabsById = (tabs, sourceTabId, targetTabId, position = DRAG_INSERT_BEFORE) => {
+  if (!Array.isArray(tabs) || tabs.length < 2) return tabs;
+  if (!sourceTabId || !targetTabId || sourceTabId === targetTabId) return tabs;
+
+  const sourceIndex = tabs.findIndex((tab) => tab.id === sourceTabId);
+  if (sourceIndex === -1) return tabs;
+
+  const reordered = [...tabs];
+  const [movedTab] = reordered.splice(sourceIndex, 1);
+  const targetIndex = reordered.findIndex((tab) => tab.id === targetTabId);
+  if (targetIndex === -1) return tabs;
+
+  const insertIndex = targetIndex + (position === DRAG_INSERT_AFTER ? 1 : 0);
+  reordered.splice(insertIndex, 0, movedTab);
+
+  return reordered;
 };
 
 const loadTabsSession = () => {
@@ -143,6 +166,8 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const initialTabRef = useRef(null);
   const [openFolderMenuAnchorEl, setOpenFolderMenuAnchorEl] = useState(null);
   const [tabsMenuAnchorEl, setTabsMenuAnchorEl] = useState(null);
+  const draggingTabIdRef = useRef(null);
+  const [dragIndicator, setDragIndicator] = useState({ tabId: null, position: DRAG_INSERT_BEFORE });
 
   // 解析URL状态
   const urlState = useMemo(() =>
@@ -277,6 +302,25 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       return;
     }
 
+    const defaultRootPath = getDefaultRootPath();
+    if (defaultRootPath) {
+      hasRestoredSession.current = true;
+      hasInitializedTabsSession.current = true;
+      const defaultRootTab = createTabFromState({
+        targetPath: defaultRootPath,
+        viewMode: 'folder',
+        initialImage: null
+      });
+      setTabs([defaultRootTab]);
+      setActiveTabId(defaultRootTab.id);
+      navigateWithPersist(defaultRootPath, {
+        viewMode: 'folder',
+        initialImage: null,
+        replace: true
+      });
+      return;
+    }
+
     hasInitializedTabsSession.current = true;
   }, [redirectFromOldRoute, urlState.targetPath, location.search, navigateWithPersist]);
 
@@ -380,10 +424,72 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   };
 
   const openNewTab = useCallback((targetPath = '', viewMode = 'folder', initialImage = null) => {
-    const newTab = createTabFromState({ targetPath, viewMode, initialImage });
+    const resolvedTargetPath = (!targetPath && viewMode === 'folder')
+      ? (getDefaultRootPath() || '')
+      : targetPath;
+    const newTab = createTabFromState({ targetPath: resolvedTargetPath, viewMode, initialImage });
     setTabs((prevTabs) => [...prevTabs, newTab]);
     navigateTab(newTab.id, newTab.targetPath, newTab.viewMode, newTab.initialImage, false);
   }, [navigateTab]);
+
+  const clearTabDragIndicator = useCallback(() => {
+    setDragIndicator((prev) => (prev.tabId ? { tabId: null, position: DRAG_INSERT_BEFORE } : prev));
+  }, []);
+
+  const resolveDragInsertPosition = useCallback((event) => {
+    const rect = event.currentTarget?.getBoundingClientRect?.();
+    if (!rect) return DRAG_INSERT_BEFORE;
+    return event.clientX >= rect.left + rect.width / 2 ? DRAG_INSERT_AFTER : DRAG_INSERT_BEFORE;
+  }, []);
+
+  const handleTabDragStart = useCallback((event, tabId) => {
+    draggingTabIdRef.current = tabId;
+    clearTabDragIndicator();
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', tabId);
+    }
+  }, [clearTabDragIndicator]);
+
+  const handleTabDragOver = useCallback((event, targetTabId) => {
+    event.preventDefault();
+    const position = resolveDragInsertPosition(event);
+    setDragIndicator((prev) => (
+      prev.tabId === targetTabId && prev.position === position
+        ? prev
+        : { tabId: targetTabId, position }
+    ));
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }, [resolveDragInsertPosition]);
+
+  const handleTabDragLeave = useCallback((event, tabId) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget && event.currentTarget?.contains?.(relatedTarget)) {
+      return;
+    }
+    setDragIndicator((prev) => (prev.tabId === tabId ? { tabId: null, position: DRAG_INSERT_BEFORE } : prev));
+  }, []);
+
+  const handleTabDrop = useCallback((event, targetTabId) => {
+    event.preventDefault();
+    const sourceTabId = draggingTabIdRef.current
+      || (event.dataTransfer ? event.dataTransfer.getData('text/plain') : '');
+    const dropPosition = dragIndicator.tabId === targetTabId
+      ? dragIndicator.position
+      : resolveDragInsertPosition(event);
+    draggingTabIdRef.current = null;
+    clearTabDragIndicator();
+    if (!sourceTabId || sourceTabId === targetTabId) return;
+
+    setTabs((prevTabs) => reorderTabsById(prevTabs, sourceTabId, targetTabId, dropPosition));
+  }, [clearTabDragIndicator, dragIndicator.position, dragIndicator.tabId, resolveDragInsertPosition]);
+
+  const handleTabDragEnd = useCallback(() => {
+    draggingTabIdRef.current = null;
+    clearTabDragIndicator();
+  }, [clearTabDragIndicator]);
 
   const handleTabChange = useCallback((event, nextTabId) => {
     if (!nextTabId || nextTabId === activeTabId) return;
@@ -508,36 +614,80 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         scrollButtons="auto"
         sx={{ minHeight: 34, flex: 1, minWidth: 0 }}
       >
-        {tabs.map((tab) => (
-          <Tab
-            key={tab.id}
-            value={tab.id}
-            disableRipple
-            sx={{ minHeight: 34, textTransform: 'none', minWidth: 120, maxWidth: 260, px: 1 }}
-            label={(
-              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
-                {tab.viewMode === 'album'
-                  ? <PhotoAlbumIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />
-                  : <FolderIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />}
-                <Typography variant="caption" noWrap sx={{ flex: 1, textAlign: 'left' }}>
-                  {tab.title}
-                </Typography>
-                <IconButton
-                  size="small"
-                  sx={{ ml: 0.25, p: 0.25, flexShrink: 0 }}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    closeTabById(tab.id);
-                  }}
-                  aria-label={`关闭标签页 ${tab.title}`}
-                >
-                  <CloseIcon sx={{ fontSize: 13 }} />
-                </IconButton>
-              </Box>
-            )}
-          />
-        ))}
+        {tabs.map((tab) => {
+          const isDropTarget = dragIndicator.tabId === tab.id;
+          const showBeforeIndicator = isDropTarget && dragIndicator.position === DRAG_INSERT_BEFORE;
+          const showAfterIndicator = isDropTarget && dragIndicator.position === DRAG_INSERT_AFTER;
+
+          return (
+            <Tab
+              key={tab.id}
+              value={tab.id}
+              disableRipple
+              draggable
+              onDragStart={(event) => handleTabDragStart(event, tab.id)}
+              onDragOver={(event) => handleTabDragOver(event, tab.id)}
+              onDragLeave={(event) => handleTabDragLeave(event, tab.id)}
+              onDrop={(event) => handleTabDrop(event, tab.id)}
+              onDragEnd={handleTabDragEnd}
+              sx={{
+                minHeight: 34,
+                textTransform: 'none',
+                minWidth: 120,
+                maxWidth: 260,
+                px: 1,
+                cursor: 'grab',
+                position: 'relative',
+                ...(showBeforeIndicator ? {
+                  '&::before': {
+                    content: '""',
+                    position: 'absolute',
+                    left: 0,
+                    top: 4,
+                    bottom: 4,
+                    width: 2,
+                    bgcolor: 'primary.main',
+                    borderRadius: 2
+                  }
+                } : {}),
+                ...(showAfterIndicator ? {
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    right: 0,
+                    top: 4,
+                    bottom: 4,
+                    width: 2,
+                    bgcolor: 'primary.main',
+                    borderRadius: 2
+                  }
+                } : {})
+              }}
+              label={(
+                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
+                  {tab.viewMode === 'album'
+                    ? <PhotoAlbumIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />
+                    : <FolderIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />}
+                  <Typography variant="caption" noWrap sx={{ flex: 1, textAlign: 'left' }}>
+                    {tab.title}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    sx={{ ml: 0.25, p: 0.25, flexShrink: 0 }}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      closeTabById(tab.id);
+                    }}
+                    aria-label={`关闭标签页 ${tab.title}`}
+                  >
+                    <CloseIcon sx={{ fontSize: 13 }} />
+                  </IconButton>
+                </Box>
+              )}
+            />
+          );
+        })}
       </Tabs>
 
       <Tooltip title="标签页列表">
@@ -592,7 +742,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         </MenuItem>
       </Menu>
     </Box>
-  ), [activeTabId, closeTabById, handleCloseOthers, handleOpenFolderToTarget, handleTabChange, navigateTab, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
+  ), [activeTabId, closeTabById, dragIndicator.position, dragIndicator.tabId, handleCloseOthers, handleOpenFolderToTarget, handleTabChange, handleTabDragEnd, handleTabDragLeave, handleTabDragOver, handleTabDragStart, handleTabDrop, navigateTab, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
 
   // 如果是重定向，不渲染内容
   if (redirectFromOldRoute) {

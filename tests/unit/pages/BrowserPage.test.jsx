@@ -50,11 +50,14 @@ const setupRouterMocks = ({
 };
 
 describe('BrowserPage', () => {
-  const BrowserPage = require('../../../src/renderer/pages/BrowserPage').default;
+  const browserPageModule = require('../../../src/renderer/pages/BrowserPage');
+  const BrowserPage = browserPageModule.default;
+  const { reorderTabsById } = browserPageModule;
 
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    navigationUtils.getLastPath.mockReturnValue('');
   });
 
   test('renders HomePage for root folder view', () => {
@@ -142,6 +145,19 @@ describe('BrowserPage', () => {
     expect(navigationUtils.setLastPath).toHaveBeenCalledWith('/photos');
   });
 
+  test('falls back to default root directory when no tabs session and no last path', () => {
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    localStorage.setItem('lastRootPath_default', '/photos/default-root');
+
+    render(<BrowserPage colorMode="light" />);
+
+    expect(navigateMock).toHaveBeenCalledWith('/photos/default-root', {
+      initialImage: null,
+      replace: true,
+      viewMode: 'folder'
+    });
+  });
+
   test('redirects legacy route with album path to new browse url', () => {
     const navigateMock = setupRouterMocks({
       pathname: '/album',
@@ -173,5 +189,40 @@ describe('BrowserPage', () => {
       replace: true,
       state: null
     });
+  });
+
+  test('reorderTabsById moves dragged tab before target tab', () => {
+    const tabs = [
+      { id: 'tab-a', title: 'A' },
+      { id: 'tab-b', title: 'B' },
+      { id: 'tab-c', title: 'C' },
+      { id: 'tab-d', title: 'D' }
+    ];
+
+    const reordered = reorderTabsById(tabs, 'tab-a', 'tab-c');
+
+    expect(reordered.map((tab) => tab.id)).toEqual(['tab-b', 'tab-a', 'tab-c', 'tab-d']);
+  });
+
+  test('reorderTabsById keeps list unchanged for invalid ids', () => {
+    const tabs = [
+      { id: 'tab-a', title: 'A' },
+      { id: 'tab-b', title: 'B' }
+    ];
+
+    expect(reorderTabsById(tabs, 'tab-x', 'tab-b')).toBe(tabs);
+    expect(reorderTabsById(tabs, 'tab-a', 'tab-a')).toBe(tabs);
+  });
+
+  test('reorderTabsById supports dropping after target tab', () => {
+    const tabs = [
+      { id: 'tab-a', title: 'A' },
+      { id: 'tab-b', title: 'B' },
+      { id: 'tab-c', title: 'C' },
+      { id: 'tab-d', title: 'D' }
+    ];
+
+    const reordered = reorderTabsById(tabs, 'tab-a', 'tab-c', 'after');
+    expect(reordered.map((tab) => tab.id)).toEqual(['tab-b', 'tab-c', 'tab-a', 'tab-d']);
   });
 });
