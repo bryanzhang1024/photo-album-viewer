@@ -1,6 +1,7 @@
 /** @jest-environment node */
 
 const path = require('path');
+const fs = require('fs');
 const {
   scanNavigationLevel,
   scanDirectoryTree,
@@ -121,6 +122,28 @@ describe('FileSystemService', () => {
       folderCount: 1,
       albumCount: 2
     });
+  });
+
+  test('scanNavigationLevel uses first image by natural filename order for album preview', async () => {
+    mockFs = createFsMock({
+      '/photos': {
+        numbered: {
+          '1.jpg': Buffer.from('first'),
+          '40.jpg': Buffer.from('last')
+        }
+      }
+    });
+
+    fs.utimesSync('/photos/numbered/1.jpg', new Date('2020-01-01T00:00:00.000Z'), new Date('2020-01-01T00:00:00.000Z'));
+    fs.utimesSync('/photos/numbered/40.jpg', new Date('2024-01-01T00:00:00.000Z'), new Date('2024-01-01T00:00:00.000Z'));
+
+    const result = await scanNavigationLevel('/photos');
+    const albumNode = result.nodes.find(
+      (node) => node.type === 'album' && node.name === 'numbered'
+    );
+
+    expect(albumNode).toBeDefined();
+    expect(albumNode.previewImages[0]).toBe('/photos/numbered/1.jpg');
   });
 
   test('scanNavigationLevel returns error response when path missing', async () => {

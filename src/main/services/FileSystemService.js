@@ -29,6 +29,47 @@ const NODE_TYPES = {
   EMPTY: 'empty'
 };
 
+function compareImageNameNaturalAsc(left, right) {
+  const leftName = left?.name || path.basename(left?.path || '');
+  const rightName = right?.name || path.basename(right?.path || '');
+  return leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function buildPreviewImagesByName(imageFiles = []) {
+  return [...imageFiles]
+    .sort(compareImageNameNaturalAsc)
+    .slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
+}
+
+function resolveImageDateStats(imageFiles = [], dateGetter) {
+  let minTimestamp = null;
+  let maxTimestamp = null;
+
+  imageFiles.forEach((file) => {
+    const rawDate = dateGetter(file);
+    if (!rawDate) return;
+
+    const timestamp = rawDate instanceof Date
+      ? rawDate.getTime()
+      : new Date(rawDate).getTime();
+
+    if (!Number.isFinite(timestamp)) return;
+
+    if (minTimestamp === null || timestamp < minTimestamp) {
+      minTimestamp = timestamp;
+    }
+    if (maxTimestamp === null || timestamp > maxTimestamp) {
+      maxTimestamp = timestamp;
+    }
+  });
+
+  return {
+    firstImageDate: minTimestamp === null ? null : new Date(minTimestamp),
+    lastImageDate: maxTimestamp === null ? null : new Date(maxTimestamp),
+    lastModified: maxTimestamp === null ? new Date() : new Date(maxTimestamp)
+  };
+}
+
 /**
  * 智能扫描单层目录，返回导航节点
  * @param {string} targetPath - 目标路径
@@ -68,12 +109,14 @@ async function scanNavigationLevel(targetPath) {
 
     // 3. 如果当前目录有图片，则创建一个“同名相簿”节点
     if (imageFiles.length > 0) {
-      imageFiles.sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime());
+      const previewImages = buildPreviewImagesByName(imageFiles);
+      const dateStats = resolveImageDateStats(imageFiles, (file) => file.stats?.mtime);
       const albumStats = {
         imageCount: imageFiles.length,
-        previewImages: imageFiles.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES).map(f => f.path),
-        lastModified: imageFiles.length > 0 ? imageFiles[0].stats.mtime : new Date(),
-        firstImageDate: imageFiles.length > 0 ? imageFiles[imageFiles.length - 1].stats.mtime : null,
+        previewImages: previewImages.map((file) => file.path),
+        lastModified: dateStats.lastModified,
+        firstImageDate: dateStats.firstImageDate,
+        lastImageDate: dateStats.lastImageDate,
         totalSize: imageFiles.reduce((sum, img) => sum + img.stats.size, 0),
       };
       const selfAlbumNode = createAlbumNode(targetPath, path.basename(targetPath), albumStats);
@@ -211,17 +254,17 @@ async function getAlbumStats(dirPath) {
       }
     }
     
-    // 按修改时间排序，取前4张作为预览
-    imageFiles.sort((a, b) => b.lastModified - a.lastModified);
-    const previewImages = imageFiles.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
+    // 预览图按文件名自然正序，优先使用“第一张”（例如 1.jpg）
+    const previewImages = buildPreviewImagesByName(imageFiles);
+    const dateStats = resolveImageDateStats(imageFiles, (file) => file.lastModified);
     
     return {
       imageCount: imageFiles.length,
       previewImages: previewImages.map(img => img.path),
-      firstImageDate: imageFiles.length > 0 ? imageFiles[imageFiles.length - 1].lastModified : null,
-      lastImageDate: imageFiles.length > 0 ? imageFiles[0].lastModified : null,
+      firstImageDate: dateStats.firstImageDate,
+      lastImageDate: dateStats.lastImageDate,
       totalSize: imageFiles.reduce((sum, img) => sum + img.size, 0),
-      lastModified: imageFiles.length > 0 ? imageFiles[0].lastModified : new Date()
+      lastModified: dateStats.lastModified
     };
     
   } catch (error) {
