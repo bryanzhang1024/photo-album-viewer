@@ -260,7 +260,6 @@ function ImageCard({
               objectFit: 'cover',
               display: 'block'
             }}
-            loading="lazy"
             onLoad={handleImageLoaded}
             onError={handleImageError}
           />

@@ -996,7 +996,6 @@ function AlbumPage({
                         onClick={() => handleImageClick(actualIndex)}
                         density={userDensity}
                         albumPath={decodedAlbumPath}
-                        lazyLoad={true}
                       />
                     </Box>
                   );
