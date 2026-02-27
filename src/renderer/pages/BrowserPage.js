@@ -105,6 +105,22 @@ const sanitizeTabFromSession = (tab) => {
   };
 };
 
+const findSessionTabMatchingURL = (tabsSession, urlState) => {
+  if (!tabsSession || !Array.isArray(tabsSession.tabs) || !urlState?.targetPath) {
+    return null;
+  }
+
+  const normalizedTargetPath = normalizeTargetPath(urlState.targetPath || '');
+  const expectedViewMode = urlState.viewMode === 'album' ? 'album' : 'folder';
+  const expectedImage = urlState.initialImage || null;
+
+  return tabsSession.tabs.find((tab) => (
+    tab.targetPath === normalizedTargetPath
+    && tab.viewMode === expectedViewMode
+    && (tab.initialImage || null) === expectedImage
+  )) || null;
+};
+
 export const reorderTabsById = (tabs, sourceTabId, targetTabId, position = DRAG_INSERT_BEFORE) => {
   if (!Array.isArray(tabs) || tabs.length < 2) return tabs;
   if (!sourceTabId || !targetTabId || sourceTabId === targetTabId) return tabs;
@@ -236,8 +252,8 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       return;
     }
 
-    // 已经有明确的目标路径或处于旧路由重定向流程时，不做会话恢复
-    if (redirectFromOldRoute || urlState.targetPath) {
+    // 旧路由重定向流程不做会话恢复
+    if (redirectFromOldRoute) {
       hasInitializedTabsSession.current = true;
       return;
     }
@@ -266,12 +282,24 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
     const restoredTabsSession = loadTabsSession();
     if (restoredTabsSession) {
+      const matchedURLTab = findSessionTabMatchingURL(restoredTabsSession, urlState);
+      if (urlState.targetPath && !matchedURLTab) {
+        // 保持深链接行为：URL 无法匹配历史标签时，不覆盖当前 URL 导航
+        hasInitializedTabsSession.current = true;
+        return;
+      }
+
       hasRestoredSession.current = true;
       hasInitializedTabsSession.current = true;
       setTabs(restoredTabsSession.tabs);
-      setActiveTabId(restoredTabsSession.activeTabId);
+      const nextActiveTabId = matchedURLTab?.id || restoredTabsSession.activeTabId;
+      setActiveTabId(nextActiveTabId);
 
-      const activeTab = restoredTabsSession.tabs.find((tab) => tab.id === restoredTabsSession.activeTabId)
+      if (urlState.targetPath) {
+        return;
+      }
+
+      const activeTab = restoredTabsSession.tabs.find((tab) => tab.id === nextActiveTabId)
         || restoredTabsSession.tabs[0];
 
       navigateWithPersist(activeTab.targetPath, {
@@ -322,7 +350,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     }
 
     hasInitializedTabsSession.current = true;
-  }, [redirectFromOldRoute, urlState.targetPath, location.search, navigateWithPersist]);
+  }, [redirectFromOldRoute, urlState.targetPath, urlState.viewMode, urlState.initialImage, location.search, navigateWithPersist]);
 
   // 路径变化时保存会话
   useEffect(() => {

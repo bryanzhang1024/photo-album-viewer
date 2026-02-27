@@ -12,11 +12,11 @@ jest.mock('react-router-dom', () => {
 });
 
 jest.mock('../../../src/renderer/pages/HomePage', () =>
-  jest.fn(() => <div data-testid="home-page" />)
+  jest.fn((props) => <div data-testid="home-page">{props.tabsHeaderContent}</div>)
 );
 
 jest.mock('../../../src/renderer/pages/AlbumPage', () =>
-  jest.fn(() => <div data-testid="album-page" />)
+  jest.fn((props) => <div data-testid="album-page">{props.tabsHeaderContent}</div>)
 );
 
 jest.mock('../../../src/renderer/utils/navigation', () => {
@@ -132,6 +132,70 @@ describe('BrowserPage', () => {
       initialImage: 'cover.jpg',
       replace: true
     });
+  });
+
+  test('restores full tabs when current URL matches a saved tab', () => {
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse/%2Falbums%2Fwedding',
+      search: '?view=album&image=cover.jpg'
+    });
+
+    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
+      tabs: [
+        {
+          id: 'tab-folder',
+          targetPath: '/albums/trip',
+          viewMode: 'folder',
+          initialImage: null
+        },
+        {
+          id: 'tab-album',
+          targetPath: '/albums/wedding',
+          viewMode: 'album',
+          initialImage: 'cover.jpg'
+        }
+      ],
+      activeTabId: 'tab-folder'
+    }));
+
+    render(<BrowserPage colorMode="dark" />);
+
+    expect(screen.getByRole('tab', { name: /trip/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /wedding/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /wedding/i })).toHaveAttribute('aria-selected', 'true');
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  test('keeps deep link as single tab when URL does not match saved session tabs', () => {
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse/%2Fnew%2Fpath',
+      search: '?view=folder'
+    });
+
+    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
+      tabs: [
+        {
+          id: 'tab-old',
+          targetPath: '/albums/wedding',
+          viewMode: 'album',
+          initialImage: null
+        },
+        {
+          id: 'tab-other',
+          targetPath: '/albums/trip',
+          viewMode: 'folder',
+          initialImage: null
+        }
+      ],
+      activeTabId: 'tab-old'
+    }));
+
+    render(<BrowserPage colorMode="dark" />);
+
+    expect(screen.getByRole('tab', { name: /path/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /wedding/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /trip/i })).not.toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   test('tracks last path for non-root navigation', () => {
