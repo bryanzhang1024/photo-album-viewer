@@ -18,6 +18,7 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
@@ -707,6 +708,16 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               sx={{ mr: 1 }}
             >
               <FolderOpenIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="复制原始图片文件 (Ctrl/Cmd+C)">
+            <IconButton
+              color="inherit"
+              onClick={() => handleCopyCurrentImage('file')}
+              size="small"
+              sx={{ mr: 1 }}
+            >
+              <ContentCopyIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="缩小 (Ctrl+滚轮向下)">
