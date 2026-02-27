@@ -98,12 +98,16 @@ function AlbumPage({
 
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
+  const scrollPositionKey = useMemo(
+    () => `${location.pathname}${location.search}`,
+    [location.pathname, location.search]
+  );
 
   const saveScrollPosition = useCallback(() => {
     if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
+      scrollContext.savePosition(scrollPositionKey, scrollContainerRef.current.scrollTop);
     }
-  }, [scrollContext, location.pathname]);
+  }, [scrollContext, scrollPositionKey]);
 
   const navigateToFolderPath = useCallback((targetPath, options = {}) => {
     saveScrollPosition();
@@ -313,6 +317,19 @@ function AlbumPage({
       setVirtualScrollParent(scrollContainerRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!scrollContainerRef.current) {
+        return;
+      }
+
+      const savedPosition = scrollContext.getPosition(scrollPositionKey);
+      scrollContainerRef.current.scrollTop = savedPosition;
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [scrollContext, scrollPositionKey]);
 
   // 从localStorage中读取密度设置
   useEffect(() => {

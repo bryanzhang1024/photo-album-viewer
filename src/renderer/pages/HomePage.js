@@ -179,6 +179,15 @@ function HomePage({
 
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
+  const scrollPositionKey = useMemo(
+    () => `${location.pathname}${location.search}`,
+    [location.pathname, location.search]
+  );
+  const saveScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(scrollPositionKey, scrollContainerRef.current.scrollTop);
+    }
+  }, [scrollContext, scrollPositionKey]);
   
   // 获取收藏上下文
   const { favorites } = useFavorites();
@@ -298,14 +307,14 @@ function HomePage({
   // 在组件挂载后恢复滚动位置
   useEffect(() => {
     const timer = setTimeout(() => {
-      const savedPosition = scrollContext.getPosition(location.pathname);
-      if (savedPosition && scrollContainerRef.current) {
+      if (scrollContainerRef.current) {
+        const savedPosition = scrollContext.getPosition(scrollPositionKey);
         scrollContainerRef.current.scrollTop = savedPosition;
       }
     }, 100);
     
     return () => clearTimeout(timer);
-  }, [location.pathname, scrollContext]);
+  }, [scrollContext, scrollPositionKey]);
   
   // 添加键盘快捷键监听
   useEffect(() => {
@@ -421,13 +430,11 @@ function HomePage({
       if (urlMode && onAlbumClick) {
         onAlbumClick(node.path, node.name);
       } else {
-        if (scrollContainerRef.current) {
-          scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-        }
+        saveScrollPosition();
         navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
       }
     }
-  }, [urlMode, onFolderClick, onAlbumClick, scanNavigationLevel, scrollContext, location.pathname, navigate]);
+  }, [urlMode, onFolderClick, onAlbumClick, scanNavigationLevel, navigate, saveScrollPosition]);
 
   // 处理浮动导航面板的相册点击
   const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
@@ -559,9 +566,7 @@ function HomePage({
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
     // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
+    saveScrollPosition();
     
     navigate('/favorites');
   };
@@ -575,9 +580,7 @@ function HomePage({
       const randomAlbum = albumNodes[randomIndex];
       
       // 保存当前滚动位置
-      if (scrollContainerRef.current) {
-        scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-      }
+      saveScrollPosition();
       
       // 导航到随机选择的相簿
       if (urlMode && onAlbumClick) {
@@ -588,14 +591,12 @@ function HomePage({
     } else {
       setError('没有可用的相簿进行随机选择');
     }
-  }, [urlMode, onAlbumClick, albumNodes, scrollContext, location.pathname, navigate]);
+  }, [urlMode, onAlbumClick, albumNodes, navigate, saveScrollPosition]);
 
   // 处理导航面板的文件夹导航 - 真正的层级浏览
   const handleNavigationPanelNavigate = (folderPath) => {
     // 保存当前滚动位置
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
+    saveScrollPosition();
 
     // 导航逻辑：使用统一的currentPath
     if (folderPath && folderPath !== currentPath) {
@@ -606,9 +607,7 @@ function HomePage({
 
   // 返回根目录
   const handleReturnToRoot = () => {
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
+    saveScrollPosition();
     scanNavigationLevel(rootPath);
   };
 

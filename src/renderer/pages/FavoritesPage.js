@@ -61,6 +61,15 @@ function FavoritesPage({ colorMode }) {
   
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
+  const scrollPositionKey = useMemo(
+    () => `${location.pathname}${location.search}`,
+    [location.pathname, location.search]
+  );
+  const saveScrollPosition = () => {
+    if (scrollContainerRef.current) {
+      scrollContext.savePosition(scrollPositionKey, scrollContainerRef.current.scrollTop);
+    }
+  };
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -90,14 +99,14 @@ function FavoritesPage({ colorMode }) {
   // 在组件挂载后恢复滚动位置
   useEffect(() => {
     const timer = setTimeout(() => {
-      const savedPosition = scrollContext.getPosition(location.pathname);
-      if (savedPosition && scrollContainerRef.current) {
+      if (scrollContainerRef.current) {
+        const savedPosition = scrollContext.getPosition(scrollPositionKey);
         scrollContainerRef.current.scrollTop = savedPosition;
       }
     }, 100);
     
     return () => clearTimeout(timer);
-  }, [location.pathname, scrollContext]);
+  }, [scrollContext, scrollPositionKey]);
 
   // 处理标签页切换
   const handleTabChange = (event, newValue) => {
@@ -111,9 +120,7 @@ function FavoritesPage({ colorMode }) {
 
   // 处理返回首页
   const handleHome = () => {
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
+    saveScrollPosition();
     navigate('/');
   };
 
@@ -136,17 +143,13 @@ function FavoritesPage({ colorMode }) {
 
   // 处理相簿点击
   const handleAlbumClick = (albumPath) => {
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
+    saveScrollPosition();
     navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
   // 处理图片点击
   const handleImageClick = (index) => {
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
+    saveScrollPosition();
 
     const images = sortedImages.map(img => ({
       path: img.path,
@@ -161,9 +164,7 @@ function FavoritesPage({ colorMode }) {
 
   // 处理导航到相册
   const handleNavigateToAlbum = (albumPath) => {
-    if (scrollContainerRef.current) {
-      scrollContext.savePosition(location.pathname, scrollContainerRef.current.scrollTop);
-    }
+    saveScrollPosition();
     navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
