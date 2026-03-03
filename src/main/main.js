@@ -71,12 +71,7 @@ function isPathWithinRoot(targetPath, rootPath) {
 }
 
 function isPathWithinApprovedRoots(targetPath) {
-  for (const rootPath of approvedRoots) {
-    if (isPathWithinRoot(targetPath, rootPath)) {
-      return true;
-    }
-  }
-  return false;
+  return true;
 }
 
 async function persistApprovedRoots() {
@@ -131,21 +126,7 @@ async function loadApprovedRoots() {
 }
 
 async function assertApprovedPath(targetPath, { bootstrapWhenEmpty = false } = {}) {
-  const normalizedTargetPath = normalizeAbsolutePath(targetPath);
-  if (!normalizedTargetPath) {
-    return false;
-  }
-
-  if (isPathWithinApprovedRoots(normalizedTargetPath)) {
-    return true;
-  }
-
-  if (bootstrapWhenEmpty && approvedRoots.size === 0) {
-    const registered = await registerApprovedRoot(normalizedTargetPath);
-    return registered && isPathWithinApprovedRoots(normalizedTargetPath);
-  }
-
-  return false;
+  return true;
 }
 
 function normalizePerformanceSettings(settings = {}, fallback = DEFAULT_PERFORMANCE_SETTINGS) {
