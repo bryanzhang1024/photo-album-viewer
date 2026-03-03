@@ -78,6 +78,7 @@ function AlbumPage({
   const theme = useTheme();
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [userDensity, setUserDensity] = useState(() => {
     const savedDensity = localStorage.getItem('userDensity');
@@ -156,7 +157,7 @@ function AlbumPage({
   });
 
   // 使用自定义 Hooks
-  const { images, loading, error, loadImages } = useAlbumImages(decodedAlbumPath);
+  const { images, loading, error: loadError, loadImages } = useAlbumImages(decodedAlbumPath);
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
 
@@ -186,7 +187,7 @@ function AlbumPage({
 
     try {
       // 扫描路径获取基本信息
-      const scanResult = await ipcRenderer.invoke('scan-directory', path);
+      const scanResult = await ipcRenderer.invoke(CHANNELS.SCAN_DIRECTORY, path);
 
       if (!scanResult || !scanResult.nodes) {
         return 'unknown';
@@ -231,7 +232,7 @@ function AlbumPage({
 
     try {
       // 获取该路径下的实际图片列表
-      const images = await ipcRenderer.invoke('get-album-images', path);
+      const images = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, path);
       return images ? images.length : 0;
     } catch (error) {
       console.error('获取路径图片数量失败:', error);
@@ -1060,7 +1061,7 @@ function AlbumPage({
   return (
     <PageLayout
       loading={loading}
-      error={error}
+      error={loadError}
       headerContent={renderHeader()}
       subHeaderContent={tabsHeaderContent}
       scrollContainerRef={scrollContainerRef}

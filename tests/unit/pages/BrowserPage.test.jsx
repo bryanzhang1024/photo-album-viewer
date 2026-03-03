@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
@@ -288,5 +288,24 @@ describe('BrowserPage', () => {
 
     const reordered = reorderTabsById(tabs, 'tab-a', 'tab-c', 'after');
     expect(reordered.map((tab) => tab.id)).toEqual(['tab-b', 'tab-c', 'tab-a', 'tab-d']);
+  });
+
+  test('go back from Windows drive subpath navigates to drive root', () => {
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse/C%3A%2Fphotos',
+      search: '?view=album'
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    const latestAlbumProps = AlbumPage.mock.calls[AlbumPage.mock.calls.length - 1][0];
+    act(() => {
+      latestAlbumProps.onGoBack();
+    });
+
+    expect(navigateMock).toHaveBeenCalledWith('C:/', {
+      viewMode: 'folder',
+      initialImage: null,
+      replace: false
+    });
   });
 });

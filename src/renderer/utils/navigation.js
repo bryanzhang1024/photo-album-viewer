@@ -4,6 +4,10 @@ export const normalizeTargetPath = (rawPath = '') => {
   if (!rawPath) return '';
   let normalized = rawPath.replace(/\\/g, '/');
 
+  if (/^[A-Za-z]:$/.test(normalized)) {
+    return `${normalized}/`;
+  }
+
   if (/^[A-Za-z]:\//.test(normalized)) {
     return normalized;
   }

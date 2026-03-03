@@ -1,4 +1,4 @@
-const { app, ipcMain, dialog, shell, Menu, session, BrowserWindow } = require('electron');
+const { app, ipcMain, dialog, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -44,6 +44,109 @@ const thumbnailProtocolStats = {
 const THUMBNAIL_PROTOCOL_PREFIX = 'thumbnail-protocol://';
 const LOCAL_IMAGE_PROTOCOL_PREFIX = 'local-image-protocol://';
 const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff']);
+const APPROVED_ROOTS_FILE = path.join(app.getPath('userData'), 'approved-roots.json');
+const approvedRoots = new Set();
+let approvedRootsLoaded = false;
+
+function normalizeAbsolutePath(inputPath) {
+  if (!inputPath || typeof inputPath !== 'string') {
+    return null;
+  }
+  if (!path.isAbsolute(inputPath)) {
+    return null;
+  }
+  return path.resolve(path.normalize(inputPath));
+}
+
+function isPathWithinRoot(targetPath, rootPath) {
+  const normalizedTargetPath = normalizeAbsolutePath(targetPath);
+  const normalizedRootPath = normalizeAbsolutePath(rootPath);
+  if (!normalizedTargetPath || !normalizedRootPath) {
+    return false;
+  }
+  return (
+    normalizedTargetPath === normalizedRootPath
+    || normalizedTargetPath.startsWith(`${normalizedRootPath}${path.sep}`)
+  );
+}
+
+function isPathWithinApprovedRoots(targetPath) {
+  for (const rootPath of approvedRoots) {
+    if (isPathWithinRoot(targetPath, rootPath)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function persistApprovedRoots() {
+  const payload = {
+    roots: Array.from(approvedRoots)
+  };
+  await writeFile(APPROVED_ROOTS_FILE, JSON.stringify(payload, null, 2), 'utf8');
+}
+
+async function registerApprovedRoot(candidatePath, { persist = true } = {}) {
+  const normalizedCandidate = normalizeAbsolutePath(candidatePath);
+  if (!normalizedCandidate) {
+    return false;
+  }
+
+  try {
+    const stats = await fs.promises.stat(normalizedCandidate);
+    const rootPath = stats.isDirectory() ? normalizedCandidate : path.dirname(normalizedCandidate);
+    if (!approvedRoots.has(rootPath)) {
+      approvedRoots.add(rootPath);
+      if (persist) {
+        await persistApprovedRoots();
+      }
+      console.log(`[Security] 注册允许访问目录: ${rootPath}`);
+    }
+    return true;
+  } catch (error) {
+    console.warn(`[Security] 注册目录失败: ${normalizedCandidate}`, error?.message || error);
+    return false;
+  }
+}
+
+async function loadApprovedRoots() {
+  if (approvedRootsLoaded) {
+    return;
+  }
+
+  approvedRootsLoaded = true;
+
+  try {
+    const content = await readFile(APPROVED_ROOTS_FILE, 'utf8');
+    const parsed = JSON.parse(content);
+    const roots = Array.isArray(parsed?.roots) ? parsed.roots : [];
+    for (const rootPath of roots) {
+      await registerApprovedRoot(rootPath, { persist: false });
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.warn('[Security] 加载允许目录失败:', error?.message || error);
+    }
+  }
+}
+
+async function assertApprovedPath(targetPath, { bootstrapWhenEmpty = false } = {}) {
+  const normalizedTargetPath = normalizeAbsolutePath(targetPath);
+  if (!normalizedTargetPath) {
+    return false;
+  }
+
+  if (isPathWithinApprovedRoots(normalizedTargetPath)) {
+    return true;
+  }
+
+  if (bootstrapWhenEmpty && approvedRoots.size === 0) {
+    const registered = await registerApprovedRoot(normalizedTargetPath);
+    return registered && isPathWithinApprovedRoots(normalizedTargetPath);
+  }
+
+  return false;
+}
 
 function normalizePerformanceSettings(settings = {}, fallback = DEFAULT_PERFORMANCE_SETTINGS) {
   const resolved = { ...fallback };
@@ -110,6 +213,11 @@ if (!gotTheLock) {
     }
     
     console.log('解析到的文件夹路径:', albumPath);
+    if (albumPath) {
+      registerApprovedRoot(albumPath).catch((error) => {
+        console.warn('[Security] second-instance 注册目录失败:', error?.message || error);
+      });
+    }
     
     // 创建新窗口
     const newWindow = createWindow(albumPath);
@@ -161,6 +269,7 @@ const handleCommandLine = () => {
 };
 
 app.whenReady().then(async () => {
+  await loadApprovedRoots();
   await ThumbnailService.ensureCacheDir(); // 使用ThumbnailService
 
   // 注册一个安全的自定义文件协议来提供缩略图
@@ -189,14 +298,15 @@ app.whenReady().then(async () => {
       return;
     }
 
-    if (fs.existsSync(resolvedPath)) {
-      thumbnailProtocolStats.hitCount++;
-      callback({ path: path.normalize(resolvedPath) });
-      return;
-    }
-
-    thumbnailProtocolStats.missCount++;
-    callback(-6); // FILE_NOT_FOUND
+    fs.promises.access(resolvedPath, fs.constants.F_OK)
+      .then(() => {
+        thumbnailProtocolStats.hitCount++;
+        callback({ path: path.normalize(resolvedPath) });
+      })
+      .catch(() => {
+        thumbnailProtocolStats.missCount++;
+        callback(-6); // FILE_NOT_FOUND
+      });
   });
 
   // 注册安全的本地图片协议，用于查看器加载原图（替代 file://）
@@ -225,23 +335,30 @@ app.whenReady().then(async () => {
       return;
     }
 
-    try {
-      const stats = fs.statSync(normalizedPath);
-      if (!stats.isFile()) {
-        callback(-6); // FILE_NOT_FOUND
-        return;
-      }
-    } catch (error) {
-      callback(-6); // FILE_NOT_FOUND
+    if (!isPathWithinApprovedRoots(normalizedPath)) {
+      callback(-10); // ACCESS_DENIED
       return;
     }
 
-    callback({ path: normalizedPath });
+    fs.promises.stat(normalizedPath)
+      .then((stats) => {
+        if (!stats.isFile()) {
+          callback(-6); // FILE_NOT_FOUND
+          return;
+        }
+        callback({ path: normalizedPath });
+      })
+      .catch(() => {
+        callback(-6); // FILE_NOT_FOUND
+      });
   });
   
   // 处理命令行参数，使用指定的文件夹路径
   const initialPath = handleCommandLine();
   console.log('启动时的初始路径:', initialPath);
+  if (initialPath) {
+    await registerApprovedRoot(initialPath);
+  }
   
   createWindow(initialPath);
   
@@ -275,7 +392,9 @@ ipcMain.handle(CHANNELS.SELECT_DIRECTORY, async () => {
     });
     
     if (!result.canceled && result.filePaths.length > 0) {
-      return result.filePaths[0];
+      const selectedDirectory = result.filePaths[0];
+      await registerApprovedRoot(selectedDirectory);
+      return selectedDirectory;
     }
     return null;
   } catch (error) {
@@ -287,6 +406,11 @@ ipcMain.handle(CHANNELS.SELECT_DIRECTORY, async () => {
 // 新的智能导航API
 ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
   try {
+    const isAllowed = await assertApprovedPath(targetPath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      return FileSystemService.createErrorResponse('访问路径不在已授权照片目录范围内', targetPath);
+    }
+
     console.log(`开始智能扫描: ${targetPath}`);
     const response = await FileSystemService.scanNavigationLevel(targetPath);
     console.log(`扫描完成: ${response.metadata ? `${response.metadata.totalNodes} 个节点，耗时 ${response.metadata.scanTime}ms` : '扫描失败'}`);
@@ -300,6 +424,11 @@ ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
 // 处理扫描文件夹请求（兼容性保留）
 ipcMain.handle(CHANNELS.SCAN_DIRECTORY, async (event, rootPath) => {
   try {
+    const isAllowed = await assertApprovedPath(rootPath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      return [];
+    }
+
     console.log(`开始扫描文件夹: ${rootPath}（兼容模式）`);
     const startTime = Date.now();
     const albums = await FileSystemService.scanDirectories(rootPath);
@@ -313,18 +442,37 @@ ipcMain.handle(CHANNELS.SCAN_DIRECTORY, async (event, rootPath) => {
 });
 
 // 获取图片的缩略图 - 使用新的服务
-ipcMain.handle(CHANNELS.GET_IMAGE_THUMBNAIL, (event, imagePath, priority = 0) => {
+ipcMain.handle(CHANNELS.GET_IMAGE_THUMBNAIL, async (event, imagePath, priority = 0) => {
+    const isAllowed = await assertApprovedPath(imagePath);
+    if (!isAllowed) {
+      return null;
+    }
     return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
 });
 
 // 获取单个图片的缩略图 - 与get-image-thumbnail功能相同，但为了兼容性添加
-ipcMain.handle(CHANNELS.GET_THUMBNAIL, (event, imagePath, priority = 0) => {
+ipcMain.handle(CHANNELS.GET_THUMBNAIL, async (event, imagePath, priority = 0) => {
+    const isAllowed = await assertApprovedPath(imagePath);
+    if (!isAllowed) {
+      return null;
+    }
     return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
 });
 
 // 批量请求预览图 - 提高效率的新接口
 ipcMain.handle(CHANNELS.GET_BATCH_THUMBNAILS, async (event, imagePaths, priority = 0) => {
-    const promises = imagePaths.map(p => ThumbnailService.generateThumbnail(p, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5).then(url => ({[p]: url})));
+    if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
+      return {};
+    }
+
+    const approvedPaths = [];
+    for (const imagePath of imagePaths) {
+      if (await assertApprovedPath(imagePath)) {
+        approvedPaths.push(imagePath);
+      }
+    }
+
+    const promises = approvedPaths.map(p => ThumbnailService.generateThumbnail(p, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5).then(url => ({[p]: url})));
     const results = await Promise.all(promises);
     return Object.assign({}, ...results);
 });
@@ -332,6 +480,10 @@ ipcMain.handle(CHANNELS.GET_BATCH_THUMBNAILS, async (event, imagePaths, priority
 
 
 ipcMain.handle(CHANNELS.GET_ALBUM_IMAGES, async (event, albumPath) => {
+    const isAllowed = await assertApprovedPath(albumPath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      return [];
+    }
     return FileSystemService.getAlbumImages(albumPath);
 });
 
@@ -424,6 +576,10 @@ ipcMain.handle(CHANNELS.CLEAR_THUMBNAIL_CACHE, async () => {
 // 在文件管理器中显示图片
 ipcMain.handle(CHANNELS.SHOW_IN_FOLDER, async (event, filePath) => {
   try {
+    const isAllowed = await assertApprovedPath(filePath);
+    if (!isAllowed) {
+      return { success: false, error: '访问路径不在已授权照片目录范围内' };
+    }
     shell.showItemInFolder(filePath);
     return { success: true };
   } catch (error) {
@@ -436,8 +592,15 @@ ipcMain.handle(CHANNELS.SHOW_IN_FOLDER, async (event, filePath) => {
 ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 'image') => {
   try {
     const { clipboard, nativeImage } = require('electron');
-    
-    if (!fs.existsSync(filePath)) {
+
+    const isAllowed = await assertApprovedPath(filePath);
+    if (!isAllowed) {
+      throw new Error('访问路径不在已授权照片目录范围内');
+    }
+
+    try {
+      await fs.promises.access(filePath, fs.constants.F_OK);
+    } catch (error) {
       throw new Error('图片文件不存在');
     }
     
@@ -517,71 +680,24 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 
   }
 });
 
-// 显示右键菜单
-ipcMain.handle(CHANNELS.SHOW_CONTEXT_MENU, async (event, menuItems) => {
-  try {
-    console.log('=== 显示右键菜单开始 ===');
-    
-    // 获取当前窗口
-    const window = BrowserWindow.fromWebContents(event.sender);
-    
-    if (!window) {
-      console.error('无法获取当前窗口');
-      return { success: false, error: '无法获取窗口' };
-    }
-    
-    console.log('当前窗口ID:', window.id);
-    
-    // 获取鼠标位置
-    const { screen } = require('electron');
-    const cursorPos = screen.getCursorScreenPoint();
-    
-    console.log('鼠标位置:', cursorPos.x, cursorPos.y);
-    
-    // 创建菜单模板
-    const menuTemplate = [
-      {
-        label: '在新实例中查看此文件夹',
-        click: () => {
-          // 直接调用创建新实例的逻辑
-          console.log('右键菜单：创建新实例');
-          event.sender.send(CHANNELS.MENU_ACTION, 'create-new-instance');
-        }
-      },
-      { type: 'separator' },
-      {
-        label: '收藏相簿',
-        click: () => {
-          event.sender.send(CHANNELS.MENU_ACTION, 'toggle-favorite');
-        }
-      },
-      {
-        label: '在文件管理器中打开',
-        click: () => {
-          event.sender.send(CHANNELS.MENU_ACTION, 'show-in-folder');
-        }
-      }
-    ];
-    
-    const menu = Menu.buildFromTemplate(menuTemplate);
-    
-    // 显示菜单
-    menu.popup({
-      window: window,
-      x: cursorPos.x,
-      y: cursorPos.y
-    });
-    
-    return { success: true };
-  } catch (error) {
-    console.error('显示右键菜单失败:', error);
-    return { success: false, error: error.message };
-  }
-});
-
 // 创建新窗口查看文件夹
 ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, albumPath) => {
   try {
+    if (albumPath) {
+      const isAllowed = await assertApprovedPath(albumPath, { bootstrapWhenEmpty: true });
+      if (!isAllowed) {
+        return { success: false, error: '访问路径不在已授权照片目录范围内' };
+      }
+    }
+
+    if (albumPath) {
+      await registerApprovedRoot(albumPath);
+    }
+
+    if (albumPath && !isPathWithinApprovedRoots(albumPath)) {
+      return { success: false, error: '访问路径不在已授权照片目录范围内' };
+    }
+
     console.log('创建新窗口查看文件夹:', albumPath);
     const newWindow = createWindow(albumPath);
     return { success: true, windowId: newWindow.id };
@@ -594,6 +710,12 @@ ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, albumPath) => {
 // 创建新实例并选择文件夹
 ipcMain.handle(CHANNELS.CREATE_NEW_INSTANCE, async (event, folderPath) => {
   try {
+    const isAllowed = await assertApprovedPath(folderPath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      return { success: false, error: '访问路径不在已授权照片目录范围内' };
+    }
+    await registerApprovedRoot(folderPath);
+
     console.log('=== 创建新实例开始 ===');
     console.log('文件夹路径:', folderPath);
     
@@ -702,6 +824,11 @@ ipcMain.handle(CHANNELS.GET_WINDOWS_INFO, async () => {
 // 处理扫描目录树请求 - 委托给 FileSystemService
 ipcMain.handle(CHANNELS.SCAN_DIRECTORY_TREE, async (event, rootPath) => {
   try {
+    const isAllowed = await assertApprovedPath(rootPath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      return [];
+    }
+
     console.log(`开始扫描目录树: ${rootPath}`);
     const tree = await FileSystemService.scanDirectoryTree(rootPath);
     console.log(`目录树扫描完成，找到 ${tree.length} 个顶级目录`);

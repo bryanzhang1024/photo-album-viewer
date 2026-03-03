@@ -4,6 +4,38 @@ import { getDirname } from '../utils/pathUtils';
 import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
+const FALLBACK_SORT = { sortBy: 'name', sortDirection: 'asc' };
+
+function readSortPreference(parentPath) {
+  const scopeKey = parentPath || '__root__';
+  const scopedStorageKey = `sorting:folder:${scopeKey}`;
+  const legacySortBy = localStorage.getItem('sortBy');
+  const legacySortDirection = localStorage.getItem('sortDirection');
+
+  try {
+    const raw = localStorage.getItem(scopedStorageKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const sortBy = parsed?.sortBy;
+      const sortDirection = parsed?.sortDirection;
+      const isValidSortBy = ['name', 'imageCount', 'lastModified'].includes(sortBy);
+      const isValidDirection = sortDirection === 'asc' || sortDirection === 'desc';
+      if (isValidSortBy && isValidDirection) {
+        return { sortBy, sortDirection };
+      }
+    }
+  } catch (error) {
+    console.warn(`读取排序配置失败(${scopedStorageKey}):`, error);
+  }
+
+  const isValidLegacySortBy = ['name', 'imageCount', 'lastModified'].includes(legacySortBy);
+  const isValidLegacyDirection = legacySortDirection === 'asc' || legacySortDirection === 'desc';
+  if (isValidLegacySortBy && isValidLegacyDirection) {
+    return { sortBy: legacySortBy, sortDirection: legacySortDirection };
+  }
+
+  return FALLBACK_SORT;
+}
 
 /**
  * 相邻相簿导航 Hook
@@ -59,20 +91,19 @@ export const useNeighboringAlbums = (albumPath) => {
       }
 
       // 使用与HomePage相同的排序逻辑
+      const { sortBy, sortDirection } = readSortPreference(parentPath);
       const sortedAlbums = [...albums].sort((a, b) => {
         let comparison = 0;
-        const savedSortBy = localStorage.getItem('sortBy') || 'name';
-        const savedSortDirection = localStorage.getItem('sortDirection') || 'asc';
 
-        if (savedSortBy === 'name') {
+        if (sortBy === 'name') {
           comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
-        } else if (savedSortBy === 'imageCount') {
+        } else if (sortBy === 'imageCount') {
           comparison = a.imageCount - b.imageCount;
-        } else if (savedSortBy === 'lastModified') {
+        } else if (sortBy === 'lastModified') {
           comparison = new Date(a.lastModified) - new Date(b.lastModified);
         }
 
-        return savedSortDirection === 'asc' ? comparison : -comparison;
+        return sortDirection === 'asc' ? comparison : -comparison;
       });
 
       const currentIndex = sortedAlbums.findIndex(album => album.path === albumPath);

@@ -3,12 +3,9 @@ import {
   Card,
   Typography,
   Box,
-  Grid,
   Skeleton,
-  Chip,
   IconButton
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
 import ImageIcon from '@mui/icons-material/Image';
 import FolderIcon from '@mui/icons-material/Folder';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
@@ -59,7 +56,6 @@ function AlbumCard({
   );
   const cardRef = useRef(null);
   const ipcFallbackAttempted = useRef(false);
-  const theme = useTheme();
   const isVisible = useIsVisible(cardRef);
   
   // 数据兼容性处理：优先使用新的node数据，回退到旧的album数据
@@ -369,171 +365,6 @@ function AlbumCard({
     }
   };
 
-  // 处理在新窗口中打开
-  const handleOpenInNewWindow = (e) => {
-    e.stopPropagation(); // 阻止事件冒泡
-    if (!ipcRenderer) return;
-    
-    ipcRenderer.invoke(CHANNELS.CREATE_NEW_WINDOW, cardData.path)
-      .then(result => {
-        if (result.success) {
-          console.log('新窗口已创建');
-        }
-      })
-      .catch(error => {
-        console.error('创建新窗口失败:', error);
-      });
-  };
-
-  // 处理右键菜单
-  const handleContextMenu = (e) => {
-    console.log('右键事件触发', e);
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (!cardData || !cardData.path) {
-      console.error('卡片数据不完整');
-      return;
-    }
-
-    console.log('右键菜单触发:', cardData.name, cardData.path);
-
-    if (!ipcRenderer) {
-      console.error('ipcRenderer 不可用');
-      return;
-    }
-
-    // 创建自定义右键菜单
-    const createContextMenu = () => {
-      // 创建菜单元素
-      const menu = document.createElement('div');
-      menu.style.cssText = `
-        position: fixed;
-        background: ${theme.palette.background.paper};
-        border: 1px solid ${theme.palette.divider};
-        border-radius: 4px;
-        box-shadow: ${theme.shadows[4]};
-        z-index: 10000;
-        min-width: 180px;
-        font-size: 14px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-        color: ${theme.palette.text.primary};
-      `;
-
-      const items = [
-        { text: cardData.type === 'folder' ? '在新实例中查看此文件夹' : '在新实例中查看此相册', action: handleNewInstance },
-        { text: isFavorited ? '取消收藏' : '收藏', action: () => handleFavoriteClick({ stopPropagation: () => {} }) },
-        { text: '在文件管理器中打开', action: handleShowInFolder }
-      ];
-
-      items.forEach((item, index) => {
-        const menuItem = document.createElement('div');
-        menuItem.textContent = item.text;
-        menuItem.style.cssText = `
-          padding: 10px 14px;
-          cursor: pointer;
-          ${index < items.length - 1 ? `border-bottom: 1px solid ${theme.palette.divider};` : ''}
-          color: ${theme.palette.text.primary};
-          transition: background-color 0.2s;
-        `;
-        menuItem.onmouseover = () => menuItem.style.backgroundColor = theme.palette.action.hover;
-        menuItem.onmouseout = () => menuItem.style.backgroundColor = 'transparent';
-        menuItem.onclick = () => {
-          item.action();
-          document.body.removeChild(menu);
-        };
-        menu.appendChild(menuItem);
-      });
-
-      // 定位菜单
-      menu.style.left = `${e.clientX}px`;
-      menu.style.top = `${e.clientY}px`;
-
-      // 确保菜单在视口内
-      const rect = menu.getBoundingClientRect();
-      if (rect.right > window.innerWidth) {
-        menu.style.left = `${window.innerWidth - rect.width - 10}px`;
-      }
-      if (rect.bottom > window.innerHeight) {
-        menu.style.top = `${window.innerHeight - rect.height - 10}px`;
-      }
-
-      document.body.appendChild(menu);
-
-      // 点击其他地方关闭菜单
-      const closeMenu = (event) => {
-        if (menu && menu.parentNode && !menu.contains(event.target)) {
-          try {
-            document.body.removeChild(menu);
-          } catch (error) {
-            // 菜单已经被移除，忽略错误
-            console.warn('菜单已被移除:', error);
-          }
-          document.removeEventListener('click', closeMenu);
-        }
-      };
-      setTimeout(() => document.addEventListener('click', closeMenu), 0);
-      
-      // 添加ESC键关闭菜单
-      const handleEsc = (event) => {
-        if (event.key === 'Escape') {
-          if (menu && menu.parentNode) {
-            try {
-              document.body.removeChild(menu);
-            } catch (error) {
-              console.warn('菜单已被移除:', error);
-            }
-          }
-          document.removeEventListener('keydown', handleEsc);
-          document.removeEventListener('click', closeMenu);
-        }
-      };
-      document.addEventListener('keydown', handleEsc);
-    };
-
-    createContextMenu();
-  };
-
-  // 处理在新实例中查看
-  const handleNewInstance = async () => {
-    if (!ipcRenderer) {
-      alert('无法访问系统功能');
-      return;
-    }
-    
-    try {
-      console.log('创建新实例:', cardData.path);
-      const result = await ipcRenderer.invoke('create-new-instance', cardData.path);
-      console.log('创建结果:', result);
-      if (!result.success) {
-        alert(`创建失败: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('创建新实例失败:', error);
-      alert(`创建失败: ${error.message}`);
-    }
-  };
-
-  // 处理在文件夹中显示
-  const handleShowInFolder = async () => {
-    if (!ipcRenderer) {
-      alert('无法访问系统功能');
-      return;
-    }
-    
-    try {
-      console.log('显示文件夹:', cardData.path);
-      const result = await ipcRenderer.invoke('show-in-folder', cardData.path);
-      console.log('显示结果:', result);
-      if (!result.success) {
-        alert(`显示失败: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('显示文件夹失败:', error);
-      alert(`显示失败: ${error.message}`);
-    }
-  };
-  
   return (
     <Card 
       ref={cardRef}
@@ -551,7 +382,6 @@ function AlbumCard({
         borderRadius: 1
       }}
       onClick={onClick}
-      onContextMenu={handleContextMenu}
       elevation={1}
     >
       {/* 图片区域 */}

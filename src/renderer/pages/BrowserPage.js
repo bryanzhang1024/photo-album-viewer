@@ -26,6 +26,7 @@ import {
   getLastPath,
   setLastPath
 } from '../utils/navigation';
+import { getDirname } from '../utils/pathUtils';
 
 const parseURLPath = (pathname, search) => {
   const searchParams = new URLSearchParams(search);
@@ -446,7 +447,11 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       return; // 已经在根目录
     }
 
-    const parentPath = urlState.targetPath.substring(0, urlState.targetPath.lastIndexOf('/'));
+    const parentPath = normalizeTargetPath(getDirname(urlState.targetPath));
+    if (!parentPath || parentPath === urlState.targetPath) {
+      navigateToPath('', 'folder');
+      return;
+    }
     navigateToPath(parentPath, 'folder');
   };
 

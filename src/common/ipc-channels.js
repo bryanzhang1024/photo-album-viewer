@@ -13,11 +13,9 @@ module.exports = {
     CLEAR_THUMBNAIL_CACHE: 'clear-thumbnail-cache',
     SHOW_IN_FOLDER: 'show-in-folder',
     COPY_IMAGE_TO_CLIPBOARD: 'copy-image-to-clipboard',
-    SHOW_CONTEXT_MENU: 'show-context-menu',
     CREATE_NEW_WINDOW: 'create-new-window',
     CREATE_NEW_INSTANCE: 'create-new-instance',
     GET_WINDOWS_INFO: 'get-windows-info',
     SCAN_DIRECTORY_TREE: 'scan-directory-tree',
-    FAVORITES_UPDATED: 'favorites-updated',
-    MENU_ACTION: 'menu-action'
+    FAVORITES_UPDATED: 'favorites-updated'
 };

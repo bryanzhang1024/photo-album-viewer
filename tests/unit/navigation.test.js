@@ -23,6 +23,10 @@ describe('navigation helpers', () => {
       expect(normalizeTargetPath('C:/Users/test')).toBe('C:/Users/test');
     });
 
+    test('normalizes Windows drive root path', () => {
+      expect(normalizeTargetPath('C:')).toBe('C:/');
+    });
+
     test('returns empty string for falsy input', () => {
       expect(normalizeTargetPath('')).toBe('');
       expect(normalizeTargetPath()).toBe('');
