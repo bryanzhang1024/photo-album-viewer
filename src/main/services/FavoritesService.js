@@ -10,6 +10,24 @@ const writeFile = promisify(fs.writeFile);
 
 const FAVORITES_FILE_PATH = path.join(app.getPath('userData'), 'favorites.json');
 let favoritesWatcher = null;
+let watcherRestartTimer = null;
+
+function scheduleWatcherRestart(delayMs = 1000) {
+    if (watcherRestartTimer) {
+        return;
+    }
+
+    watcherRestartTimer = setTimeout(() => {
+        watcherRestartTimer = null;
+        startFavoritesWatcher().catch((error) => {
+            console.error('重新启动收藏文件监听失败:', error);
+        });
+    }, delayMs);
+
+    if (typeof watcherRestartTimer.unref === 'function') {
+        watcherRestartTimer.unref();
+    }
+}
 
 async function loadFavoritesInternal() {
     try {
@@ -23,12 +41,22 @@ async function loadFavoritesInternal() {
     return JSON.parse(data);
 }
 
-function startFavoritesWatcher() {
+async function startFavoritesWatcher() {
     try {
         if (favoritesWatcher) {
             favoritesWatcher.close();
+            favoritesWatcher = null;
         }
+        // 确保收藏文件存在后再监听，避免首次启动时 ENOENT
+        await loadFavoritesInternal();
+
         favoritesWatcher = fs.watch(FAVORITES_FILE_PATH, (eventType, filename) => {
+            if (eventType === 'rename') {
+                // 文件被替换/删除后，底层 watch 会失效，需重建 watcher
+                scheduleWatcherRestart(300);
+                return;
+            }
+
             if (eventType === 'change') {
                 setTimeout(async () => {
                     try {
@@ -46,6 +74,7 @@ function startFavoritesWatcher() {
         });
     } catch (error) {
         console.error('启动文件监听失败:', error);
+        scheduleWatcherRestart();
     }
 }
 
@@ -53,6 +82,10 @@ function stopFavoritesWatcher() {
     if (favoritesWatcher) {
         favoritesWatcher.close();
         favoritesWatcher = null;
+    }
+    if (watcherRestartTimer) {
+        clearTimeout(watcherRestartTimer);
+        watcherRestartTimer = null;
     }
 }
 

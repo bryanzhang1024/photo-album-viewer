@@ -170,8 +170,7 @@ const loadTabsSession = () => {
   }
 };
 
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 
 function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const location = useLocation();
@@ -699,9 +698,29 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
                   <Typography variant="caption" noWrap sx={{ flex: 1, textAlign: 'left' }}>
                     {tab.title}
                   </Typography>
-                  <IconButton
-                    size="small"
-                    sx={{ ml: 0.25, p: 0.25, flexShrink: 0 }}
+                  <Box
+                    component="span"
+                    role="button"
+                    tabIndex={-1}
+                    sx={{
+                      ml: 0.25,
+                      p: 0.25,
+                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 0.75,
+                      color: 'text.secondary',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                        color: 'text.primary'
+                      }
+                    }}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -710,7 +729,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
                     aria-label={`关闭标签页 ${tab.title}`}
                   >
                     <CloseIcon sx={{ fontSize: 13 }} />
-                  </IconButton>
+                  </Box>
                 </Box>
               )}
             />

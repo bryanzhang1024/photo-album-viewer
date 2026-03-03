@@ -11,8 +11,7 @@ import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import CHANNELS from '../common/ipc-channels';
 
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 const PERFORMANCE_SETTINGS_KEY = 'performance_settings';
 
 function sanitizePerformanceSettings(settings) {

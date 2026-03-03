@@ -3,8 +3,7 @@ import imageCache from '../utils/ImageCacheManager';
 import { getDirname } from '../utils/pathUtils';
 import CHANNELS from '../../common/ipc-channels';
 
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron?.ipcRenderer;
+const ipcRenderer = window.electronAPI || null;
 
 /**
  * 相邻相簿导航 Hook

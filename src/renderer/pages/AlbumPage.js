@@ -54,8 +54,7 @@ import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from 
 import { navigateToBrowsePath } from '../utils/navigation';
 
 // 安全地获取electron对象
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 
 const PREFETCH_ROWS_AHEAD = 4;
 const PREFETCH_ROWS_BEHIND = 1;

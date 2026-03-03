@@ -150,7 +150,7 @@ describe('ThumbnailService', () => {
 
     const result = await service.thumbnailService.generateThumbnail(imagePath, width, height);
 
-    expect(result).toBe(`file://${webpPath}`);
+    expect(result).toBe(`thumbnail-protocol://${path.basename(webpPath)}`);
     expect(sharp).not.toHaveBeenCalled();
   });
 
@@ -186,7 +186,7 @@ describe('ThumbnailService', () => {
     });
     expect(service.sharpInstance.webp).toHaveBeenCalledWith({ quality: 80 });
     expect(service.sharpInstance.toFile).toHaveBeenCalledWith(webpPath);
-    expect(result).toBe(`file://${webpPath}`);
+    expect(result).toBe(`thumbnail-protocol://${path.basename(webpPath)}`);
   });
 
   test('falls back to native thumbnail when sharp fails', async () => {
@@ -227,7 +227,7 @@ describe('ThumbnailService', () => {
       height
     });
     expect(fs.existsSync(pngPath)).toBe(true);
-    expect(result).toBe(`file://${pngPath}`);
+    expect(result).toBe(`thumbnail-protocol://${path.basename(pngPath)}`);
   });
 
   test('returns null when both sharp and native thumbnail fail', async () => {

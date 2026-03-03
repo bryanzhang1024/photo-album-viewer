@@ -18,17 +18,7 @@ import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
 // import LazyLoad from 'react-lazyload'; // 注释掉懒加载导入
 
-// 安全地获取electron对象
-let electron = null;
-let ipcRenderer = null;
-
-try {
-  electron = window.require ? window.require('electron') : null;
-  ipcRenderer = electron ? electron.ipcRenderer : null;
-  console.log('Electron模块加载成功');
-} catch (error) {
-  console.error('无法加载Electron模块:', error);
-}
+const ipcRenderer = window.electronAPI || null;
 
 import useIsVisible from '../hooks/useIsVisible';
 import CHANNELS from '../../common/ipc-channels';
@@ -39,6 +29,16 @@ import { getBasename } from '../utils/pathUtils';
 
 // 全局请求映射 - 防止重复请求
 const thumbnailRequests = new Map();
+
+const normalizeThumbnailUrl = (url) => {
+  if (!url || typeof url !== 'string') {
+    return null;
+  }
+  if (url.startsWith('thumbnail-protocol://')) {
+    return url;
+  }
+  return `thumbnail-protocol://${getBasename(url)}`;
+};
 
 // 相簿/文件夹预览卡片组件 - 重构版本
 function AlbumCard({ 
@@ -115,7 +115,7 @@ function AlbumCard({
     // 内存缓存命中
     const cachedUrls = imageCache.get('preview', cacheKey);
     if (cachedUrls) {
-      setPreviewUrls(cachedUrls);
+      setPreviewUrls(cachedUrls.map(normalizeThumbnailUrl).filter(Boolean));
       setLoading(false);
       return;
     }
@@ -153,7 +153,9 @@ function AlbumCard({
         if (imagePaths.length === 0) return;
 
         const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, imagePaths, 0);
-        const validUrls = imagePaths.map(p => results[p]).filter(Boolean);
+        const validUrls = imagePaths
+          .map((p) => normalizeThumbnailUrl(results[p]))
+          .filter(Boolean);
         imageCache.set('preview', cacheKey, validUrls);
         setPreviewUrls(validUrls);
       } catch (err) {

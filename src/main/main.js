@@ -1,4 +1,4 @@
-const { app, ipcMain, dialog, shell, Menu, session } = require('electron');
+const { app, ipcMain, dialog, shell, Menu, session, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -42,6 +42,8 @@ const thumbnailProtocolStats = {
 };
 
 const THUMBNAIL_PROTOCOL_PREFIX = 'thumbnail-protocol://';
+const LOCAL_IMAGE_PROTOCOL_PREFIX = 'local-image-protocol://';
+const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff']);
 
 function normalizePerformanceSettings(settings = {}, fallback = DEFAULT_PERFORMANCE_SETTINGS) {
   const resolved = { ...fallback };
@@ -168,17 +170,73 @@ app.whenReady().then(async () => {
     const encodedPath = request.url.startsWith(THUMBNAIL_PROTOCOL_PREFIX)
       ? request.url.slice(THUMBNAIL_PROTOCOL_PREFIX.length)
       : request.url;
-    const decodedPath = decodeURIComponent(encodedPath);
-    const filePath = path.join(ThumbnailService.THUMBNAIL_CACHE_DIR, decodedPath);
+    let decodedPath = '';
+    try {
+      decodedPath = decodeURIComponent(encodedPath);
+    } catch (error) {
+      thumbnailProtocolStats.missCount++;
+      callback(-10); // ACCESS_DENIED
+      return;
+    }
 
-    if (fs.existsSync(filePath)) {
+    const cacheRoot = path.resolve(ThumbnailService.THUMBNAIL_CACHE_DIR);
+    const resolvedPath = path.resolve(cacheRoot, decodedPath);
+    const isInsideCache = resolvedPath === cacheRoot || resolvedPath.startsWith(`${cacheRoot}${path.sep}`);
+
+    if (!isInsideCache) {
+      thumbnailProtocolStats.missCount++;
+      callback(-10); // ACCESS_DENIED
+      return;
+    }
+
+    if (fs.existsSync(resolvedPath)) {
       thumbnailProtocolStats.hitCount++;
-      callback({ path: path.normalize(filePath) });
+      callback({ path: path.normalize(resolvedPath) });
       return;
     }
 
     thumbnailProtocolStats.missCount++;
     callback(-6); // FILE_NOT_FOUND
+  });
+
+  // 注册安全的本地图片协议，用于查看器加载原图（替代 file://）
+  session.defaultSession.protocol.registerFileProtocol('local-image-protocol', (request, callback) => {
+    const encodedPath = request.url.startsWith(LOCAL_IMAGE_PROTOCOL_PREFIX)
+      ? request.url.slice(LOCAL_IMAGE_PROTOCOL_PREFIX.length)
+      : request.url;
+
+    let decodedPath = '';
+    try {
+      decodedPath = decodeURIComponent(encodedPath);
+    } catch (error) {
+      callback(-10); // ACCESS_DENIED
+      return;
+    }
+
+    if (!decodedPath || !path.isAbsolute(decodedPath)) {
+      callback(-10); // ACCESS_DENIED
+      return;
+    }
+
+    const normalizedPath = path.normalize(decodedPath);
+    const extension = path.extname(normalizedPath).toLowerCase();
+    if (!LOCAL_IMAGE_EXTENSIONS.has(extension)) {
+      callback(-10); // ACCESS_DENIED
+      return;
+    }
+
+    try {
+      const stats = fs.statSync(normalizedPath);
+      if (!stats.isFile()) {
+        callback(-6); // FILE_NOT_FOUND
+        return;
+      }
+    } catch (error) {
+      callback(-6); // FILE_NOT_FOUND
+      return;
+    }
+
+    callback({ path: normalizedPath });
   });
   
   // 处理命令行参数，使用指定的文件夹路径
@@ -188,7 +246,7 @@ app.whenReady().then(async () => {
   createWindow(initialPath);
   
   // 启动收藏数据文件监听
-  FavoritesService.startFavoritesWatcher();
+  await FavoritesService.startFavoritesWatcher();
 });
 
 // 应用退出时清理资源
@@ -487,20 +545,20 @@ ipcMain.handle(CHANNELS.SHOW_CONTEXT_MENU, async (event, menuItems) => {
         click: () => {
           // 直接调用创建新实例的逻辑
           console.log('右键菜单：创建新实例');
-          event.sender.send('menu-action', 'create-new-instance');
+          event.sender.send(CHANNELS.MENU_ACTION, 'create-new-instance');
         }
       },
       { type: 'separator' },
       {
         label: '收藏相簿',
         click: () => {
-          event.sender.send('menu-action', 'toggle-favorite');
+          event.sender.send(CHANNELS.MENU_ACTION, 'toggle-favorite');
         }
       },
       {
         label: '在文件管理器中打开',
         click: () => {
-          event.sender.send('menu-action', 'show-in-folder');
+          event.sender.send(CHANNELS.MENU_ACTION, 'show-in-folder');
         }
       }
     ];

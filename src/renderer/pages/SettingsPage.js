@@ -29,8 +29,7 @@ import { clearAllCache } from '../utils/cacheUtils';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 
 const formatBytes = (bytes = 0) => {
   const numeric = Number(bytes);

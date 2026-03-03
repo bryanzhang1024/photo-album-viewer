@@ -27,7 +27,8 @@ import RotateRightIcon from '@mui/icons-material/RotateRight';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useSettings } from '../contexts/SettingsContext';
 import CHANNELS from '../../common/ipc-channels';
-const { ipcRenderer } = window.require('electron');
+
+const ipcRenderer = window.electronAPI || null;
 
 function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -41,7 +42,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [isVertical, setIsVertical] = useState(false);
   const [manualRotation, setManualRotation] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [currentImageUrl, setCurrentImageUrl] = useState('');
   const [prevImageDimensions, setPrevImageDimensions] = useState({ width: 0, height: 0 });
   const [prevRotation, setPrevRotation] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -55,6 +55,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const imgRef = useRef(null);
   
   const currentImage = images[currentIndex];
+  const getSafeImageUrl = useCallback((imagePath) => {
+    if (!imagePath || !ipcRenderer || typeof ipcRenderer.getLocalImageUrl !== 'function') {
+      return null;
+    }
+    return ipcRenderer.getLocalImageUrl(imagePath);
+  }, []);
 
   const handleCopyCurrentImage = useCallback(async (mode = 'file') => {
     if (!currentImage?.path) return;
@@ -113,15 +119,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
         return newCache;
       });
     };
-    // 确保路径格式正确
-    const imagePath = currentImage.path.startsWith('/') ? currentImage.path : `/${currentImage.path}`;
-    img.src = `file://${imagePath}`;
+    const imageSrc = getSafeImageUrl(currentImage.path);
+    if (!imageSrc) {
+      setImageLoaded(true);
+      setIsTransitioning(false);
+      return undefined;
+    }
+    img.src = imageSrc;
 
     return () => {
       img.onload = null;
       img.onerror = null;
     };
-  }, [currentImage, currentIndex, preloadCache]);
+  }, [currentImage, currentIndex, preloadCache, getSafeImageUrl]);
 
   // 预加载相邻图片 - 增强版双缓冲
   useEffect(() => {
@@ -161,13 +171,17 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               return newCache;
             });
           };
-          img.src = `file://${images[index].path}`;
+          const imageSrc = getSafeImageUrl(images[index].path);
+          if (!imageSrc) {
+            return;
+          }
+          img.src = imageSrc;
         }
       });
     };
 
     preloadImages();
-  }, [currentIndex, images, preloadCache, pendingNavigation]);
+  }, [currentIndex, images, preloadCache, pendingNavigation, getSafeImageUrl]);
 
   // 添加键盘导航支持
   useEffect(() => {
@@ -420,7 +434,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           onIndexChange(newIndex);
           setPendingNavigation(null);
         };
-        img.src = `file://${images[newIndex].path}`;
+        const imageSrc = getSafeImageUrl(images[newIndex].path);
+        if (!imageSrc) {
+          onIndexChange(newIndex);
+          setPendingNavigation(null);
+          return;
+        }
+        img.src = imageSrc;
       }
     }
   };
@@ -484,7 +504,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           onIndexChange(randomIndex);
           setPendingNavigation(null);
         };
-        img.src = `file://${images[randomIndex].path}`;
+        const imageSrc = getSafeImageUrl(images[randomIndex].path);
+        if (!imageSrc) {
+          onIndexChange(randomIndex);
+          setPendingNavigation(null);
+          return;
+        }
+        img.src = imageSrc;
       }
     }
   };
@@ -806,7 +832,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
         {currentImage && (
           <img
             ref={imgRef}
-            src={currentImage.path.startsWith('/') ? `file://${currentImage.path}` : `file:///${currentImage.path}`}
+            src={getSafeImageUrl(currentImage.path) || ''}
             alt={currentImage.name}
             onLoad={(e) => {
               // 如果有缓存的尺寸信息，立即使用

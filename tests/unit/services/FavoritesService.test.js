@@ -30,6 +30,9 @@ describe('FavoritesService', () => {
   });
 
   afterEach(() => {
+    if (FavoritesService && typeof FavoritesService.stopFavoritesWatcher === 'function') {
+      FavoritesService.stopFavoritesWatcher();
+    }
     if (mockFs && typeof mockFs.restore === 'function') {
       mockFs.restore();
       mockFs = null;
@@ -169,7 +172,7 @@ describe('FavoritesService', () => {
       });
 
     FavoritesService.registerIpcHandlers();
-    FavoritesService.startFavoritesWatcher();
+    await FavoritesService.startFavoritesWatcher();
 
     expect(electron.BrowserWindow.getAllWindows()).toHaveLength(1);
 

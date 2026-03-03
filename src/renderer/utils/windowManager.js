@@ -1,6 +1,5 @@
 // 窗口管理工具
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 
 class WindowManager {
   // 创建新窗口查看文件夹

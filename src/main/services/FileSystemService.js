@@ -347,14 +347,16 @@ async function getFolderStats(dirPath) {
       previewSamples = uniqueSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
     }
     
+    let childFolders = folderCount;
+    try {
+      const dirents = await fs.promises.readdir(dirPath, { withFileTypes: true });
+      childFolders = dirents.filter((dirent) => dirent.isDirectory()).length;
+    } catch {
+      childFolders = folderCount;
+    }
+
     return {
-      childFolders: entries.filter(entry => {
-        try {
-          return require('fs').statSync(path.join(dirPath, entry)).isDirectory();
-        } catch {
-          return false;
-        }
-      }).length,
+      childFolders,
       previewSamples: previewSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES),
       hasSubAlbums,
       hasMore: entries.length > sampleSize,
@@ -468,20 +470,24 @@ async function collectNestedImageSamples(rootDirs, maxSamples, options = {}) {
  * 生成面包屑导航
  */
 function generateBreadcrumbs(currentPath) {
+  if (!currentPath) {
+    return [];
+  }
+
+  const resolvedPath = path.resolve(currentPath);
+  const root = path.parse(resolvedPath).root;
+  const parts = resolvedPath.slice(root.length).split(path.sep).filter(Boolean);
   const breadcrumbs = [];
-  const parts = currentPath.split(path.sep).filter(Boolean);
-  
-  let buildPath = '';
-  for (let i = 0; i < parts.length; i++) {
-    buildPath = path.join(buildPath, parts[i]);
-    if (buildPath === '') buildPath = path.sep; // 处理根路径
-    
+  let buildPath = root;
+
+  for (const part of parts) {
+    buildPath = buildPath ? path.join(buildPath, part) : part;
     breadcrumbs.push({
-      name: parts[i],
+      name: part,
       path: buildPath
     });
   }
-  
+
   return breadcrumbs;
 }
 

@@ -1,9 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 
 // 安全地获取electron对象
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
-const path = electron && electron.remote ? electron.remote.require('path') : null;
+const ipcRenderer = window.electronAPI || null;
 
 // 创建收藏上下文
 export const FavoritesContext = createContext({

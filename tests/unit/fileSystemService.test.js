@@ -122,6 +122,9 @@ describe('FileSystemService', () => {
       folderCount: 1,
       albumCount: 2
     });
+    expect(result.breadcrumbs).toEqual([
+      { name: 'photos', path: '/photos' }
+    ]);
   });
 
   test('scanNavigationLevel uses first image by natural filename order for album preview', async () => {

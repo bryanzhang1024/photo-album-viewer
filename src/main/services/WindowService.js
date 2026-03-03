@@ -51,13 +51,14 @@ function createWindow(albumPath = null) {
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: true,
-      webSecurity: false, // 禁用webSecurity以支持file://协议
-      allowRunningInsecureContent: true, // 允许加载本地文件
+      preload: path.join(__dirname, '..', 'preload.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       devTools: isDev,
-      nodeIntegrationInWorker: true
+      nodeIntegrationInWorker: false
     },
     show: false
   });
@@ -139,13 +140,16 @@ function createWindow(albumPath = null) {
   }
 
   // 强制显示窗口的保险机制
-  setTimeout(() => {
+  const forceShowTimer = setTimeout(() => {
     if (!newWindow.isVisible()) {
       console.log('强制显示窗口');
       newWindow.show();
       newWindow.focus();
     }
   }, 5000); // 5秒后强制显示
+  if (typeof forceShowTimer.unref === 'function') {
+    forceShowTimer.unref();
+  }
 
   // 监听加载失败事件
   newWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
@@ -164,6 +168,7 @@ function createWindow(albumPath = null) {
     console.log('DOM已就绪');
   });
   newWindow.on('closed', () => {
+    clearTimeout(forceShowTimer);
     windows.delete(newWindow);
     if (newWindow === mainWindow) {
       mainWindow = null;

@@ -90,6 +90,10 @@ class ThumbnailService {
     return path.join(this.cacheDir, `${hash}.${format}`);
   }
 
+  toProtocolUrl(cacheFilename) {
+    return `thumbnail-protocol://${path.basename(cacheFilename)}`;
+  }
+
   /**
    * 生成缩略图 - 带并发控制和请求去重
    */
@@ -110,7 +114,7 @@ class ThumbnailService {
     if (fs.existsSync(cacheFilenames.webp)) {
       this.metrics.cacheHits.total++;
       this.metrics.cacheHits.webp++;
-      return `file://${cacheFilenames.webp}`;
+      return this.toProtocolUrl(cacheFilenames.webp);
     }
 
     if (fs.existsSync(cacheFilenames.png)) {
@@ -121,7 +125,7 @@ class ThumbnailService {
           if (!looksLikeIcon) {
             this.metrics.cacheHits.total++;
             this.metrics.cacheHits.png++;
-            return `file://${cacheFilenames.png}`;
+            return this.toProtocolUrl(cacheFilenames.png);
           }
         }
       } catch (err) {
@@ -200,7 +204,7 @@ class ThumbnailService {
       const buffer = image.toPNG();
       await writeFile(cacheFilenames.png, buffer);
       this.metrics.generatedWithSystem++;
-      return `file://${cacheFilenames.png}`;
+      return this.toProtocolUrl(cacheFilenames.png);
     } catch (error) {
       console.warn('系统缩略图获取失败，回退到Sharp:', error?.message || error);
       return null;
@@ -307,7 +311,7 @@ class ThumbnailService {
         .toFile(cacheFilename);
 
       this.metrics.generatedWithSharp++;
-      return `file://${cacheFilename}`;
+      return this.toProtocolUrl(cacheFilename);
     } catch (err) {
       console.error(`处理图片失败: ${imagePath}`, err);
       return null;

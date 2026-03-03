@@ -15,14 +15,7 @@ jest.mock('../../../src/renderer/utils/pathUtils', () => {
 
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager');
 const CHANNELS = require('../../../src/common/ipc-channels');
-const ipcRenderer = { invoke: jest.fn() };
-
-window.require = jest.fn((module) => {
-  if (module === 'electron') {
-    return { ipcRenderer };
-  }
-  return {};
-});
+const ipcRenderer = global.electronMock.ipcRenderer;
 
 const { useNeighboringAlbums } = require('../../../src/renderer/hooks/useNeighboringAlbums');
 

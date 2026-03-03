@@ -15,8 +15,7 @@ import { getBasename } from '../utils/pathUtils';
 import useIsVisible from '../hooks/useIsVisible';
 import { getThumbnailUrl } from '../utils/thumbnailUrl';
 
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 
 /**
  * 图片卡片组件 - 固定 2:3 宽高比显示

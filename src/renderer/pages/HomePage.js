@@ -47,8 +47,7 @@ import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from 
 import { navigateToBrowsePath } from '../utils/navigation';
 
 // 安全地获取electron对象
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 
 
 function HomePage({
@@ -510,57 +509,6 @@ function HomePage({
   const getNodeDisplayPath = (node) => {
     if (!node || !currentPath) return '';
     return nodeDisplayPaths[node.path] || node.name;
-  };
-  
-  // 获取当前显示的路径信息 - 使用 useMemo 缓存
-  // 打开设置对话框
-  const handleOpenSettings = () => {
-    setTempSettings({...performanceSettings});
-    setSettingsDialogOpen(true);
-  };
-  
-  // 关闭设置对话框
-  const handleCloseSettings = () => {
-    setSettingsDialogOpen(false);
-  };
-  
-  // 保存设置
-  const handleSaveSettings = () => {
-    setPerformanceSettings(tempSettings);
-    localStorage.setItem('performance_settings', JSON.stringify(tempSettings));
-
-    if (ipcRenderer) {
-      ipcRenderer.invoke(CHANNELS.UPDATE_PERFORMANCE_SETTINGS, tempSettings)
-        .catch((err) => {
-          console.warn('同步性能设置失败:', err);
-        });
-    }
-
-    setSettingsDialogOpen(false);
-
-    // 自动刷新应用设置
-    setError('设置已保存，正在自动应用...');
-
-    // 强制重新计算布局
-    setTimeout(() => {
-      // 强制重新计算列数和网格
-      setWindowWidth(prev => prev + 1); // 触发useCallback重新计算
-      setTimeout(() => setWindowWidth(window.innerWidth), 50);
-      setError('');
-    }, 100);
-  };
-  
-  // 处理设置变化
-  const handleSettingChange = (key, value) => {
-    setTempSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  };
-  
-  // 重置为默认设置
-  const handleResetSettings = () => {
-    setTempSettings({...DEFAULT_PERFORMANCE_SETTINGS});
   };
   
   // 处理导航到收藏页面

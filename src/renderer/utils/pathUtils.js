@@ -250,11 +250,10 @@ export const isValidPath = (path) => {
   if (trimmedPath === '') return false;
 
   // 检查路径长度
-  if (path.length > 4096) return false; // 大多数系统的路径长度限制
+  if (trimmedPath.length > 4096) return false; // 大多数系统的路径长度限制
 
-  // 检查是否包含非法字符（根据操作系统）
-  const illegalChars = /[<>:"|?*]/;
-  if (illegalChars.test(trimmedPath)) return false;
+  // NUL 字符在任何平台都非法
+  if (/[\0]/.test(trimmedPath)) return false;
 
   // 允许的路径格式：
   // 1. Windows绝对路径: C:\path, C:/path
@@ -264,22 +263,37 @@ export const isValidPath = (path) => {
   // 5. 单个文件名或目录名: filename, dirname
 
   // 检查路径格式 - 更宽松的验证
-  const windowsPathPattern = /^[a-zA-Z]:(\\|\/|$)/; // C:\ or C:/
+  const windowsPathPattern = /^[a-zA-Z]:(\\|\/)/; // C:\ or C:/
+  const windowsDriveOnlyPattern = /^[a-zA-Z]:$/; // C:
   const unixAbsolutePathPattern = /^\//; // /path
   const networkPathPattern = /^\\\\[^\\]/; // \\server\share
-  const relativePathPattern = /^\.\\.?|^~\//; // ./, ../, ~/
+  const relativePathPattern = /^(\.\/|\.\.\/|~\/)/; // ./, ../, ~/
+
+  // Windows 路径允许驱动器后的冒号（例如 C:），但不允许后续再次出现冒号
+  if (windowsDriveOnlyPattern.test(trimmedPath)) {
+    return true;
+  }
+
+  if (windowsPathPattern.test(trimmedPath)) {
+    const pathWithoutDrive = trimmedPath.slice(2);
+    if (pathWithoutDrive.includes(':')) return false;
+    return !/[<>"|?*]/.test(pathWithoutDrive);
+  }
+
+  if (networkPathPattern.test(trimmedPath)) {
+    return !/[<>"|?*]/.test(trimmedPath);
+  }
 
   // 如果匹配特殊格式，直接通过
-  if (windowsPathPattern.test(trimmedPath) ||
-      unixAbsolutePathPattern.test(trimmedPath) ||
+  if (unixAbsolutePathPattern.test(trimmedPath) ||
       networkPathPattern.test(trimmedPath) ||
       relativePathPattern.test(trimmedPath)) {
-    return true;
+    return !/[<>"|?*]/.test(trimmedPath);
   }
 
   // 对于普通路径，只检查不包含非法字符且不以空格开头/结尾
   // 允许包含斜杠、点、连字符、下划线、字母、数字、汉字等
-  const validCharsPattern = /^[^<>:"|?*]*[^<>:"|?*\s]$/;
+  const validCharsPattern = /^[^<>"|?*]*[^<>"|?*\s]$/;
   return validCharsPattern.test(trimmedPath);
 };
 

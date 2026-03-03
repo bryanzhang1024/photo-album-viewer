@@ -1,8 +1,7 @@
 import imageCache from './ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
+const ipcRenderer = window.electronAPI || null;
 
 export const clearAllCache = () => {
   try {

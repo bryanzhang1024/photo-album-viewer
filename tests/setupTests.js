@@ -60,11 +60,14 @@ if (typeof window !== 'undefined') {
   });
 
   window.electronAPI = {
-    invoke: jest.fn(() => Promise.resolve()),
-    send: jest.fn(),
-    on: jest.fn(),
-    once: jest.fn(),
-    removeListener: jest.fn()
+    invoke: electronMock.ipcRenderer.invoke,
+    send: electronMock.ipcRenderer.send,
+    on: electronMock.ipcRenderer.on,
+    once: electronMock.ipcRenderer.once,
+    removeListener: electronMock.ipcRenderer.removeListener,
+    getThumbnailUrl: jest.fn((imagePath) => (imagePath ? `thumbnail-protocol://mock-${encodeURIComponent(imagePath)}.webp` : null)),
+    getLocalImageUrl: jest.fn((imagePath) => (imagePath ? `local-image-protocol://${encodeURIComponent(imagePath)}` : null)),
+    saveToDiskCache: jest.fn(() => false)
   };
 
   window.require = jest.fn((moduleName) => {
