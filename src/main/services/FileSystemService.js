@@ -70,6 +70,52 @@ function resolveImageDateStats(imageFiles = [], dateGetter) {
   };
 }
 
+function compareNameNaturalAsc(left, right) {
+  return String(left || '').localeCompare(String(right || ''), undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  });
+}
+
+function pickEvenlySpacedItems(items = [], limit = 0) {
+  if (!Array.isArray(items) || items.length === 0 || limit <= 0) {
+    return [];
+  }
+
+  if (items.length <= limit) {
+    return [...items];
+  }
+
+  if (limit === 1) {
+    return [items[0]];
+  }
+
+  const sampled = [];
+  const usedIndices = new Set();
+
+  for (let i = 0; i < limit; i++) {
+    const index = Math.round((i * (items.length - 1)) / (limit - 1));
+    if (usedIndices.has(index)) {
+      continue;
+    }
+    usedIndices.add(index);
+    sampled.push({ index, value: items[index] });
+  }
+
+  if (sampled.length < limit) {
+    for (let i = 0; i < items.length && sampled.length < limit; i++) {
+      if (usedIndices.has(i)) {
+        continue;
+      }
+      usedIndices.add(i);
+      sampled.push({ index: i, value: items[i] });
+    }
+  }
+
+  sampled.sort((a, b) => a.index - b.index);
+  return sampled.map(item => item.value);
+}
+
 /**
  * 智能扫描单层目录，返回导航节点
  * @param {string} targetPath - 目标路径
@@ -285,11 +331,15 @@ async function getAlbumStats(dirPath) {
  */
 async function getFolderStats(dirPath) {
   try {
-    const entries = await readdir(dirPath);
-    const sampleSize = Math.min(entries.length, SCAN_CONFIG.MAX_CHILD_SCAN);
-    const sampleEntries = entries.slice(0, sampleSize);
+    const dirents = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    const allChildDirectories = dirents
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name)
+      .sort(compareNameNaturalAsc);
+    const sampleEntries = pickEvenlySpacedItems(allChildDirectories, SCAN_CONFIG.MAX_CHILD_SCAN);
+    const sampledEntrySet = new Set(sampleEntries);
     
-    let folderCount = 0;
+    const folderCount = allChildDirectories.length;
     let previewSamples = [];
     let hasSubAlbums = false;
     let lastModified = new Date(0);
@@ -302,8 +352,6 @@ async function getFolderStats(dirPath) {
         const stats = await stat(entryPath);
         
         if (stats.isDirectory()) {
-          folderCount++;
-          
           // 快速检查子目录是否包含图片
           const quickCheck = await quickScanForImages(entryPath);
           if (quickCheck.hasImages) {
@@ -342,25 +390,43 @@ async function getFolderStats(dirPath) {
       }
     }
 
+    // 首轮采样无结果时，对未采样目录进行一次均匀兜底，避免“前N个目录恰好无图”导致空预览。
+    if (previewSamples.length === 0 && allChildDirectories.length > sampleEntries.length) {
+      const unsampledDirectories = allChildDirectories.filter(name => !sampledEntrySet.has(name));
+      const fallbackRoots = pickEvenlySpacedItems(
+        unsampledDirectories,
+        Math.min(unsampledDirectories.length, DEEP_SCAN_CONFIG.MAX_VISITED_DIRS)
+      ).map(name => path.join(dirPath, name));
+
+      if (fallbackRoots.length > 0) {
+        const deepFallbackSamples = await collectNestedImageSamples(
+          fallbackRoots,
+          SCAN_CONFIG.MAX_PREVIEW_SAMPLES,
+          {
+            maxDepth: DEEP_SCAN_CONFIG.MAX_DEPTH,
+            maxVisited: DEEP_SCAN_CONFIG.MAX_VISITED_DIRS,
+            maxEntriesPerDir: DEEP_SCAN_CONFIG.MAX_ENTRIES_PER_DIR
+          }
+        );
+
+        if (deepFallbackSamples.length > 0) {
+          hasSubAlbums = true;
+          previewSamples.push(...deepFallbackSamples);
+        }
+      }
+    }
+
     if (previewSamples.length > 0) {
       const uniqueSamples = Array.from(new Set(previewSamples));
       previewSamples = uniqueSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES);
     }
-    
-    let childFolders = folderCount;
-    try {
-      const dirents = await fs.promises.readdir(dirPath, { withFileTypes: true });
-      childFolders = dirents.filter((dirent) => dirent.isDirectory()).length;
-    } catch {
-      childFolders = folderCount;
-    }
 
     return {
-      childFolders,
+      childFolders: folderCount,
       previewSamples: previewSamples.slice(0, SCAN_CONFIG.MAX_PREVIEW_SAMPLES),
       hasSubAlbums,
-      hasMore: entries.length > sampleSize,
-      sampleSize,
+      hasMore: allChildDirectories.length > sampleEntries.length,
+      sampleSize: sampleEntries.length,
       lastModified
     };
     

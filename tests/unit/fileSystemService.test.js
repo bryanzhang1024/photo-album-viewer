@@ -149,6 +149,43 @@ describe('FileSystemService', () => {
     expect(albumNode.previewImages[0]).toBe('/photos/numbered/1.jpg');
   });
 
+  test('scanNavigationLevel still builds folder previews when images exist only in unsampled nested children', async () => {
+    const parent = {};
+    for (let i = 1; i <= 10; i++) {
+      parent[`album${String(i).padStart(2, '0')}`] = {
+        images: {}
+      };
+    }
+    parent.album11 = {
+      images: {
+        '001.jpg': Buffer.from('image-11')
+      }
+    };
+    parent.album12 = {
+      images: {
+        '002.jpg': Buffer.from('image-12')
+      }
+    };
+
+    mockFs = createFsMock({
+      '/photos': {
+        parent
+      }
+    });
+
+    const result = await scanNavigationLevel('/photos');
+    const folderNode = result.nodes.find(
+      (node) => node.type === 'folder' && node.name === 'parent'
+    );
+
+    expect(folderNode).toBeDefined();
+    expect(folderNode.previewSamples.length).toBeGreaterThan(0);
+    expect(folderNode.previewSamples.some((samplePath) => (
+      samplePath.includes('/photos/parent/album11/images/') ||
+      samplePath.includes('/photos/parent/album12/images/')
+    ))).toBe(true);
+  });
+
   test('scanNavigationLevel returns error response when path missing', async () => {
     const result = await scanNavigationLevel('/does/not/exist');
 
