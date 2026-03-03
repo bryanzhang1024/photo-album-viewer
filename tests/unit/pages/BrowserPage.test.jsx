@@ -19,6 +19,10 @@ jest.mock('../../../src/renderer/pages/AlbumPage', () =>
   jest.fn((props) => <div data-testid="album-page">{props.tabsHeaderContent}</div>)
 );
 
+jest.mock('../../../src/renderer/pages/FavoritesPage', () =>
+  jest.fn((props) => <div data-testid="favorites-page">{props.tabsHeaderContent}</div>)
+);
+
 jest.mock('../../../src/renderer/utils/navigation', () => {
   const actual = jest.requireActual('../../../src/renderer/utils/navigation');
   return {
@@ -31,6 +35,7 @@ jest.mock('../../../src/renderer/utils/navigation', () => {
 
 const HomePage = require('../../../src/renderer/pages/HomePage');
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage');
+const FavoritesPage = require('../../../src/renderer/pages/FavoritesPage');
 const navigationUtils = require('../../../src/renderer/utils/navigation');
 const reactRouter = require('react-router-dom');
 
@@ -94,6 +99,25 @@ describe('BrowserPage', () => {
       {}
     );
     expect(HomePage).not.toHaveBeenCalled();
+  });
+
+  test('renders FavoritesPage when viewMode=favorites in URL', () => {
+    setupRouterMocks({
+      pathname: '/browse',
+      search: '?view=favorites'
+    });
+
+    render(<BrowserPage colorMode="light" />);
+
+    expect(screen.getByTestId('favorites-page')).toBeInTheDocument();
+    expect(FavoritesPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        urlMode: true
+      }),
+      {}
+    );
+    expect(HomePage).not.toHaveBeenCalled();
+    expect(AlbumPage).not.toHaveBeenCalled();
   });
 
   test('restores last path when no target specified', () => {
@@ -195,6 +219,31 @@ describe('BrowserPage', () => {
     expect(screen.getByRole('tab', { name: /path/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /wedding/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /trip/i })).not.toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  test('keeps favorites deep link as single tab when URL does not match saved session tabs', () => {
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse',
+      search: '?view=favorites'
+    });
+
+    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
+      tabs: [
+        {
+          id: 'tab-old',
+          targetPath: '/albums/wedding',
+          viewMode: 'album',
+          initialImage: null
+        }
+      ],
+      activeTabId: 'tab-old'
+    }));
+
+    render(<BrowserPage colorMode="dark" />);
+
+    expect(screen.getByRole('tab', { name: /我的收藏/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /wedding/i })).not.toBeInTheDocument();
     expect(navigateMock).not.toHaveBeenCalled();
   });
 

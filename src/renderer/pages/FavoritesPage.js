@@ -9,7 +9,6 @@ import {
   Tabs,
   Tab,
   CircularProgress,
-  Alert,
   Button,
   Tooltip,
   useMediaQuery,
@@ -17,14 +16,11 @@ import {
   FormControl,
   Select,
   MenuItem,
-  InputLabel,
-  Badge
+  InputLabel
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import SortIcon from '@mui/icons-material/Sort';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import CasinoIcon from '@mui/icons-material/Casino';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { useFavorites } from '../contexts/FavoritesContext';
 import ImageViewer from '../components/ImageViewer';
@@ -36,7 +32,7 @@ import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from 
 import { navigateToBrowsePath } from '../utils/navigation';
 
 // 收藏页面组件
-function FavoritesPage({ colorMode }) {
+function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -57,7 +53,7 @@ function FavoritesPage({ colorMode }) {
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   
   // 使用收藏上下文
-  const { favorites, isLoading, toggleAlbumFavorite, toggleImageFavorite } = useFavorites();
+  const { favorites, isLoading } = useFavorites();
   
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
@@ -121,6 +117,10 @@ function FavoritesPage({ colorMode }) {
   // 处理返回首页
   const handleHome = () => {
     saveScrollPosition();
+    if (urlMode && onNavigate) {
+      onNavigate('', 'folder');
+      return;
+    }
     navigate('/');
   };
 
@@ -144,6 +144,10 @@ function FavoritesPage({ colorMode }) {
   // 处理相簿点击
   const handleAlbumClick = (albumPath) => {
     saveScrollPosition();
+    if (urlMode && onNavigate) {
+      onNavigate(albumPath, 'album');
+      return;
+    }
     navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
@@ -165,6 +169,10 @@ function FavoritesPage({ colorMode }) {
   // 处理导航到相册
   const handleNavigateToAlbum = (albumPath) => {
     saveScrollPosition();
+    if (urlMode && onNavigate) {
+      onNavigate(albumPath, 'album');
+      return;
+    }
     navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
@@ -285,7 +293,7 @@ function FavoritesPage({ colorMode }) {
           <Typography variant="h6" color="text.secondary" gutterBottom>
             暂无收藏的相簿
           </Typography>
-          <Button variant="contained" onClick={() => navigate('/')}>
+          <Button variant="contained" onClick={handleHome}>
             浏览相簿
           </Button>
         </Box>
@@ -345,7 +353,7 @@ function FavoritesPage({ colorMode }) {
           <Typography variant="h6" color="text.secondary" gutterBottom>
             暂无收藏的图片
           </Typography>
-          <Button variant="contained" onClick={() => navigate('/')}>
+          <Button variant="contained" onClick={handleHome}>
             浏览相簿
           </Button>
         </Box>
@@ -403,20 +411,22 @@ function FavoritesPage({ colorMode }) {
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" color="primary" elevation={0}>
         <Toolbar variant="dense">
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={handleBack}
-            sx={{ mr: 1 }}
-            size="small"
-          >
-            <ArrowBackIcon />
-          </IconButton>
+          {!urlMode ? (
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={handleBack}
+              sx={{ mr: 1 }}
+              size="small"
+            >
+              <ArrowBackIcon />
+            </IconButton>
+          ) : null}
           
           <IconButton
             color="inherit"
             onClick={handleHome}
-            sx={{ mr: 2 }}
+            sx={{ mr: urlMode ? 1 : 2 }}
             size="small"
           >
             <HomeIcon />
@@ -485,6 +495,11 @@ function FavoritesPage({ colorMode }) {
             </Tooltip>
           </Box>
         </Toolbar>
+        {tabsHeaderContent ? (
+          <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.12)', px: { xs: 0.5, sm: 1 }, py: 0.5 }}>
+            {tabsHeaderContent}
+          </Box>
+        ) : null}
         
         <Box
           sx={{

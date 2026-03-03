@@ -515,7 +515,12 @@ function HomePage({
   const handleNavigateToFavorites = () => {
     // 保存当前滚动位置
     saveScrollPosition();
-    
+
+    if (urlMode && onNavigate) {
+      onNavigate('', 'favorites');
+      return;
+    }
+
     navigate('/favorites');
   };
   

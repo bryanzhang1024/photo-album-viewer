@@ -693,6 +693,10 @@ function AlbumPage({
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
     saveScrollPosition();
+    if (urlMode && onNavigate) {
+      onNavigate('', 'favorites');
+      return;
+    }
     navigate('/favorites');
   };
 

@@ -19,8 +19,10 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import FolderIcon from '@mui/icons-material/Folder';
 import PhotoAlbumIcon from '@mui/icons-material/PhotoAlbum';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import HomePage from './HomePage';
 import AlbumPage from './AlbumPage';
+import FavoritesPage from './FavoritesPage';
 import CHANNELS from '../../common/ipc-channels';
 import {
   normalizeTargetPath,
@@ -33,6 +35,7 @@ import { getDirname } from '../utils/pathUtils';
 const parseURLPath = (pathname, search) => {
   const searchParams = new URLSearchParams(search);
   const view = searchParams.get('view');
+  const safeViewMode = view === 'album' || view === 'favorites' ? view : 'folder';
   const image = searchParams.get('image');
 
   // 处理不同的路由模式
@@ -45,6 +48,24 @@ const parseURLPath = (pathname, search) => {
     };
   }
 
+  if (pathname === '/favorites') {
+    return {
+      targetPath: '',
+      viewMode: 'favorites',
+      initialImage: null,
+      isRoot: true
+    };
+  }
+
+  if (pathname === '/browse') {
+    return {
+      targetPath: '',
+      viewMode: safeViewMode,
+      initialImage: null,
+      isRoot: true
+    };
+  }
+
   if (pathname.startsWith('/browse/')) {
     // 新路由模式: /browse/path?view=album&image=xxx
     const pathPart = pathname.replace('/browse/', '');
@@ -52,7 +73,7 @@ const parseURLPath = (pathname, search) => {
 
     return {
       targetPath: decodedPath,
-      viewMode: view || 'folder',
+      viewMode: safeViewMode,
       initialImage: image ? decodeURIComponent(image) : null,
       isRoot: !decodedPath
     };
@@ -86,42 +107,61 @@ const getPathDisplayName = (targetPath) => {
   return decodeURIComponent(segments[segments.length - 1]);
 };
 
+const normalizeViewMode = (viewMode) => {
+  if (viewMode === 'album') return 'album';
+  if (viewMode === 'favorites') return 'favorites';
+  return 'folder';
+};
+
+const getTabTitle = (targetPath, viewMode = 'folder') => {
+  if (normalizeViewMode(viewMode) === 'favorites') {
+    return '我的收藏';
+  }
+  return getPathDisplayName(targetPath);
+};
+
 const createTabFromState = (state) => ({
   id: createTabId(),
   targetPath: normalizeTargetPath(state?.targetPath || ''),
-  viewMode: state?.viewMode || 'folder',
+  viewMode: normalizeViewMode(state?.viewMode),
   initialImage: state?.initialImage || null,
-  title: getPathDisplayName(state?.targetPath || '')
+  title: getTabTitle(state?.targetPath || '', state?.viewMode)
 });
 
 const sanitizeTabFromSession = (tab) => {
   if (!tab || typeof tab !== 'object') return null;
 
   const targetPath = normalizeTargetPath(tab.targetPath || '');
-  const viewMode = tab.viewMode === 'album' ? 'album' : 'folder';
+  const viewMode = normalizeViewMode(tab.viewMode);
 
   return {
     id: typeof tab.id === 'string' && tab.id ? tab.id : createTabId(),
     targetPath,
     viewMode,
     initialImage: typeof tab.initialImage === 'string' && tab.initialImage ? tab.initialImage : null,
-    title: getPathDisplayName(targetPath)
+    title: getTabTitle(targetPath, viewMode)
   };
 };
 
 const findSessionTabMatchingURL = (tabsSession, urlState) => {
-  if (!tabsSession || !Array.isArray(tabsSession.tabs) || !urlState?.targetPath) {
+  if (!tabsSession || !Array.isArray(tabsSession.tabs) || !urlState) {
     return null;
   }
 
   const normalizedTargetPath = normalizeTargetPath(urlState.targetPath || '');
-  const expectedViewMode = urlState.viewMode === 'album' ? 'album' : 'folder';
+  const expectedViewMode = normalizeViewMode(urlState.viewMode);
   const expectedImage = urlState.initialImage || null;
 
   return tabsSession.tabs.find((tab) => (
-    tab.targetPath === normalizedTargetPath
-    && tab.viewMode === expectedViewMode
-    && (tab.initialImage || null) === expectedImage
+    tab.viewMode === expectedViewMode
+    && (
+      expectedViewMode === 'favorites'
+        ? true
+        : (
+          tab.targetPath === normalizedTargetPath
+          && (tab.initialImage || null) === expectedImage
+        )
+    )
   )) || null;
 };
 
@@ -292,7 +332,8 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     const restoredTabsSession = loadTabsSession();
     if (restoredTabsSession) {
       const matchedURLTab = findSessionTabMatchingURL(restoredTabsSession, urlState);
-      if (urlState.targetPath && !matchedURLTab) {
+      const hasExplicitURLIntent = Boolean(urlState.targetPath) || urlState.viewMode === 'favorites';
+      if (hasExplicitURLIntent && !matchedURLTab) {
         // 保持深链接行为：URL 无法匹配历史标签时，不覆盖当前 URL 导航
         hasInitializedTabsSession.current = true;
         return;
@@ -304,7 +345,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       const nextActiveTabId = matchedURLTab?.id || restoredTabsSession.activeTabId;
       setActiveTabId(nextActiveTabId);
 
-      if (urlState.targetPath) {
+      if (hasExplicitURLIntent) {
         return;
       }
 
@@ -383,11 +424,12 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
       const activeTab = prevTabs[activeIndex];
       const normalizedTargetPath = normalizeTargetPath(urlState.targetPath || '');
-      const nextTitle = getPathDisplayName(normalizedTargetPath);
+      const nextViewMode = normalizeViewMode(urlState.viewMode);
+      const nextTitle = getTabTitle(normalizedTargetPath, nextViewMode);
 
       if (
         activeTab.targetPath === normalizedTargetPath &&
-        activeTab.viewMode === urlState.viewMode &&
+        activeTab.viewMode === nextViewMode &&
         activeTab.initialImage === (urlState.initialImage || null) &&
         activeTab.title === nextTitle
       ) {
@@ -398,7 +440,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       nextTabs[activeIndex] = {
         ...activeTab,
         targetPath: normalizedTargetPath,
-        viewMode: urlState.viewMode,
+        viewMode: nextViewMode,
         initialImage: urlState.initialImage || null,
         title: nextTitle
       };
@@ -408,20 +450,21 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
   const navigateTab = useCallback((tabId, targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
     const normalizedTargetPath = normalizeTargetPath(targetPath || '');
+    const nextViewMode = normalizeViewMode(viewMode);
     setTabs((prevTabs) => prevTabs.map((tab) => (
       tab.id === tabId
         ? {
             ...tab,
             targetPath: normalizedTargetPath,
-            viewMode,
+            viewMode: nextViewMode,
             initialImage: initialImage || null,
-            title: getPathDisplayName(normalizedTargetPath)
+            title: getTabTitle(normalizedTargetPath, nextViewMode)
           }
         : tab
     )));
 
     setActiveTabId(tabId);
-    navigateWithPersist(normalizedTargetPath, { viewMode, initialImage, replace });
+    navigateWithPersist(normalizedTargetPath, { viewMode: nextViewMode, initialImage, replace });
   }, [navigateWithPersist]);
 
   // 导航函数 - 供子组件使用
@@ -745,7 +788,11 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
                 <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
                   {tab.viewMode === 'album'
                     ? <PhotoAlbumIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />
-                    : <FolderIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />}
+                    : (
+                      tab.viewMode === 'favorites'
+                        ? <FavoriteIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />
+                        : <FolderIcon sx={{ fontSize: 14, mr: 0.75, flexShrink: 0 }} />
+                    )}
                   <Typography variant="caption" noWrap sx={{ flex: 1, textAlign: 'left' }}>
                     {tab.title}
                   </Typography>
@@ -874,6 +921,16 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
       />
     )
     : (
+      urlState.viewMode === 'favorites'
+        ? (
+          <FavoritesPage
+            colorMode={colorMode}
+            urlMode={true}
+            onNavigate={navigateToPath}
+            tabsHeaderContent={renderTabsHeader}
+          />
+        )
+        : (
       <HomePage
         colorMode={colorMode}
         // 通过props传递URL状态
@@ -886,6 +943,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
       />
+        )
     );
 
   return (

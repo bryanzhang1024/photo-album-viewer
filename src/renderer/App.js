@@ -4,7 +4,6 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import BrowserPage from './pages/BrowserPage';
-import FavoritesPage from './pages/FavoritesPage';
 import TestPage from './pages/TestPage';
 import SettingsPage from './pages/SettingsPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
@@ -195,7 +194,7 @@ function App() {
               <Route path="/" element={<BrowserPage colorMode={colorMode} />} />
               <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} />} />
               <Route path="/test" element={<TestPage colorMode={colorMode} />} />
-              <Route path="/favorites" element={<FavoritesPage colorMode={colorMode} />} />
+              <Route path="/favorites" element={<BrowserPage colorMode={colorMode} />} />
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
               {/* 兼容性路由 - 重定向旧的相册URL */}
               <Route path="/album/:albumPath" element={<BrowserPage colorMode={colorMode} redirectFromOldRoute={true} />} />
