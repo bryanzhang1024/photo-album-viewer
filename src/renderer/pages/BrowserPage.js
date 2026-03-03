@@ -9,7 +9,9 @@ import {
   Typography,
   Menu,
   MenuItem,
-  Divider
+  Divider,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
@@ -66,6 +68,7 @@ const parseURLPath = (pathname, search) => {
 };
 
 const TABS_SESSION_KEY = 'browser_tabs_session_v1';
+const SAVED_TABS_SNAPSHOT_KEY = 'browser_tabs_snapshot_v1';
 const DEFAULT_ROOT_PATH_KEY = 'lastRootPath_default';
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const DRAG_INSERT_BEFORE = 'before';
@@ -140,9 +143,20 @@ export const reorderTabsById = (tabs, sourceTabId, targetTabId, position = DRAG_
   return reordered;
 };
 
-const loadTabsSession = () => {
+const createTabsSessionPayload = (tabs, activeTabId) => ({
+  tabs: tabs.map((tab) => ({
+    id: tab.id,
+    targetPath: tab.targetPath || '',
+    viewMode: tab.viewMode || 'folder',
+    initialImage: tab.initialImage || null
+  })),
+  activeTabId,
+  savedAt: Date.now()
+});
+
+const loadTabsSession = (storageKey = TABS_SESSION_KEY) => {
   try {
-    const raw = localStorage.getItem(TABS_SESSION_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
@@ -182,6 +196,11 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const initialTabRef = useRef(null);
   const [openFolderMenuAnchorEl, setOpenFolderMenuAnchorEl] = useState(null);
   const [tabsMenuAnchorEl, setTabsMenuAnchorEl] = useState(null);
+  const [hasSavedTabsSnapshot, setHasSavedTabsSnapshot] = useState(
+    () => Boolean(loadTabsSession(SAVED_TABS_SNAPSHOT_KEY))
+  );
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const draggingTabIdRef = useRef(null);
   const [dragIndicator, setDragIndicator] = useState({ tabId: null, position: DRAG_INSERT_BEFORE });
 
@@ -208,17 +227,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     if (redirectFromOldRoute) return;
 
     try {
-      const serializedTabs = tabs.map((tab) => ({
-        id: tab.id,
-        targetPath: tab.targetPath || '',
-        viewMode: tab.viewMode || 'folder',
-        initialImage: tab.initialImage || null
-      }));
-      localStorage.setItem(TABS_SESSION_KEY, JSON.stringify({
-        tabs: serializedTabs,
-        activeTabId,
-        savedAt: Date.now()
-      }));
+      localStorage.setItem(TABS_SESSION_KEY, JSON.stringify(createTabsSessionPayload(tabs, activeTabId)));
     } catch (error) {
       console.warn('保存标签会话失败:', error);
     }
@@ -585,6 +594,43 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
     setTabsMenuAnchorEl(null);
   }, [tabs, activeTabId]);
 
+  const handleSaveTabsSnapshot = useCallback(() => {
+    setTabsMenuAnchorEl(null);
+    try {
+      localStorage.setItem(
+        SAVED_TABS_SNAPSHOT_KEY,
+        JSON.stringify(createTabsSessionPayload(tabs, activeTabId))
+      );
+      setHasSavedTabsSnapshot(true);
+      setSuccessMessage(`已保存 ${tabs.length} 个标签页`);
+    } catch (error) {
+      console.warn('保存标签组失败:', error);
+      setErrorMessage('保存标签组失败，请稍后重试');
+    }
+  }, [tabs, activeTabId]);
+
+  const handleRestoreTabsSnapshot = useCallback(() => {
+    setTabsMenuAnchorEl(null);
+
+    const savedTabsSession = loadTabsSession(SAVED_TABS_SNAPSHOT_KEY);
+    if (!savedTabsSession) {
+      setHasSavedTabsSnapshot(false);
+      setErrorMessage('没有可恢复的已保存标签组');
+      return;
+    }
+
+    setTabs(savedTabsSession.tabs);
+    setActiveTabId(savedTabsSession.activeTabId);
+    const nextActiveTab = savedTabsSession.tabs.find((tab) => tab.id === savedTabsSession.activeTabId)
+      || savedTabsSession.tabs[0];
+    navigateWithPersist(nextActiveTab.targetPath, {
+      viewMode: nextActiveTab.viewMode,
+      initialImage: nextActiveTab.initialImage,
+      replace: true
+    });
+    setSuccessMessage(`已恢复 ${savedTabsSession.tabs.length} 个标签页`);
+  }, [navigateWithPersist]);
+
   const handleOpenFolderToTarget = useCallback(async (target) => {
     setOpenFolderMenuAnchorEl(null);
     if (!ipcRenderer) return;
@@ -786,6 +832,16 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
           </MenuItem>
         ))}
         <Divider />
+        <MenuItem onClick={handleSaveTabsSnapshot}>
+          保存当前标签组
+        </MenuItem>
+        <MenuItem
+          onClick={handleRestoreTabsSnapshot}
+          disabled={!hasSavedTabsSnapshot}
+        >
+          恢复已保存标签组
+        </MenuItem>
+        <Divider />
         <MenuItem
           onClick={handleCloseOthers}
           disabled={tabs.length <= 1}
@@ -794,17 +850,15 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         </MenuItem>
       </Menu>
     </Box>
-  ), [activeTabId, closeTabById, dragIndicator.position, dragIndicator.tabId, handleCloseOthers, handleOpenFolderToTarget, handleTabChange, handleTabDragEnd, handleTabDragLeave, handleTabDragOver, handleTabDragStart, handleTabDrop, navigateTab, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
+  ), [activeTabId, closeTabById, dragIndicator.position, dragIndicator.tabId, handleCloseOthers, handleOpenFolderToTarget, handleRestoreTabsSnapshot, handleSaveTabsSnapshot, handleTabChange, handleTabDragEnd, handleTabDragLeave, handleTabDragOver, handleTabDragStart, handleTabDrop, hasSavedTabsSnapshot, navigateTab, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
 
   // 如果是重定向，不渲染内容
   if (redirectFromOldRoute) {
     return null;
   }
 
-  // 根据视图模式渲染不同组件
-  if (urlState.viewMode === 'album') {
-    // 相册视图 - 增强的AlbumPage，支持URL导航
-    return (
+  const pageContent = urlState.viewMode === 'album'
+    ? (
       <AlbumPage
         colorMode={colorMode}
         // 通过props传递URL状态，而不是依赖路由参数
@@ -818,10 +872,8 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
       />
-    );
-  } else {
-    // 文件夹视图 - 增强的HomePage，支持URL导航
-    return (
+    )
+    : (
       <HomePage
         colorMode={colorMode}
         // 通过props传递URL状态
@@ -835,7 +887,30 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         tabsHeaderContent={renderTabsHeader}
       />
     );
-  }
+
+  return (
+    <>
+      {pageContent}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={3000}
+        onClose={() => setSuccessMessage('')}
+      >
+        <Alert onClose={() => setSuccessMessage('')} severity="success" sx={{ width: '100%' }}>
+          {successMessage}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={!!errorMessage}
+        autoHideDuration={4000}
+        onClose={() => setErrorMessage('')}
+      >
+        <Alert onClose={() => setErrorMessage('')} severity="error" sx={{ width: '100%' }}>
+          {errorMessage}
+        </Alert>
+      </Snackbar>
+    </>
+  );
 }
 
 export default BrowserPage;

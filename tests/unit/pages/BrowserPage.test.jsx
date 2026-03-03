@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
@@ -219,6 +219,58 @@ describe('BrowserPage', () => {
       initialImage: null,
       replace: true,
       viewMode: 'folder'
+    });
+  });
+
+  test('saves current tabs snapshot from tabs menu', () => {
+    setupRouterMocks({
+      pathname: '/browse/%2Falbums%2Ftrip',
+      search: '?view=folder'
+    });
+
+    render(<BrowserPage colorMode="light" />);
+
+    fireEvent.click(screen.getByLabelText('标签页列表'));
+    fireEvent.click(screen.getByText('保存当前标签组'));
+
+    const savedRaw = localStorage.getItem('browser_tabs_snapshot_v1');
+    expect(savedRaw).toBeTruthy();
+
+    const savedSnapshot = JSON.parse(savedRaw);
+    expect(savedSnapshot.tabs).toEqual([
+      expect.objectContaining({
+        targetPath: '/albums/trip',
+        viewMode: 'folder',
+        initialImage: null
+      })
+    ]);
+    expect(savedSnapshot.activeTabId).toBeTruthy();
+  });
+
+  test('restores saved tabs snapshot from tabs menu', () => {
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+
+    localStorage.setItem('browser_tabs_snapshot_v1', JSON.stringify({
+      tabs: [
+        {
+          id: 'tab-album-restore',
+          targetPath: '/albums/wedding',
+          viewMode: 'album',
+          initialImage: 'cover.jpg'
+        }
+      ],
+      activeTabId: 'tab-album-restore'
+    }));
+
+    render(<BrowserPage colorMode="dark" />);
+
+    fireEvent.click(screen.getByLabelText('标签页列表'));
+    fireEvent.click(screen.getByText('恢复已保存标签组'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/albums/wedding', {
+      viewMode: 'album',
+      initialImage: 'cover.jpg',
+      replace: true
     });
   });
 
