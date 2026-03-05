@@ -389,6 +389,9 @@ function HomePage({
   const handleNavigate = async (targetPath) => {
     if (targetPath === currentPath || isNavigating) return; // 避免重复导航和并发操作
 
+    // 进入下一级前先保存当前列表滚动位置，便于返回恢复
+    saveScrollPosition();
+
     // URL模式：使用传入的回调函数
     if (urlMode && onNavigate) {
       onNavigate(targetPath, 'folder');
@@ -418,31 +421,33 @@ function HomePage({
   // 处理节点点击 - 支持文件夹和相册 - 使用 useCallback 缓存
   const handleNodeClick = useCallback(async (node) => {
     if (node.type === 'folder') {
-      // 文件夹类型：导航到该文件夹
+      // 文件夹类型：统一复用导航逻辑，确保滚动位置被保存
       if (urlMode && onFolderClick) {
+        saveScrollPosition();
         onFolderClick(node.path);
-      } else {
-        await scanNavigationLevel(node.path);
+        return;
       }
+      await handleNavigate(node.path);
     } else if (node.type === 'album') {
       // 相册类型：打开相册页面
+      saveScrollPosition();
       if (urlMode && onAlbumClick) {
         onAlbumClick(node.path, node.name);
       } else {
-        saveScrollPosition();
         navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
       }
     }
-  }, [urlMode, onFolderClick, onAlbumClick, scanNavigationLevel, navigate, saveScrollPosition]);
+  }, [urlMode, onFolderClick, onAlbumClick, handleNavigate, navigate, saveScrollPosition]);
 
   // 处理浮动导航面板的相册点击
   const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
+    saveScrollPosition();
     if (urlMode && onAlbumClick) {
       onAlbumClick(albumPath, albumName);
     } else {
       navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
     }
-  }, [urlMode, onAlbumClick, navigate]);
+  }, [urlMode, onAlbumClick, navigate, saveScrollPosition]);
   
   // 重新扫描
   const handleRefresh = () => {
@@ -573,6 +578,13 @@ function HomePage({
 
     // 如果上级目录存在，则导航到上级
     if (parentPath && parentPath !== currentPath) {
+      saveScrollPosition();
+
+      if (urlMode && onNavigate) {
+        onNavigate(parentPath, 'folder');
+        return;
+      }
+
       setIsNavigating(true);
       try {
         await scanNavigationLevel(parentPath);
@@ -584,13 +596,23 @@ function HomePage({
       }
     }
   };
+
+  const handleBreadcrumbNavigate = useCallback((targetPath) => {
+    if (urlMode && onBreadcrumbNavigate) {
+      saveScrollPosition();
+      onBreadcrumbNavigate(targetPath);
+      return;
+    }
+
+    handleNavigate(targetPath);
+  }, [urlMode, onBreadcrumbNavigate, handleNavigate, saveScrollPosition]);
   
     const renderHeader = () => (
       <>
         <BreadcrumbNavigation
           breadcrumbs={breadcrumbs}
           currentPath={currentPath}
-          onNavigate={urlMode && onBreadcrumbNavigate ? onBreadcrumbNavigate : handleNavigate}
+          onNavigate={handleBreadcrumbNavigate}
           variant="minimal"
           compact={isSmallScreen}
           sx={{ flexGrow: 1, minWidth: 0 }}
