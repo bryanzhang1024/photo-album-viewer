@@ -12,7 +12,41 @@ jest.mock('react-router-dom', () => {
 });
 
 jest.mock('../../../src/renderer/pages/HomePage', () =>
-  jest.fn((props) => <div data-testid="home-page">{props.tabsHeaderContent}</div>)
+  jest.fn((props) => {
+    const React = require('react');
+    const { useContext, useEffect, useMemo, useRef } = React;
+    const { useLocation } = require('react-router-dom');
+    const { ScrollPositionContext } = require('../../../src/renderer/App');
+
+    function MockHomePage() {
+      const location = useLocation();
+      const scrollContext = useContext(ScrollPositionContext);
+      const scrollContainerRef = useRef(null);
+      const scrollPositionKey = useMemo(
+        () => `${props.tabScrollKey || '__missing__'}::${location.pathname}${location.search}`,
+        [props.tabScrollKey, location.pathname, location.search]
+      );
+
+      useEffect(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContext.getPosition(scrollPositionKey);
+        }
+      }, [scrollContext, scrollPositionKey]);
+
+      return (
+        <div data-testid="home-page">
+          {props.tabsHeaderContent}
+          <div
+            ref={scrollContainerRef}
+            className="scroll-container"
+            data-testid="mock-scroll-container"
+          />
+        </div>
+      );
+    }
+
+    return <MockHomePage />;
+  })
 );
 
 jest.mock('../../../src/renderer/pages/AlbumPage', () =>
@@ -36,6 +70,7 @@ jest.mock('../../../src/renderer/utils/navigation', () => {
 const HomePage = require('../../../src/renderer/pages/HomePage');
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage');
 const FavoritesPage = require('../../../src/renderer/pages/FavoritesPage');
+const { ScrollPositionContext } = require('../../../src/renderer/App');
 const navigationUtils = require('../../../src/renderer/utils/navigation');
 const reactRouter = require('react-router-dom');
 
@@ -408,5 +443,73 @@ describe('BrowserPage', () => {
       initialImage: null,
       replace: false
     });
+  });
+
+  test('preserves independent scroll positions when switching between same-path tabs', () => {
+    const routerState = {
+      pathname: '/browse/%2Falbums%2Fshared',
+      search: '?view=folder',
+      state: null
+    };
+    const navigateMock = jest.fn();
+    const scrollPositions = {};
+    const scrollContextValue = {
+      positions: scrollPositions,
+      savePosition: jest.fn((key, position) => {
+        scrollPositions[key] = position;
+      }),
+      getPosition: jest.fn((key) => scrollPositions[key] || 0)
+    };
+
+    reactRouter.useLocation.mockImplementation(() => routerState);
+    reactRouter.useNavigate.mockReturnValue(navigateMock);
+    reactRouter.useParams.mockReturnValue({});
+
+    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
+      tabs: [
+        {
+          id: 'tab-a',
+          targetPath: '/albums/shared',
+          viewMode: 'folder',
+          initialImage: null
+        },
+        {
+          id: 'tab-b',
+          targetPath: '/albums/shared',
+          viewMode: 'folder',
+          initialImage: null
+        }
+      ],
+      activeTabId: 'tab-a'
+    }));
+
+    render(
+      <ScrollPositionContext.Provider value={scrollContextValue}>
+        <BrowserPage colorMode="dark" scrollContext={scrollContextValue} />
+      </ScrollPositionContext.Provider>
+    );
+
+    let scrollContainer = screen.getByTestId('mock-scroll-container');
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: 0
+    });
+
+    scrollContainer.scrollTop = 240;
+    act(() => {
+      fireEvent.click(screen.getAllByRole('tab')[1]);
+    });
+
+    expect(scrollContextValue.savePosition).toHaveBeenCalled();
+    scrollContainer = screen.getByTestId('mock-scroll-container');
+
+    scrollContainer.scrollTop = 40;
+    act(() => {
+      fireEvent.click(screen.getAllByRole('tab')[0]);
+    });
+
+    scrollContainer = screen.getByTestId('mock-scroll-container');
+    expect(scrollContainer.scrollTop).toBe(240);
   });
 });

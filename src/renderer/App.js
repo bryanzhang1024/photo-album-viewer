@@ -191,14 +191,14 @@ function App() {
         <FavoritesProvider>
           <ScrollPositionContext.Provider value={scrollContext}>
             <Routes>
-              <Route path="/" element={<BrowserPage colorMode={colorMode} />} />
-              <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} />} />
+              <Route path="/" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
+              <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/test" element={<TestPage colorMode={colorMode} />} />
-              <Route path="/favorites" element={<BrowserPage colorMode={colorMode} />} />
+              <Route path="/favorites" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
               {/* 兼容性路由 - 重定向旧的相册URL */}
-              <Route path="/album/:albumPath" element={<BrowserPage colorMode={colorMode} redirectFromOldRoute={true} />} />
-              <Route path="/album" element={<BrowserPage colorMode={colorMode} redirectFromOldRoute={true} />} />
+              <Route path="/album/:albumPath" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} redirectFromOldRoute={true} />} />
+              <Route path="/album" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} redirectFromOldRoute={true} />} />
             </Routes>
           </ScrollPositionContext.Provider>
         </FavoritesProvider>

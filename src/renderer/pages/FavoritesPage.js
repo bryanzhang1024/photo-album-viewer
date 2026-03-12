@@ -32,7 +32,7 @@ import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from 
 import { navigateToBrowsePath } from '../utils/navigation';
 
 // 收藏页面组件
-function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent = null }) {
+function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent = null, tabScrollKey = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -58,8 +58,8 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
   const scrollPositionKey = useMemo(
-    () => `${location.pathname}${location.search}`,
-    [location.pathname, location.search]
+    () => `${tabScrollKey || '__default__'}::${location.pathname}${location.search}`,
+    [tabScrollKey, location.pathname, location.search]
   );
   const saveScrollPosition = () => {
     if (scrollContainerRef.current) {

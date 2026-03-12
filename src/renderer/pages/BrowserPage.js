@@ -227,7 +227,7 @@ const loadTabsSession = (storageKey = TABS_SESSION_KEY) => {
 
 const ipcRenderer = window.electronAPI || null;
 
-function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
+function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -256,11 +256,29 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
   const [tabs, setTabs] = useState(() => [initialTabRef.current]);
   const [activeTabId, setActiveTabId] = useState(() => initialTabRef.current.id);
+  const activeTabScrollKey = useMemo(
+    () => activeTabId || '__default__',
+    [activeTabId]
+  );
 
   const navigateWithPersist = useMemo(
     () => withLastPathTracking(navigate),
     [navigate]
   );
+
+  const saveActiveTabScrollPosition = useCallback(() => {
+    if (!scrollContext?.savePosition) {
+      return;
+    }
+
+    const scrollContainer = document.querySelector('.scroll-container');
+    if (!scrollContainer) {
+      return;
+    }
+
+    const scopedKey = `${activeTabScrollKey}::${location.pathname}${location.search}`;
+    scrollContext.savePosition(scopedKey, scrollContainer.scrollTop || 0);
+  }, [activeTabScrollKey, location.pathname, location.search, scrollContext]);
 
   useEffect(() => {
     if (!hasInitializedTabsSession.current) return;
@@ -451,6 +469,9 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
   const navigateTab = useCallback((tabId, targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
     const normalizedTargetPath = normalizeTargetPath(targetPath || '');
     const nextViewMode = normalizeViewMode(viewMode);
+    if (tabId !== activeTabId) {
+      saveActiveTabScrollPosition();
+    }
     setTabs((prevTabs) => prevTabs.map((tab) => (
       tab.id === tabId
         ? {
@@ -465,7 +486,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
 
     setActiveTabId(tabId);
     navigateWithPersist(normalizedTargetPath, { viewMode: nextViewMode, initialImage, replace });
-  }, [navigateWithPersist]);
+  }, [activeTabId, navigateWithPersist, saveActiveTabScrollPosition]);
 
   // 导航函数 - 供子组件使用
   const navigateToPath = useCallback(
@@ -918,6 +939,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
+        tabScrollKey={activeTabScrollKey}
       />
     )
     : (
@@ -928,6 +950,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
             urlMode={true}
             onNavigate={navigateToPath}
             tabsHeaderContent={renderTabsHeader}
+            tabScrollKey={activeTabScrollKey}
           />
         )
         : (
@@ -942,6 +965,7 @@ function BrowserPage({ colorMode, redirectFromOldRoute = false }) {
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
+        tabScrollKey={activeTabScrollKey}
       />
         )
     );

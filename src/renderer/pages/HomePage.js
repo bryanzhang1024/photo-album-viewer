@@ -59,7 +59,8 @@ function HomePage({
   onAlbumClick = null,
   onFolderClick = null,
   urlMode = false,
-  tabsHeaderContent = null
+  tabsHeaderContent = null,
+  tabScrollKey = null
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -179,8 +180,8 @@ function HomePage({
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
   const scrollPositionKey = useMemo(
-    () => `${location.pathname}${location.search}`,
-    [location.pathname, location.search]
+    () => `${tabScrollKey || '__default__'}::${location.pathname}${location.search}`,
+    [tabScrollKey, location.pathname, location.search]
   );
   const saveScrollPosition = useCallback(() => {
     if (scrollContainerRef.current) {
