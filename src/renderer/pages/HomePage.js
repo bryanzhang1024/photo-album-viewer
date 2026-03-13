@@ -229,81 +229,6 @@ function HomePage({
   }, [userDensity]);
   
   
-  // URL模式初始化 - 处理来自BrowserPage的props
-  useEffect(() => {
-    if (urlMode && urlCurrentPath !== null) {
-      console.log('URL模式：设置当前路径为', urlCurrentPath);
-      if (urlCurrentPath) {
-        scanNavigationLevel(urlCurrentPath);
-      } else {
-        updateNavigationState({ currentPath: '', nodes: [], breadcrumbs: [], metadata: null }, '');
-      }
-      return;
-    }
-  }, [urlMode, urlCurrentPath, scanNavigationLevel, updateNavigationState]);
-
-  // 处理从AlbumPage返回的导航请求 (仅非URL模式)
-  useEffect(() => {
-    if (urlMode) return; // URL模式下不处理这个逻辑
-    if (location.state?.navigateToPath) {
-      const targetPath = location.state.navigateToPath;
-      console.log(`从相册页面返回，导航到: ${targetPath}`);
-
-      // 异步处理：设置根路径，等待完成后扫描目标路径
-      const parentPath = getDirname(targetPath);
-      setRootPath(parentPath);
-
-      // 使用setTimeout确保状态更新后再执行导航
-      setTimeout(async () => {
-        try {
-          await scanNavigationLevel(targetPath);
-          // 只有在导航成功后才清除state
-          navigate(location.pathname, { replace: true, state: null });
-        } catch (error) {
-          console.error('从相册返回导航失败:', error);
-          setError(`导航失败: ${error.message}`);
-        }
-      }, 100);
-      return;
-    }
-  }, [location.state, urlMode, navigate, scanNavigationLevel]);
-
-  // 从localStorage中读取上次的路径，并处理URL参数 (仅非URL模式)
-  useEffect(() => {
-    if (urlMode) return; // URL模式下不处理localStorage逻辑
-    if (urlPathProcessed) {
-      console.log('URL参数已处理，跳过重复处理');
-      return;
-    }
-
-    const searchParams = new URLSearchParams(window.location.search);
-    const initialPath = searchParams.get('initialPath');
-    
-    console.log('URL参数检查:', { search: location.search, initialPath, urlPathProcessed, fullUrl: window.location.href });
-    
-    if (initialPath) {
-      // 如果有URL参数，使用指定路径 - 优先处理
-      const decodedPath = decodeURIComponent(initialPath);
-      console.log('使用URL参数路径:', decodedPath);
-      console.log('窗口存储键:', windowStorageKey);
-      setRootPath(decodedPath);
-      localStorage.setItem(windowStorageKey, decodedPath);
-      scanNavigationLevel(decodedPath);
-      setUrlPathProcessed(true);
-    } else if (!urlPathProcessed) {
-      // 否则使用localStorage中的路径（仅当URL参数未处理时）
-      const savedPath = localStorage.getItem(windowStorageKey);
-      if (savedPath) {
-        console.log('使用localStorage路径:', savedPath);
-        console.log('窗口存储键:', windowStorageKey);
-        setRootPath(savedPath);
-        scanNavigationLevel(savedPath);
-      }
-      setUrlPathProcessed(true);
-    }
-  }, [location.search, urlMode, urlPathProcessed, windowStorageKey, scanNavigationLevel]);
-  
-  
   // 在组件挂载后恢复滚动位置
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -315,38 +240,6 @@ function HomePage({
     
     return () => clearTimeout(timer);
   }, [scrollContext, scrollPositionKey]);
-  
-  // 添加键盘快捷键监听
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (searchHasFocus) {
-        return;
-      }
-
-      if (document.activeElement.tagName === 'INPUT' || 
-          document.activeElement.tagName === 'TEXTAREA' ||
-          document.activeElement.isContentEditable) {
-        return; // 在输入框中时，禁用部分快捷键
-      }
-
-      switch (event.key) {
-        case 'r':
-          handleRandomAlbum();
-          break;
-        case 'Backspace':
-          handleGoUp();
-          break;
-        default:
-          break;
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [albumNodes, handleGoUp, handleRandomAlbum, searchHasFocus]); // 添加依赖
-  
 
   
   // 智能导航扫描 - 新架构（使用统一缓存）
@@ -452,9 +345,10 @@ function HomePage({
   
   // 重新扫描
   const handleRefresh = () => {
-    if (rootPath) {
+    const refreshTargetPath = currentPath || rootPath;
+    if (refreshTargetPath) {
       imageCache.clearType('navigation');
-      scanNavigationLevel(currentPath || rootPath);
+      scanNavigationLevel(refreshTargetPath);
     }
   };
   
@@ -607,6 +501,113 @@ function HomePage({
 
     handleNavigate(targetPath);
   }, [urlMode, onBreadcrumbNavigate, handleNavigate, saveScrollPosition]);
+
+  // URL模式初始化 - 处理来自BrowserPage的props
+  useEffect(() => {
+    if (urlMode && urlCurrentPath !== null) {
+      console.log('URL模式：设置当前路径为', urlCurrentPath);
+      if (urlCurrentPath) {
+        scanNavigationLevel(urlCurrentPath);
+      } else {
+        updateNavigationState({ currentPath: '', nodes: [], breadcrumbs: [], metadata: null }, '');
+      }
+      return;
+    }
+  }, [urlMode, urlCurrentPath, scanNavigationLevel, updateNavigationState]);
+
+  // 处理从AlbumPage返回的导航请求 (仅非URL模式)
+  useEffect(() => {
+    if (urlMode) return; // URL模式下不处理这个逻辑
+    if (location.state?.navigateToPath) {
+      const targetPath = location.state.navigateToPath;
+      console.log(`从相册页面返回，导航到: ${targetPath}`);
+
+      // 异步处理：设置根路径，等待完成后扫描目标路径
+      const parentPath = getDirname(targetPath);
+      setRootPath(parentPath);
+
+      // 使用setTimeout确保状态更新后再执行导航
+      setTimeout(async () => {
+        try {
+          await scanNavigationLevel(targetPath);
+          // 只有在导航成功后才清除state
+          navigate(location.pathname, { replace: true, state: null });
+        } catch (error) {
+          console.error('从相册返回导航失败:', error);
+          setError(`导航失败: ${error.message}`);
+        }
+      }, 100);
+      return;
+    }
+  }, [location.state, urlMode, navigate, scanNavigationLevel]);
+
+  // 从localStorage中读取上次的路径，并处理URL参数 (仅非URL模式)
+  useEffect(() => {
+    if (urlMode) return; // URL模式下不处理localStorage逻辑
+    if (urlPathProcessed) {
+      console.log('URL参数已处理，跳过重复处理');
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const initialPath = searchParams.get('initialPath');
+    
+    console.log('URL参数检查:', { search: location.search, initialPath, urlPathProcessed, fullUrl: window.location.href });
+    
+    if (initialPath) {
+      // 如果有URL参数，使用指定路径 - 优先处理
+      const decodedPath = decodeURIComponent(initialPath);
+      console.log('使用URL参数路径:', decodedPath);
+      console.log('窗口存储键:', windowStorageKey);
+      setRootPath(decodedPath);
+      localStorage.setItem(windowStorageKey, decodedPath);
+      scanNavigationLevel(decodedPath);
+      setUrlPathProcessed(true);
+    } else if (!urlPathProcessed) {
+      // 否则使用localStorage中的路径（仅当URL参数未处理时）
+      const savedPath = localStorage.getItem(windowStorageKey);
+      if (savedPath) {
+        console.log('使用localStorage路径:', savedPath);
+        console.log('窗口存储键:', windowStorageKey);
+        setRootPath(savedPath);
+        scanNavigationLevel(savedPath);
+      }
+      setUrlPathProcessed(true);
+    }
+  }, [location.search, urlMode, urlPathProcessed, windowStorageKey, scanNavigationLevel]);
+
+  // 添加键盘快捷键监听
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (searchHasFocus) {
+        return;
+      }
+
+      if (document.activeElement.tagName === 'INPUT' || 
+          document.activeElement.tagName === 'TEXTAREA' ||
+          document.activeElement.isContentEditable) {
+        return; // 在输入框中时，禁用部分快捷键
+      }
+
+      switch (event.key) {
+        case 'r':
+          handleRandomAlbum();
+          break;
+        case 'Backspace':
+          handleGoUp();
+          break;
+        default:
+          break;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleGoUp, handleRandomAlbum, searchHasFocus]);
+
+  const canRefreshCurrentFolder = Boolean(currentPath || rootPath);
   
     const renderHeader = () => (
       <>
@@ -721,16 +722,32 @@ function HomePage({
               <MenuItem value="comfortable">宽松</MenuItem>
             </Select>
           </FormControl>
+          <Tooltip title="刷新当前文件夹">
+            <span>
+              <IconButton
+                color="inherit"
+                onClick={handleRefresh}
+                size="small"
+                sx={{ mx: 0.5 }}
+                aria-label="刷新当前文件夹"
+                disabled={!canRefreshCurrentFolder}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
           <Tooltip title="随机选择相簿 (R)">
-            <IconButton
-              color="inherit"
-              onClick={handleRandomAlbum}
-              size="small"
-              sx={{ mx: 0.5 }}
-              disabled={albumNodes.length === 0}
-            >
-              <CasinoIcon />
-            </IconButton>
+            <span>
+              <IconButton
+                color="inherit"
+                onClick={handleRandomAlbum}
+                size="small"
+                sx={{ mx: 0.5 }}
+                disabled={albumNodes.length === 0}
+              >
+                <CasinoIcon />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title="我的收藏">
             <IconButton

@@ -36,6 +36,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import ImageViewer from '../components/ImageViewer';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import ImageCard from '../components/ImageCard';
@@ -158,7 +159,7 @@ function AlbumPage({
   });
 
   // 使用自定义 Hooks
-  const { images, loading, error: loadError, loadImages } = useAlbumImages(decodedAlbumPath);
+  const { images, loading, error: loadError, loadImages, refresh } = useAlbumImages(decodedAlbumPath);
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
 
@@ -569,6 +570,7 @@ function AlbumPage({
   const hasActiveSearch = Boolean(normalizedSearchQuery);
   const totalImagesCount = images.length;
   const filteredImagesCount = sortedImages.length;
+  const canRefreshAlbum = Boolean(decodedAlbumPath);
 
   // 处理图片点击
   const handleImageClick = (index) => {
@@ -908,6 +910,30 @@ function AlbumPage({
             <MenuItem value="comfortable">宽松</MenuItem>
           </Select>
         </FormControl>
+        <Tooltip title="刷新当前相簿">
+          <span>
+            <IconButton
+              color="inherit"
+              onClick={refresh}
+              size="small"
+              sx={{ mx: 0.5 }}
+              aria-label="刷新当前相簿"
+              disabled={!canRefreshAlbum}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="随机选择相簿 (R)">
+          <IconButton
+            color="inherit"
+            onClick={handleRandomAlbum}
+            size="small"
+            sx={{ mx: 0.5 }}
+          >
+            <CasinoIcon />
+          </IconButton>
+        </Tooltip>
         <Tooltip title={neighboringAlbums.prev ? `上一个相簿: ${neighboringAlbums.prev.name}` : "已是第一个相簿"}>
           <span>
             <IconButton
@@ -938,16 +964,6 @@ function AlbumPage({
               <ChevronRightIcon />
             </IconButton>
           </span>
-        </Tooltip>
-        <Tooltip title="随机选择相簿 (R)">
-          <IconButton
-            color="inherit"
-            onClick={handleRandomAlbum}
-            size="small"
-            sx={{ mx: 0.5 }}
-          >
-            <CasinoIcon />
-          </IconButton>
         </Tooltip>
         <Tooltip title={isAlbumFavorited(decodedAlbumPath) ? "取消收藏相簿" : "收藏相簿"}>
           <IconButton
