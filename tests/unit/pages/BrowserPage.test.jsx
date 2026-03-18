@@ -1,6 +1,8 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 
+const mockAlbumRefreshTargets = [];
+
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
   return {
@@ -50,7 +52,24 @@ jest.mock('../../../src/renderer/pages/HomePage', () =>
 );
 
 jest.mock('../../../src/renderer/pages/AlbumPage', () =>
-  jest.fn((props) => <div data-testid="album-page">{props.tabsHeaderContent}</div>)
+  jest.fn((props) => (
+    <div data-testid="album-page">
+      {props.tabsHeaderContent}
+      <div data-testid="mock-album-path">{props.albumPath}</div>
+      <button
+        type="button"
+        onClick={() => props.onAlbumClick?.('/albums/random', 'random', null)}
+      >
+        模拟随机相簿
+      </button>
+      <button
+        type="button"
+        onClick={() => mockAlbumRefreshTargets.push(props.albumPath)}
+      >
+        模拟刷新当前相簿
+      </button>
+    </div>
+  ))
 );
 
 jest.mock('../../../src/renderer/pages/FavoritesPage', () =>
@@ -97,6 +116,7 @@ describe('BrowserPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    mockAlbumRefreshTargets.length = 0;
     navigationUtils.getLastPath.mockReturnValue('');
   });
 
@@ -443,6 +463,31 @@ describe('BrowserPage', () => {
       initialImage: null,
       replace: false
     });
+  });
+
+  test('keeps album content in sync with tab state after random navigation before url catches up', () => {
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse/%2Falbums%2Fold',
+      search: '?view=album'
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    expect(screen.getByRole('tab', { name: /old/i })).toBeInTheDocument();
+    expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/albums/old');
+
+    fireEvent.click(screen.getByText('模拟随机相簿'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/albums/random', {
+      viewMode: 'album',
+      initialImage: null,
+      replace: false
+    });
+    expect(screen.getByRole('tab', { name: /random/i })).toBeInTheDocument();
+    expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/albums/random');
+
+    fireEvent.click(screen.getByText('模拟刷新当前相簿'));
+    expect(mockAlbumRefreshTargets).toEqual(['/albums/random']);
   });
 
   test('preserves independent scroll positions when switching between same-path tabs', () => {

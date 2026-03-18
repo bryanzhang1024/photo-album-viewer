@@ -128,6 +128,18 @@ const createTabFromState = (state) => ({
   title: getTabTitle(state?.targetPath || '', state?.viewMode)
 });
 
+const createViewState = (targetPath = '', viewMode = 'folder', initialImage = null) => {
+  const normalizedTargetPath = normalizeTargetPath(targetPath || '');
+  const normalizedViewMode = normalizeViewMode(viewMode);
+
+  return {
+    targetPath: normalizedTargetPath,
+    viewMode: normalizedViewMode,
+    initialImage: initialImage || null,
+    isRoot: normalizedViewMode === 'favorites' ? true : !normalizedTargetPath
+  };
+};
+
 const sanitizeTabFromSession = (tab) => {
   if (!tab || typeof tab !== 'object') return null;
 
@@ -256,6 +268,9 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
 
   const [tabs, setTabs] = useState(() => [initialTabRef.current]);
   const [activeTabId, setActiveTabId] = useState(() => initialTabRef.current.id);
+  const [displayState, setDisplayState] = useState(() =>
+    createViewState(urlState.targetPath, urlState.viewMode, urlState.initialImage)
+  );
   const activeTabScrollKey = useMemo(
     () => activeTabId || '__default__',
     [activeTabId]
@@ -339,6 +354,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       });
       setTabs([commandLineTab]);
       setActiveTabId(commandLineTab.id);
+      setDisplayState(createViewState(decodedPath, 'folder', null));
       navigateWithPersist(decodedPath, {
         viewMode: 'folder',
         initialImage: null,
@@ -364,11 +380,13 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       setActiveTabId(nextActiveTabId);
 
       if (hasExplicitURLIntent) {
+        setDisplayState(createViewState(urlState.targetPath, urlState.viewMode, urlState.initialImage));
         return;
       }
 
       const activeTab = restoredTabsSession.tabs.find((tab) => tab.id === nextActiveTabId)
         || restoredTabsSession.tabs[0];
+      setDisplayState(createViewState(activeTab.targetPath, activeTab.viewMode, activeTab.initialImage));
 
       navigateWithPersist(activeTab.targetPath, {
         viewMode: activeTab.viewMode,
@@ -390,6 +408,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       });
       setTabs([fallbackTab]);
       setActiveTabId(fallbackTab.id);
+      setDisplayState(createViewState(lastPath, 'folder', null));
       navigateWithPersist(lastPath, {
         viewMode: 'folder',
         initialImage: null,
@@ -409,6 +428,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       });
       setTabs([defaultRootTab]);
       setActiveTabId(defaultRootTab.id);
+      setDisplayState(createViewState(defaultRootPath, 'folder', null));
       navigateWithPersist(defaultRootPath, {
         viewMode: 'folder',
         initialImage: null,
@@ -429,6 +449,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       // clearLastPath();
     }
   }, [urlState.targetPath, urlState.isRoot]);
+
+  useEffect(() => {
+    setDisplayState(createViewState(urlState.targetPath, urlState.viewMode, urlState.initialImage));
+  }, [urlState.targetPath, urlState.viewMode, urlState.initialImage]);
 
   // URL变化时，将当前URL同步回激活标签
   useEffect(() => {
@@ -485,6 +509,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     )));
 
     setActiveTabId(tabId);
+    setDisplayState(createViewState(normalizedTargetPath, nextViewMode, initialImage));
     navigateWithPersist(normalizedTargetPath, { viewMode: nextViewMode, initialImage, replace });
   }, [activeTabId, navigateWithPersist, saveActiveTabScrollPosition]);
 
@@ -516,12 +541,12 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   // 返回处理
   const handleGoBack = () => {
     // 根据当前路径计算父路径
-    if (!urlState.targetPath || urlState.isRoot) {
+    if (!displayState.targetPath || displayState.isRoot) {
       return; // 已经在根目录
     }
 
-    const parentPath = normalizeTargetPath(getDirname(urlState.targetPath));
-    if (!parentPath || parentPath === urlState.targetPath) {
+    const parentPath = normalizeTargetPath(getDirname(displayState.targetPath));
+    if (!parentPath || parentPath === displayState.targetPath) {
       navigateToPath('', 'folder');
       return;
     }
@@ -687,6 +712,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     setActiveTabId(savedTabsSession.activeTabId);
     const nextActiveTab = savedTabsSession.tabs.find((tab) => tab.id === savedTabsSession.activeTabId)
       || savedTabsSession.tabs[0];
+    setDisplayState(createViewState(nextActiveTab.targetPath, nextActiveTab.viewMode, nextActiveTab.initialImage));
     navigateWithPersist(nextActiveTab.targetPath, {
       viewMode: nextActiveTab.viewMode,
       initialImage: nextActiveTab.initialImage,
@@ -925,13 +951,13 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     return null;
   }
 
-  const pageContent = urlState.viewMode === 'album'
+  const pageContent = displayState.viewMode === 'album'
     ? (
       <AlbumPage
         colorMode={colorMode}
         // 通过props传递URL状态，而不是依赖路由参数
-        albumPath={urlState.targetPath}
-        initialImage={urlState.initialImage}
+        albumPath={displayState.targetPath}
+        initialImage={displayState.initialImage}
         onNavigate={navigateToPath}
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}
@@ -943,7 +969,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       />
     )
     : (
-      urlState.viewMode === 'favorites'
+      displayState.viewMode === 'favorites'
         ? (
           <FavoritesPage
             colorMode={colorMode}
@@ -957,7 +983,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       <HomePage
         colorMode={colorMode}
         // 通过props传递URL状态
-        currentPath={urlState.targetPath}
+        currentPath={displayState.targetPath}
         onNavigate={navigateToPath}
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}
