@@ -5,6 +5,7 @@ AGENTS.md
 agents/
 .serena
 doc
+docs/
 
 # 依赖
 node_modules/
