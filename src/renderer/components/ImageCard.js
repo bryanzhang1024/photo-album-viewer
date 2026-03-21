@@ -14,6 +14,7 @@ import imageCache from '../utils/ImageCacheManager';
 import { getBasename } from '../utils/pathUtils';
 import useIsVisible from '../hooks/useIsVisible';
 import { getThumbnailUrl } from '../utils/thumbnailUrl';
+import { LAYOUT_CONFIG } from '../utils/layoutConfig';
 
 const ipcRenderer = window.electronAPI || null;
 
@@ -45,6 +46,7 @@ function ImageCard({
   showAlbumLink = false,
   lazyLoad = false
 }) {
+  const cardBorderRadius = `${LAYOUT_CONFIG.card.borderRadius}px`;
   const cardRef = useRef(null);
   const isVisible = useIsVisible(cardRef);
   const ipcFallbackAttempted = useRef(false);
@@ -211,7 +213,7 @@ function ImageCard({
           boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
         },
         overflow: 'hidden',
-        borderRadius: 1
+        borderRadius: cardBorderRadius
       }}
       onClick={handleClick}
       elevation={1}

@@ -28,7 +28,8 @@ export const LAYOUT_CONFIG = {
   card: {
     minWidth: 180,
     maxWidth: 400,
-    borderRadius: 8,
+    borderRadius: 18,
+    previewBorderRadius: 10,
     aspectRatio: 1.33 // 4:3
   },
 

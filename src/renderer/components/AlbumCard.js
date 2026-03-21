@@ -21,6 +21,7 @@ import useIsVisible from '../hooks/useIsVisible';
 import CHANNELS from '../../common/ipc-channels';
 import { getThumbnailUrl } from '../utils/thumbnailUrl';
 import { getBasename } from '../utils/pathUtils';
+import { LAYOUT_CONFIG } from '../utils/layoutConfig';
 
 // 观察器已移除 - 使用isVisible属性替代
 
@@ -46,6 +47,9 @@ function AlbumCard({
   isCompactMode, 
   isFavoritesPage = false 
 }) {
+  const cardBorderRadius = `${LAYOUT_CONFIG.card.borderRadius}px`;
+  const previewTileBorderRadius = `${LAYOUT_CONFIG.card.previewBorderRadius}px`;
+
   // 同步从缓存初始化，消除首次渲染的骨架屏闪烁
   const initialPath = node?.path || album?.path;
   const [previewUrls, setPreviewUrls] = useState(() =>
@@ -233,7 +237,7 @@ function AlbumCard({
                   key={index}
                   sx={{
                     bgcolor: 'rgba(0,0,0,0.05)',
-                    borderRadius: '4px',
+                    borderRadius: previewTileBorderRadius,
                     overflow: 'hidden',
                     position: 'relative'
                   }}
@@ -379,7 +383,7 @@ function AlbumCard({
           boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
         },
         overflow: 'hidden',
-        borderRadius: 1
+        borderRadius: cardBorderRadius
       }}
       onClick={onClick}
       elevation={1}
