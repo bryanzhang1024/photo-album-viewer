@@ -5,10 +5,12 @@ const ipcRenderer = window.electronAPI || null;
 
 // 创建收藏上下文
 export const FavoritesContext = createContext({
-  favorites: { albums: [], images: [], collections: [] },
+  favorites: { folders: [], albums: [], images: [], collections: [] },
   isLoading: true,
+  isFolderFavorited: () => false,
   isAlbumFavorited: () => false,
   isImageFavorited: () => false,
+  toggleFolderFavorite: () => {},
   toggleAlbumFavorite: () => {},
   toggleImageFavorite: () => {},
   addCollection: () => {},
@@ -24,9 +26,18 @@ const getBasename = (filePath) => {
   return parts[parts.length - 1];
 };
 
+const normalizeFavoritesData = (data = {}) => ({
+  folders: Array.isArray(data.folders) ? data.folders : [],
+  albums: Array.isArray(data.albums) ? data.albums : [],
+  images: Array.isArray(data.images) ? data.images : [],
+  collections: Array.isArray(data.collections) ? data.collections : [],
+  version: data.version,
+  lastModified: data.lastModified
+});
+
 // 收藏上下文提供者组件
 export const FavoritesProvider = ({ children }) => {
-  const [favorites, setFavorites] = useState({ albums: [], images: [], collections: [] });
+  const [favorites, setFavorites] = useState({ folders: [], albums: [], images: [], collections: [] });
   const [isLoading, setIsLoading] = useState(true);
 
   // 加载收藏数据
@@ -40,7 +51,7 @@ export const FavoritesProvider = ({ children }) => {
 
       try {
         const data = await ipcRenderer.invoke('load-favorites');
-        setFavorites(data);
+        setFavorites(normalizeFavoritesData(data));
       } catch (error) {
         console.error('加载收藏数据失败:', error);
       } finally {
@@ -53,7 +64,7 @@ export const FavoritesProvider = ({ children }) => {
     // 监听来自主进程的收藏数据更新
     const handleFavoritesUpdated = (event, data) => {
       console.log('收到收藏数据更新:', data);
-      setFavorites(data);
+      setFavorites(normalizeFavoritesData(data));
     };
 
     if (ipcRenderer) {
@@ -82,7 +93,7 @@ export const FavoritesProvider = ({ children }) => {
         // 版本冲突时重新加载数据
         if (result.error.includes('版本冲突')) {
           const newData = await ipcRenderer.invoke('load-favorites');
-          setFavorites(newData);
+          setFavorites(normalizeFavoritesData(newData));
         }
       }
       return result.success;
@@ -92,10 +103,47 @@ export const FavoritesProvider = ({ children }) => {
     }
   }, []);
 
+  // 检查文件夹是否已收藏
+  const isFolderFavorited = useCallback((folderPath) => {
+    return favorites.folders.some(folder => folder.path === folderPath);
+  }, [favorites.folders]);
+
   // 检查相簿是否已收藏
   const isAlbumFavorited = useCallback((albumPath) => {
-    return favorites.albums.some(album => album.path === albumPath);
+    return favorites.albums.some(album => album.path === albumPath && (album.kind || 'photoSet') === 'photoSet');
   }, [favorites.albums]);
+
+  // 切换文件夹收藏状态
+  const toggleFolderFavorite = useCallback(async (folder) => {
+    const isCurrentlyFavorited = isFolderFavorited(folder.path);
+    let newFavorites;
+
+    if (isCurrentlyFavorited) {
+      newFavorites = {
+        ...favorites,
+        folders: favorites.folders.filter(item => item.path !== folder.path)
+      };
+    } else {
+      const newFolder = {
+        id: `folder_${Date.now()}`,
+        kind: 'folder',
+        path: folder.path,
+        name: folder.name,
+        childFolders: folder.childFolders || 0,
+        previewSamples: folder.previewSamples || folder.samples || [],
+        addedAt: Date.now()
+      };
+
+      newFavorites = {
+        ...favorites,
+        folders: [...favorites.folders, newFolder]
+      };
+    }
+
+    setFavorites(newFavorites);
+    await saveFavorites(newFavorites);
+    return !isCurrentlyFavorited;
+  }, [favorites, isFolderFavorited, saveFavorites]);
 
   // 检查图片是否已收藏
   const isImageFavorited = useCallback((imagePath) => {
@@ -133,6 +181,7 @@ export const FavoritesProvider = ({ children }) => {
 
       const newAlbum = {
         id: `album_${Date.now()}`,
+        kind: 'photoSet',
         path: album.path,
         name: album.name,
         imageCount: album.imageCount || 0,
@@ -262,8 +311,10 @@ export const FavoritesProvider = ({ children }) => {
   const contextValue = {
     favorites,
     isLoading,
+    isFolderFavorited,
     isAlbumFavorited,
     isImageFavorited,
+    toggleFolderFavorite,
     toggleAlbumFavorite,
     toggleImageFavorite,
     addCollection,

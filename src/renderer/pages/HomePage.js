@@ -29,12 +29,15 @@ import SortIcon from '@mui/icons-material/Sort';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CasinoIcon from '@mui/icons-material/Casino';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AlbumCard from '../components/AlbumCard';
+import ImageCard from '../components/ImageCard';
+import ImageViewer from '../components/ImageViewer';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import { Virtuoso } from 'react-virtuoso';
 import { ScrollPositionContext } from '../App';
@@ -69,6 +72,7 @@ function HomePage({
   const [navigationState, setNavigationState] = useState(() => ({
     path: '',
     nodes: [],
+    directImages: [],
     breadcrumbs: [],
     metadata: null
   }));
@@ -87,7 +91,9 @@ function HomePage({
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHasFocus, setSearchHasFocus] = useState(false);
-  const { path: currentPath, nodes: navigationNodes, breadcrumbs, metadata } = navigationState;
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const { path: currentPath, nodes: navigationNodes, directImages, breadcrumbs, metadata } = navigationState;
   const homeSortFields = useMemo(() => ['name', 'imageCount', 'lastModified'], []);
   const homeLegacySortKeys = useMemo(
     () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
@@ -107,6 +113,7 @@ function HomePage({
     setNavigationState({
       path: data?.currentPath ?? fallbackPath ?? '',
       nodes: data?.nodes ?? [],
+      directImages: data?.directImages ?? [],
       breadcrumbs: data?.breadcrumbs ?? [],
       metadata: data?.metadata ?? null
     });
@@ -148,6 +155,25 @@ function HomePage({
       return (node.path || '').toLowerCase().includes(normalizedSearchQuery);
     });
   }, [navigationNodes, normalizedSearchQuery, currentPath]);
+
+  const filteredDirectImages = useMemo(() => {
+    if (!directImages.length) {
+      return [];
+    }
+
+    if (!normalizedSearchQuery) {
+      return directImages;
+    }
+
+    return directImages.filter((image) => {
+      const imageName = (image.name || '').toLowerCase();
+      if (imageName.includes(normalizedSearchQuery)) {
+        return true;
+      }
+
+      return (image.path || '').toLowerCase().includes(normalizedSearchQuery);
+    });
+  }, [directImages, normalizedSearchQuery]);
   
   // 为当前窗口生成唯一的存储键
   const getWindowStorageKey = () => {
@@ -190,7 +216,12 @@ function HomePage({
   }, [scrollContext, scrollPositionKey]);
   
   // 获取收藏上下文
-  const { favorites } = useFavorites();
+  const {
+    isFolderFavorited,
+    isAlbumFavorited,
+    toggleFolderFavorite,
+    toggleAlbumFavorite
+  } = useFavorites();
 
 
   // 监听窗口大小变化
@@ -225,6 +256,12 @@ function HomePage({
   const estimatedRowHeight = useMemo(() => {
     const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
     const baseHeight = densityConfig.itemWidth;
+    return Math.round(baseHeight + densityConfig.gap);
+  }, [userDensity]);
+
+  const estimatedImageRowHeight = useMemo(() => {
+    const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
+    const baseHeight = (densityConfig.itemWidth * 3) / 2;
     return Math.round(baseHeight + densityConfig.gap);
   }, [userDensity]);
   
@@ -333,6 +370,16 @@ function HomePage({
     }
   }, [urlMode, onFolderClick, onAlbumClick, handleNavigate, navigate, saveScrollPosition]);
 
+  const handleDirectImageClick = useCallback((index) => {
+    saveScrollPosition();
+    setSelectedImageIndex(index);
+    setViewerOpen(true);
+  }, [saveScrollPosition]);
+
+  const handleCloseViewer = useCallback(() => {
+    setViewerOpen(false);
+  }, []);
+
   // 处理浮动导航面板的相册点击
   const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
     saveScrollPosition();
@@ -381,6 +428,22 @@ function HomePage({
     });
   }, [filteredNodes, sortBy, sortDirection]);
 
+  const sortedDirectImages = useMemo(() => {
+    if (!filteredDirectImages.length) return [];
+
+    return [...filteredDirectImages].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortBy === 'name') {
+        comparison = (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+      } else if (sortBy === 'lastModified') {
+        comparison = new Date(a.lastModified || 0) - new Date(b.lastModified || 0);
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredDirectImages, sortBy, sortDirection]);
+
   const columnsCount = useMemo(
     () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
     [windowWidth, userDensity, isSmallScreen]
@@ -391,9 +454,14 @@ function HomePage({
     [sortedNodesData, columnsCount]
   );
 
+  const imageRows = useMemo(
+    () => chunkIntoRows(sortedDirectImages, columnsCount),
+    [sortedDirectImages, columnsCount]
+  );
+
   const hasActiveSearch = Boolean(normalizedSearchQuery);
-  const totalNodesCount = navigationNodes.length;
-  const filteredNodesCount = sortedNodesData.length;
+  const totalItemsCount = navigationNodes.length + directImages.length;
+  const filteredItemsCount = sortedNodesData.length + sortedDirectImages.length;
 
   // 获取节点显示路径 - 使用 useMemo 缓存路径计算
   const nodeDisplayPaths = useMemo(() => {
@@ -423,6 +491,28 @@ function HomePage({
 
     navigate('/favorites');
   };
+
+  const handleToggleCurrentFolderFavorite = useCallback(() => {
+    if (!currentPath) return;
+
+    toggleFolderFavorite({
+      path: currentPath,
+      name: getBasename(currentPath),
+      childFolders: metadata?.folderCount || 0
+    });
+  }, [currentPath, metadata?.folderCount, toggleFolderFavorite]);
+
+  const handleToggleCurrentPhotoSetFavorite = useCallback(() => {
+    if (!currentPath || directImages.length === 0) return;
+
+    toggleAlbumFavorite({
+      kind: 'photoSet',
+      path: currentPath,
+      name: getBasename(currentPath),
+      imageCount: directImages.length,
+      previewImages: directImages.slice(0, 4)
+    });
+  }, [currentPath, directImages, toggleAlbumFavorite]);
   
   
   // 处理随机选择相簿
@@ -509,7 +599,7 @@ function HomePage({
       if (urlCurrentPath) {
         scanNavigationLevel(urlCurrentPath);
       } else {
-        updateNavigationState({ currentPath: '', nodes: [], breadcrumbs: [], metadata: null }, '');
+        updateNavigationState({ currentPath: '', nodes: [], directImages: [], breadcrumbs: [], metadata: null }, '');
       }
       return;
     }
@@ -749,6 +839,38 @@ function HomePage({
               </IconButton>
             </span>
           </Tooltip>
+          <Tooltip title={isFolderFavorited(currentPath) ? "取消收藏当前文件夹" : "收藏当前文件夹"}>
+            <span>
+              <IconButton
+                color="inherit"
+                onClick={handleToggleCurrentFolderFavorite}
+                size="small"
+                sx={{ mx: 0.5 }}
+                disabled={!currentPath}
+                aria-label="收藏当前文件夹"
+              >
+                {isFolderFavorited(currentPath)
+                  ? <FavoriteIcon sx={{ color: '#ff5252' }} />
+                  : <FavoriteBorderIcon />}
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title={isAlbumFavorited(currentPath) ? "取消收藏当前照片集合" : "收藏当前照片集合"}>
+            <span>
+              <IconButton
+                color="inherit"
+                onClick={handleToggleCurrentPhotoSetFavorite}
+                size="small"
+                sx={{ mx: 0.5 }}
+                disabled={!currentPath || directImages.length === 0}
+                aria-label="收藏当前照片集合"
+              >
+                {isAlbumFavorited(currentPath)
+                  ? <FavoriteIcon sx={{ color: '#ff5252' }} />
+                  : <FavoriteBorderIcon />}
+              </IconButton>
+            </span>
+          </Tooltip>
           <Tooltip title="我的收藏">
             <IconButton
               color="inherit"
@@ -785,7 +907,7 @@ function HomePage({
       );
     }
 
-    const hasContent = navigationNodes.length > 0;
+    const hasContent = navigationNodes.length > 0 || directImages.length > 0;
 
     if (!hasContent) {
       return (
@@ -807,8 +929,9 @@ function HomePage({
 
     const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
     const rowsToRender = gridRows.length > 0 ? gridRows : (sortedNodesData.length ? [sortedNodesData] : []);
+    const imageRowsToRender = imageRows.length > 0 ? imageRows : (sortedDirectImages.length ? [sortedDirectImages] : []);
 
-    if (hasActiveSearch && filteredNodesCount === 0) {
+    if (hasActiveSearch && filteredItemsCount === 0) {
       return (
         <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>没有匹配的项目</Typography>
@@ -824,51 +947,106 @@ function HomePage({
         {metadata && (
           <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 2 }}>
             <Typography variant="caption" color="text.secondary">
-              共 {metadata.folderCount} 个文件夹, {metadata.albumCount} 个相簿
+              共 {metadata.albumCount} 个相簿, {metadata.directImageCount || 0} 张照片
             </Typography>
           </Box>
         )}
         {hasActiveSearch && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            匹配 {filteredNodesCount} / {totalNodesCount} 项
+            匹配 {filteredItemsCount} / {totalItemsCount} 项
           </Typography>
         )}
-        <Virtuoso
-          data={rowsToRender}
-          customScrollParent={virtualScrollParent || undefined}
-          overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
-          increaseViewportBy={overscanConfig}
-          computeItemKey={(rowIndex, row) => {
-            const firstItem = Array.isArray(row) ? row[0] : null;
-            return firstItem?.path ? `row-${firstItem.path}` : `row-${rowIndex}`;
-          }}
-          itemContent={(rowIndex, row) => (
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`,
-                gap: `${densityConfig.gap}px`,
-                mb: `${densityConfig.gap}px`,
-                px: { xs: 1, sm: 2, md: 3 },
-                minHeight: `${estimatedRowHeight}px`
+        {rowsToRender.length > 0 ? (
+          <Virtuoso
+            data={rowsToRender}
+            customScrollParent={virtualScrollParent || undefined}
+            overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
+            increaseViewportBy={overscanConfig}
+            computeItemKey={(rowIndex, row) => {
+              const firstItem = Array.isArray(row) ? row[0] : null;
+              return firstItem?.path ? `row-${firstItem.path}` : `row-${rowIndex}`;
+            }}
+            itemContent={(rowIndex, row) => (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`,
+                  gap: `${densityConfig.gap}px`,
+                  mb: `${densityConfig.gap}px`,
+                  px: { xs: 1, sm: 2, md: 3 },
+                  minHeight: `${estimatedRowHeight}px`
+                }}
+              >
+                {row.map((item, colIndex) => {
+                  const itemKey = item?.path || `${rowIndex}-${colIndex}`;
+                  return (
+                    <Box key={itemKey} sx={{ width: '100%' }}>
+                      <AlbumCard
+                        node={item}
+                        displayPath={getNodeDisplayPath(item)}
+                        onClick={() => handleNodeClick(item)}
+                        isCompactMode={userDensity === 'compact'}
+                      />
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+          />
+        ) : null}
+        {imageRowsToRender.length > 0 ? (
+          <Box
+            data-testid="direct-images-section"
+            style={{
+              marginTop: rowsToRender.length > 0 ? `${densityConfig.gap}px` : undefined
+            }}
+          >
+            <Virtuoso
+              data={imageRowsToRender}
+              customScrollParent={virtualScrollParent || undefined}
+              overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
+              increaseViewportBy={overscanConfig}
+              computeItemKey={(rowIndex, row) => {
+                const firstImage = Array.isArray(row) ? row[0] : null;
+                return firstImage?.path ? `image-row-${firstImage.path}` : `image-row-${rowIndex}`;
               }}
-            >
-              {row.map((item, colIndex) => {
-                const itemKey = item?.path || `${rowIndex}-${colIndex}`;
-                return (
-                  <Box key={itemKey} sx={{ width: '100%' }}>
-                    <AlbumCard
-                      node={item}
-                      displayPath={getNodeDisplayPath(item)}
-                      onClick={() => handleNodeClick(item)}
-                      isCompactMode={userDensity === 'compact'}
-                    />
-                  </Box>
-                );
-              })}
-            </Box>
-          )}
-        />
+              itemContent={(rowIndex, row) => (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`,
+                    gap: `${densityConfig.gap}px`,
+                    mb: `${densityConfig.gap}px`,
+                    px: { xs: 1, sm: 2, md: 3 },
+                    minHeight: `${estimatedImageRowHeight}px`
+                  }}
+                >
+                  {row.map((image, colIndex) => {
+                    const actualIndex = rowIndex * columnsCount + colIndex;
+                    return (
+                      <Box key={image.path} sx={{ width: '100%', aspectRatio: '2/3' }}>
+                        <ImageCard
+                          image={image}
+                          onClick={() => handleDirectImageClick(actualIndex)}
+                          density={userDensity}
+                          albumPath={currentPath}
+                        />
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
+            />
+          </Box>
+        ) : null}
+        {viewerOpen && (
+          <ImageViewer
+            images={sortedDirectImages}
+            currentIndex={selectedImageIndex}
+            onClose={handleCloseViewer}
+            onIndexChange={setSelectedImageIndex}
+          />
+        )}
       </Box>
     );
   };

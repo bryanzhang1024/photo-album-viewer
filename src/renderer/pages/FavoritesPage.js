@@ -30,6 +30,15 @@ import { ScrollPositionContext } from '../App';
 import { Virtuoso } from 'react-virtuoso';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import { navigateToBrowsePath } from '../utils/navigation';
+import CHANNELS from '../../common/ipc-channels';
+
+const ipcRenderer = window.electronAPI || null;
+
+const getFavoriteItemKey = (item, fallback = '') => {
+  if (!item) return fallback;
+  const kind = item.kind || (item.type === 'folder' ? 'folder' : 'photoSet');
+  return `${kind}:${item.path || fallback}`;
+};
 
 // 收藏页面组件
 function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent = null, tabScrollKey = null }) {
@@ -142,12 +151,40 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
   };
 
   // 处理相簿点击
-  const handleAlbumClick = (albumPath) => {
+  const handleAlbumClick = async (favoriteItem) => {
     saveScrollPosition();
+    const albumPath = typeof favoriteItem === 'string' ? favoriteItem : favoriteItem.path;
+    const kind = typeof favoriteItem === 'string'
+      ? 'photoSet'
+      : (favoriteItem.kind || (favoriteItem.type === 'folder' ? 'folder' : 'photoSet'));
+
     if (urlMode && onNavigate) {
+      if (kind === 'folder') {
+        onNavigate(albumPath, 'folder');
+        return;
+      }
+
+      if (!favoriteItem.kind && ipcRenderer) {
+        const directImages = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, albumPath);
+        onNavigate(albumPath, directImages && directImages.length > 0 ? 'album' : 'folder');
+        return;
+      }
+
       onNavigate(albumPath, 'album');
       return;
     }
+
+    if (kind === 'folder') {
+      navigateToBrowsePath(navigate, albumPath, { viewMode: 'folder' });
+      return;
+    }
+
+    if (!favoriteItem.kind && ipcRenderer) {
+      const directImages = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, albumPath);
+      navigateToBrowsePath(navigate, albumPath, { viewMode: directImages && directImages.length > 0 ? 'album' : 'folder' });
+      return;
+    }
+
     navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
   };
 
@@ -183,9 +220,14 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
 
   // 排序收藏的相簿
   const sortedAlbums = useMemo(() => {
-    if (!favorites.albums.length) return [];
+    const favoriteAlbums = [
+      ...(favorites.folders || []),
+      ...(favorites.albums || [])
+    ];
 
-    return [...favorites.albums].sort((a, b) => {
+    if (!favoriteAlbums.length) return [];
+
+    return favoriteAlbums.sort((a, b) => {
       let comparison = 0;
 
       if (sortBy === 'name') {
@@ -198,7 +240,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [favorites.albums, sortBy, sortDirection]);
+  }, [favorites.folders, favorites.albums, sortBy, sortDirection]);
 
   // 排序收藏的图片
   const sortedImages = useMemo(() => {
@@ -312,7 +354,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
         increaseViewportBy={overscanConfig}
         computeItemKey={(rowIndex, row) => {
           const firstAlbum = Array.isArray(row) ? row[0] : null;
-          return firstAlbum?.path ? `favorites-album-${firstAlbum.path}` : `favorites-album-${rowIndex}`;
+          return firstAlbum?.path ? `favorites-album-${getFavoriteItemKey(firstAlbum)}` : `favorites-album-${rowIndex}`;
         }}
         itemContent={(rowIndex, row) => (
           <Box
@@ -326,13 +368,13 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
             }}
           >
             {row.map((album, colIndex) => {
-              const key = album?.path || `${rowIndex}-${colIndex}`;
+              const key = getFavoriteItemKey(album, `${rowIndex}-${colIndex}`);
               return (
                 <Box key={key} sx={{ width: '100%' }}>
                   <AlbumCard
                     album={album}
                     displayPath={album.path}
-                    onClick={() => handleAlbumClick(album.path)}
+                    onClick={() => handleAlbumClick(album)}
                     isCompactMode={userDensity === 'compact'}
                     isFavoritesPage={true}
                     isVisible={true}
@@ -528,7 +570,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
             }}
           >
             <Tab
-              label={`相簿 (${favorites.albums.length})`}
+              label={`相簿 (${(favorites.folders || []).length + (favorites.albums || []).length})`}
               disableRipple
               sx={tabStyles}
             />
@@ -560,7 +602,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
             <Box sx={{ mb: 1 }}>
               <Typography variant="subtitle2" sx={{ fontSize: '0.8rem' }}>
                 {tabValue === 0 
-                  ? `共 ${favorites.albums.length} 个收藏的相簿` 
+                  ? `共 ${(favorites.folders || []).length + (favorites.albums || []).length} 个收藏的相簿` 
                   : `共 ${favorites.images.length} 张收藏的图片`
                 }
               </Typography>

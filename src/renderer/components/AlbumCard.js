@@ -75,14 +75,16 @@ function AlbumCard({
         childFolders: node.childFolders
       };
     } else if (album) {
+      const kind = album.kind || (album.type === 'folder' ? 'folder' : 'photoSet');
       return {
         path: album.path,
         name: album.name,
-        type: 'album',
+        kind,
+        type: kind === 'folder' ? 'folder' : 'album',
         imageCount: album.imageCount,
-        samples: album.previewImages?.map(img => img.path) || [],
-        hasImages: true,
-        childFolders: 0
+        samples: album.previewSamples || album.samples || album.previewImages?.map(img => (typeof img === 'string' ? img : img.path)).filter(Boolean) || [],
+        hasImages: kind !== 'folder',
+        childFolders: album.childFolders || 0
       };
     }
     return null;
@@ -95,8 +97,15 @@ function AlbumCard({
   }, [cardData?.path]);
   
   // 使用收藏上下文
-  const { isAlbumFavorited, toggleAlbumFavorite } = useFavorites();
-  const isFavorited = cardData ? isAlbumFavorited(cardData.path) : false;
+  const {
+    isFolderFavorited,
+    isAlbumFavorited,
+    toggleFolderFavorite,
+    toggleAlbumFavorite
+  } = useFavorites();
+  const isFavorited = cardData
+    ? (cardData.type === 'folder' ? isFolderFavorited(cardData.path) : isAlbumFavorited(cardData.path))
+    : false;
   
   // 如果没有有效数据，返回空组件
   if (!cardData) {
@@ -361,11 +370,18 @@ function AlbumCard({
     if (cardData) {
       // 为了兼容性，构造album格式
       const albumForFavorite = {
+        kind: cardData.type === 'folder' ? 'folder' : 'photoSet',
         path: cardData.path,
         name: cardData.name,
-        imageCount: cardData.imageCount
+        imageCount: cardData.imageCount,
+        childFolders: cardData.childFolders,
+        samples: cardData.samples
       };
-      toggleAlbumFavorite(albumForFavorite);
+      if (cardData.type === 'folder') {
+        toggleFolderFavorite(albumForFavorite);
+      } else {
+        toggleAlbumFavorite(albumForFavorite);
+      }
     }
   };
 

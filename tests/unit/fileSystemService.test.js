@@ -96,14 +96,11 @@ describe('FileSystemService', () => {
     const result = await scanNavigationLevel('/photos');
 
     expect(result.success).toBe(true);
-    expect(result.nodes).toHaveLength(3);
+    expect(result.nodes).toHaveLength(2);
 
     const folderNode = result.nodes.find((node) => node.type === 'folder');
     const albumNode = result.nodes.find(
       (node) => node.type === 'album' && node.name === 'trip1'
-    );
-    const selfAlbum = result.nodes.find(
-      (node) => node.type === 'album' && node.name === 'photos'
     );
 
     expect(folderNode).toMatchObject({
@@ -116,15 +113,44 @@ describe('FileSystemService', () => {
       hasImages: true,
       type: 'album'
     });
-    expect(selfAlbum).toBeDefined();
+    expect(result.directImages).toEqual([
+      expect.objectContaining({
+        name: 'cover.jpg',
+        path: '/photos/cover.jpg'
+      })
+    ]);
+    expect(result.nodes.some((node) => node.path === '/photos' && node.type === 'album')).toBe(false);
     expect(result.metadata).toMatchObject({
-      totalNodes: 3,
+      totalNodes: 2,
       folderCount: 1,
-      albumCount: 2
+      albumCount: 1,
+      directImageCount: 1
     });
     expect(result.breadcrumbs).toEqual([
       { name: 'photos', path: '/photos' }
     ]);
+  });
+
+  test('scanNavigationLevel returns direct images for pure image directories', async () => {
+    mockFs = createFsMock({
+      '/photos': {
+        '1.jpg': Buffer.from('one'),
+        '2.png': Buffer.from('two'),
+        'notes.txt': 'ignored'
+      }
+    });
+
+    const result = await scanNavigationLevel('/photos');
+
+    expect(result.success).toBe(true);
+    expect(result.nodes).toHaveLength(0);
+    expect(result.directImages.map((image) => image.name)).toEqual(['1.jpg', '2.png']);
+    expect(result.metadata).toMatchObject({
+      totalNodes: 0,
+      folderCount: 0,
+      albumCount: 0,
+      directImageCount: 2
+    });
   });
 
   test('scanNavigationLevel uses first image by natural filename order for album preview', async () => {

@@ -127,7 +127,7 @@ async function scanNavigationLevel(targetPath) {
   try {
     const entries = await readdir(targetPath);
     if (entries.length === 0) {
-      return createNavigationResponse([], targetPath, path.dirname(targetPath), []);
+      return createNavigationResponse([], targetPath, path.dirname(targetPath), [], []);
     }
 
     const directoryEntries = [];
@@ -153,21 +153,7 @@ async function scanNavigationLevel(targetPath) {
     const nodePromises = directoryEntries.map(entry => processNavigationEntry(targetPath, entry));
     const nodes = (await Promise.all(nodePromises)).filter(Boolean);
 
-    // 3. 如果当前目录有图片，则创建一个“同名相簿”节点
-    if (imageFiles.length > 0) {
-      const previewImages = buildPreviewImagesByName(imageFiles);
-      const dateStats = resolveImageDateStats(imageFiles, (file) => file.stats?.mtime);
-      const albumStats = {
-        imageCount: imageFiles.length,
-        previewImages: previewImages.map((file) => file.path),
-        lastModified: dateStats.lastModified,
-        firstImageDate: dateStats.firstImageDate,
-        lastImageDate: dateStats.lastImageDate,
-        totalSize: imageFiles.reduce((sum, img) => sum + img.stats.size, 0),
-      };
-      const selfAlbumNode = createAlbumNode(targetPath, path.basename(targetPath), albumStats);
-      nodes.push(selfAlbumNode);
-    }
+    const directImages = buildDirectImageList(imageFiles);
     
     // 按类型和名称排序：文件夹在前，相册在后
     nodes.sort((a, b) => {
@@ -180,7 +166,7 @@ async function scanNavigationLevel(targetPath) {
     const parentPath = path.dirname(targetPath);
     const breadcrumbs = generateBreadcrumbs(targetPath);
     
-    const response = createNavigationResponse(nodes, targetPath, parentPath, breadcrumbs);
+    const response = createNavigationResponse(nodes, targetPath, parentPath, breadcrumbs, directImages);
     response.metadata.scanTime = Date.now() - startTime;
     
     console.log(`智能扫描完成: ${targetPath}, 耗时: ${response.metadata.scanTime}ms, 节点: ${nodes.length}`);
@@ -560,10 +546,11 @@ function generateBreadcrumbs(currentPath) {
 /**
  * 创建导航响应
  */
-function createNavigationResponse(nodes, currentPath, parentPath, breadcrumbs) {
+function createNavigationResponse(nodes, currentPath, parentPath, breadcrumbs, directImages = []) {
   return {
     success: true,
     nodes,
+    directImages,
     currentPath,
     parentPath,
     breadcrumbs,
@@ -572,6 +559,7 @@ function createNavigationResponse(nodes, currentPath, parentPath, breadcrumbs) {
       totalNodes: nodes.length,
       folderCount: nodes.filter(n => n.type === NODE_TYPES.FOLDER).length,
       albumCount: nodes.filter(n => n.type === NODE_TYPES.ALBUM).length,
+      directImageCount: directImages.length,
       scanTime: 0 // 将在调用处设置
     }
   };
@@ -584,6 +572,7 @@ function createErrorResponse(message, currentPath) {
   return {
     success: false,
     nodes: [],
+    directImages: [],
     currentPath,
     parentPath: '',
     breadcrumbs: [],
@@ -593,6 +582,17 @@ function createErrorResponse(message, currentPath) {
     },
     metadata: null
   };
+}
+
+function buildDirectImageList(imageFiles = []) {
+  return [...imageFiles]
+    .sort(compareImageNameNaturalAsc)
+    .map((file) => ({
+      path: file.path,
+      name: file.name,
+      size: file.stats?.size || file.size || 0,
+      lastModified: file.stats?.mtime || file.lastModified || new Date()
+    }));
 }
 
 /**

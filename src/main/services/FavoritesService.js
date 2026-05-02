@@ -33,7 +33,7 @@ async function loadFavoritesInternal() {
     try {
         await stat(FAVORITES_FILE_PATH);
     } catch (err) {
-        const defaultData = { albums: [], images: [], collections: [], version: 1, lastModified: Date.now() };
+        const defaultData = { folders: [], albums: [], images: [], collections: [], version: 1, lastModified: Date.now() };
         await writeFile(FAVORITES_FILE_PATH, JSON.stringify(defaultData, null, 2));
         return defaultData;
     }

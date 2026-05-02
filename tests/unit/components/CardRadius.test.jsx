@@ -6,7 +6,9 @@ import ImageCard from '../../../src/renderer/components/ImageCard';
 
 jest.mock('../../../src/renderer/contexts/FavoritesContext', () => ({
   useFavorites: jest.fn(() => ({
+    isFolderFavorited: jest.fn(() => false),
     isAlbumFavorited: jest.fn(() => false),
+    toggleFolderFavorite: jest.fn(),
     toggleAlbumFavorite: jest.fn(),
     isImageFavorited: jest.fn(() => false),
     toggleImageFavorite: jest.fn()
