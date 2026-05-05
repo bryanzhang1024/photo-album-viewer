@@ -406,6 +406,7 @@ function HomePage({
       path: node.path || '',
       lastModified: node.lastModified || 0,
       count: node.type === 'folder' ? (node.childFolders || 0) : (node.imageCount || 0),
+      groupRank: node.type === 'folder' ? 0 : 1,
       node
     }));
     const imageItems = filteredDirectImages.map((image) => ({
@@ -415,12 +416,13 @@ function HomePage({
       path: image.path || '',
       lastModified: image.lastModified || 0,
       count: 1,
+      groupRank: 2,
       image
     }));
 
     return [...nodeItems, ...imageItems].sort((a, b) => {
-      if (homeSortGrouping === 'containersFirst' && a.itemKind !== b.itemKind) {
-        return a.itemKind === 'node' ? -1 : 1;
+      if (homeSortGrouping === 'containersFirst' && a.groupRank !== b.groupRank) {
+        return a.groupRank - b.groupRank;
       }
 
       let comparison = 0;

@@ -268,7 +268,7 @@ describe('HomePage refresh button', () => {
     expect(cards).toHaveLength(3);
   });
 
-  test('can keep folders and albums before direct images when configured', async () => {
+  test('keeps folders before albums and albums before direct images when configured', async () => {
     useSettings.mockReturnValue({
       settings: { homeSortGrouping: 'containersFirst' }
     });
@@ -327,10 +327,10 @@ describe('HomePage refresh button', () => {
       expect(screen.getByText('c-folder')).toBeInTheDocument();
     });
 
-    const content = screen.getByText('b-album').closest('[data-testid="virtuoso"]');
+    const content = screen.getByText('c-folder').closest('[data-testid="virtuoso"]');
 
     expect(screen.getAllByTestId('virtuoso')).toHaveLength(1);
-    expect(content).toHaveTextContent(/b-album.*c-folder.*a-photo\.jpg/s);
+    expect(content).toHaveTextContent(/c-folder.*b-album.*a-photo\.jpg/s);
   });
 
   test('opens image viewer from a direct image inside the mixed grid', async () => {
