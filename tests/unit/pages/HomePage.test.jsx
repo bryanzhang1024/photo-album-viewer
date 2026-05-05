@@ -57,6 +57,12 @@ jest.mock('../../../src/renderer/contexts/FavoritesContext', () => ({
   }))
 }));
 
+jest.mock('../../../src/renderer/contexts/SettingsContext', () => ({
+  useSettings: jest.fn(() => ({
+    settings: { homeSortGrouping: 'mixed' }
+  }))
+}));
+
 jest.mock('../../../src/renderer/hooks/useSorting', () =>
   jest.fn(() => ({
     sortBy: 'name',
@@ -78,6 +84,7 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
 const reactRouter = require('react-router-dom');
 const { ScrollPositionContext } = require('../../../src/renderer/App');
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
+const { useSettings } = require('../../../src/renderer/contexts/SettingsContext');
 const HomePage = require('../../../src/renderer/pages/HomePage').default;
 const ipcRenderer = global.electronMock.ipcRenderer;
 
@@ -91,6 +98,9 @@ describe('HomePage refresh button', () => {
       state: null
     });
     imageCache.get.mockReturnValue(null);
+    useSettings.mockReturnValue({
+      settings: { homeSortGrouping: 'mixed' }
+    });
     ipcRenderer.invoke.mockResolvedValue({
       success: true,
       currentPath: '/photos',
@@ -256,6 +266,71 @@ describe('HomePage refresh button', () => {
     expect(screen.getAllByTestId('virtuoso')).toHaveLength(1);
     expect(content).toHaveTextContent(/a-photo\.jpg.*b-album.*c-folder/s);
     expect(cards).toHaveLength(3);
+  });
+
+  test('can keep folders and albums before direct images when configured', async () => {
+    useSettings.mockReturnValue({
+      settings: { homeSortGrouping: 'containersFirst' }
+    });
+    ipcRenderer.invoke.mockResolvedValue({
+      success: true,
+      currentPath: '/photos',
+      nodes: [
+        {
+          type: 'album',
+          path: '/photos/b-album',
+          name: 'b-album',
+          imageCount: 2,
+          samples: ['/photos/b-album/1.jpg']
+        },
+        {
+          type: 'folder',
+          path: '/photos/c-folder',
+          name: 'c-folder',
+          childFolders: 3,
+          imageCount: 0,
+          samples: ['/photos/c-folder/nested.jpg']
+        }
+      ],
+      directImages: [
+        {
+          path: '/photos/a-photo.jpg',
+          name: 'a-photo.jpg',
+          size: 10,
+          lastModified: new Date('2024-01-01T00:00:00.000Z')
+        }
+      ],
+      breadcrumbs: [],
+      metadata: {
+        folderCount: 1,
+        albumCount: 1,
+        totalNodes: 2,
+        directImageCount: 1
+      }
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <HomePage
+          colorMode={{ mode: 'light' }}
+          currentPath="/photos"
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('a-photo.jpg')).toBeInTheDocument();
+      expect(screen.getByText('b-album')).toBeInTheDocument();
+      expect(screen.getByText('c-folder')).toBeInTheDocument();
+    });
+
+    const content = screen.getByText('b-album').closest('[data-testid="virtuoso"]');
+
+    expect(screen.getAllByTestId('virtuoso')).toHaveLength(1);
+    expect(content).toHaveTextContent(/b-album.*c-folder.*a-photo\.jpg/s);
   });
 
   test('opens image viewer from a direct image inside the mixed grid', async () => {

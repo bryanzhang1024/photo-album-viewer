@@ -42,6 +42,7 @@ import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import { Virtuoso } from 'react-virtuoso';
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { useSettings } from '../contexts/SettingsContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
@@ -222,6 +223,8 @@ function HomePage({
     toggleFolderFavorite,
     toggleAlbumFavorite
   } = useFavorites();
+  const { settings } = useSettings();
+  const homeSortGrouping = settings?.homeSortGrouping || 'mixed';
 
 
   // 监听窗口大小变化
@@ -416,6 +419,10 @@ function HomePage({
     }));
 
     return [...nodeItems, ...imageItems].sort((a, b) => {
+      if (homeSortGrouping === 'containersFirst' && a.itemKind !== b.itemKind) {
+        return a.itemKind === 'node' ? -1 : 1;
+      }
+
       let comparison = 0;
 
       if (sortBy === 'name') {
@@ -432,7 +439,7 @@ function HomePage({
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [filteredNodes, filteredDirectImages, sortBy, sortDirection]);
+  }, [filteredNodes, filteredDirectImages, sortBy, sortDirection, homeSortGrouping]);
 
   const sortedDirectImages = useMemo(
     () => sortedDisplayItems

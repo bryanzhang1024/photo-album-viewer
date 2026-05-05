@@ -258,6 +258,27 @@ function SettingsPage({ colorMode }) {
             label="显示文件名"
             sx={{ mb: 2 }}
           />
+
+          <Box sx={{ mt: 2 }}>
+            <FormControl component="fieldset">
+              <FormLabel component="legend">文件夹浏览排序</FormLabel>
+              <RadioGroup
+                value={settings.homeSortGrouping || 'mixed'}
+                onChange={handleRadioChange('homeSortGrouping')}
+              >
+                <FormControlLabel
+                  value="mixed"
+                  control={<Radio />}
+                  label="全部按当前排序混排"
+                />
+                <FormControlLabel
+                  value="containersFirst"
+                  control={<Radio />}
+                  label="文件夹和相簿排在照片前"
+                />
+              </RadioGroup>
+            </FormControl>
+          </Box>
         </Box>
 
         <Divider sx={{ my: 2 }} />
