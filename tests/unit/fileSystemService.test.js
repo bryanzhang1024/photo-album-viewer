@@ -212,6 +212,38 @@ describe('FileSystemService', () => {
     ))).toBe(true);
   });
 
+  test('scanNavigationLevel keeps folder semantics while using deeply nested images as previews', async () => {
+    mockFs = createFsMock({
+      '/photos': {
+        year2024: {
+          spring: {
+            day1: {
+              '001.jpg': Buffer.from('nested-image')
+            }
+          },
+          autumn: {}
+        }
+      }
+    });
+
+    const result = await scanNavigationLevel('/photos');
+    const folderNode = result.nodes.find(
+      (node) => node.type === 'folder' && node.name === 'year2024'
+    );
+
+    expect(folderNode).toMatchObject({
+      type: 'folder',
+      hasImages: false,
+      imageCount: 0,
+      childFolders: 2,
+      hasSubAlbums: true
+    });
+    expect(folderNode.previewSamples).toEqual([
+      '/photos/year2024/spring/day1/001.jpg'
+    ]);
+    expect(folderNode.samples).toEqual(folderNode.previewSamples);
+  });
+
   test('scanNavigationLevel returns error response when path missing', async () => {
     const result = await scanNavigationLevel('/does/not/exist');
 

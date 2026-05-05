@@ -25,7 +25,9 @@ jest.mock('../../../src/renderer/components/AlbumCard', () =>
 );
 
 jest.mock('../../../src/renderer/components/ImageCard', () =>
-  jest.fn(({ image }) => <div data-testid="image-card">{image?.name || 'image'}</div>)
+  jest.fn(({ image, onClick }) => (
+    <div data-testid="image-card" onClick={onClick}>{image?.name || 'image'}</div>
+  ))
 );
 
 jest.mock('../../../src/renderer/components/ImageViewer', () =>
@@ -179,10 +181,137 @@ describe('HomePage refresh button', () => {
       expect(screen.getByText('root.jpg')).toBeInTheDocument();
     });
 
+    expect(screen.getAllByTestId('virtuoso')).toHaveLength(1);
     expect(screen.getAllByTestId('album-card')).toHaveLength(1);
     expect(screen.getAllByTestId('image-card')).toHaveLength(1);
-    expect(screen.getByTestId('direct-images-section')).toHaveStyle('margin-top: 10px');
+    expect(screen.queryByTestId('direct-images-section')).not.toBeInTheDocument();
     expect(screen.getByText('共 0 个相簿, 1 张照片')).toBeInTheDocument();
     expect(screen.queryByText(/个文件夹/)).not.toBeInTheDocument();
+  });
+
+  test('mixes folders albums and direct images in one name-sorted grid', async () => {
+    ipcRenderer.invoke.mockResolvedValue({
+      success: true,
+      currentPath: '/photos',
+      nodes: [
+        {
+          type: 'album',
+          path: '/photos/b-album',
+          name: 'b-album',
+          imageCount: 2,
+          samples: ['/photos/b-album/1.jpg'],
+          lastModified: new Date('2024-01-02T00:00:00.000Z')
+        },
+        {
+          type: 'folder',
+          path: '/photos/c-folder',
+          name: 'c-folder',
+          childFolders: 3,
+          imageCount: 0,
+          samples: ['/photos/c-folder/nested.jpg'],
+          lastModified: new Date('2024-01-03T00:00:00.000Z')
+        }
+      ],
+      directImages: [
+        {
+          path: '/photos/a-photo.jpg',
+          name: 'a-photo.jpg',
+          size: 10,
+          lastModified: new Date('2024-01-01T00:00:00.000Z')
+        }
+      ],
+      breadcrumbs: [],
+      metadata: {
+        folderCount: 1,
+        albumCount: 1,
+        totalNodes: 2,
+        directImageCount: 1
+      }
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <HomePage
+          colorMode={{ mode: 'light' }}
+          currentPath="/photos"
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('a-photo.jpg')).toBeInTheDocument();
+      expect(screen.getByText('b-album')).toBeInTheDocument();
+      expect(screen.getByText('c-folder')).toBeInTheDocument();
+    });
+
+    const cards = [
+      ...screen.getAllByTestId('album-card'),
+      ...screen.getAllByTestId('image-card')
+    ];
+    const content = screen.getByText('a-photo.jpg').closest('[data-testid="virtuoso"]');
+
+    expect(screen.getAllByTestId('virtuoso')).toHaveLength(1);
+    expect(content).toHaveTextContent(/a-photo\.jpg.*b-album.*c-folder/s);
+    expect(cards).toHaveLength(3);
+  });
+
+  test('opens image viewer from a direct image inside the mixed grid', async () => {
+    ipcRenderer.invoke.mockResolvedValue({
+      success: true,
+      currentPath: '/photos',
+      nodes: [
+        {
+          type: 'album',
+          path: '/photos/album',
+          name: 'album',
+          imageCount: 2,
+          samples: ['/photos/album/1.jpg']
+        }
+      ],
+      directImages: [
+        {
+          path: '/photos/a.jpg',
+          name: 'a.jpg',
+          size: 10,
+          lastModified: new Date('2024-01-01T00:00:00.000Z')
+        },
+        {
+          path: '/photos/z.jpg',
+          name: 'z.jpg',
+          size: 10,
+          lastModified: new Date('2024-01-02T00:00:00.000Z')
+        }
+      ],
+      breadcrumbs: [],
+      metadata: {
+        folderCount: 0,
+        albumCount: 1,
+        totalNodes: 1,
+        directImageCount: 2
+      }
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <HomePage
+          colorMode={{ mode: 'light' }}
+          currentPath="/photos"
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('z.jpg')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('z.jpg'));
+
+    expect(screen.getByTestId('image-viewer')).toBeInTheDocument();
   });
 });

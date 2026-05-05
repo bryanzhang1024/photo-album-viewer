@@ -48,7 +48,6 @@ function AlbumCard({
   isFavoritesPage = false 
 }) {
   const cardBorderRadius = `${LAYOUT_CONFIG.card.borderRadius}px`;
-  const previewTileBorderRadius = `${LAYOUT_CONFIG.card.previewBorderRadius}px`;
 
   // 同步从缓存初始化，消除首次渲染的骨架屏闪烁
   const initialPath = node?.path || album?.path;
@@ -131,20 +130,16 @@ function AlbumCard({
 
     if (!isVisible) return;
 
-    const isFolder = cardData.type === 'folder';
-
-    if (!isFolder) {
-      // 相册类型（单图）：直接用预算 URL，零 IPC
-      const sample = cardData.samples?.[0];
-      const predicted = sample ? getThumbnailUrl(sample) : null;
-      if (predicted) {
-        setPreviewUrls([predicted]);
-        setLoading(false);
-        return;
-      }
+    // 文件夹和相册都按单张封面预览，直接预算缩略图 URL，零 IPC。
+    const sample = cardData.samples?.[0];
+    const predicted = sample ? getThumbnailUrl(sample) : null;
+    if (predicted) {
+      setPreviewUrls([predicted]);
+      setLoading(false);
+      return;
     }
 
-    // 文件夹类型（2×2）或相册无法预算时：走 IPC
+    // 没有可预算 URL 时：走 IPC fallback。
     if (!ipcRenderer) {
       setLoading(false);
       return;
@@ -157,8 +152,7 @@ function AlbumCard({
     const loadViaIpc = async () => {
       try {
         setLoading(true);
-        const maxSamples = isFolder ? 4 : 1;
-        const imagePaths = cardData.samples ? cardData.samples.slice(0, maxSamples) : [];
+        const imagePaths = cardData.samples ? cardData.samples.slice(0, 1) : [];
         if (imagePaths.length === 0) return;
 
         const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, imagePaths, 0);
@@ -178,7 +172,7 @@ function AlbumCard({
     loadViaIpc();
   }, [cardData, cacheKey, isVisible]);
 
-  // 相册封面图加载失败（磁盘无缓存）→ IPC fallback 生成
+  // 封面图加载失败（磁盘无缓存）→ IPC fallback 生成
   const handleAlbumPreviewError = async () => {
     if (ipcFallbackAttempted.current || !ipcRenderer || !cardData) return;
     ipcFallbackAttempted.current = true;
@@ -216,93 +210,6 @@ function AlbumCard({
     </Box>
   );
 
-  // 文件夹预览渲染
-  const renderFolderPreview = () => {
-    const hasPreviewImages = previewUrls.length > 0;
-    
-    return (
-      <Box sx={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        {/* 主要内容区域 */}
-        <Box sx={{ 
-          flex: 1, 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          bgcolor: hasPreviewImages ? 'transparent' : 'rgba(0,0,0,0.03)'
-        }}>
-          {hasPreviewImages ? (
-            // 有预览图时的网格布局
-            <Box sx={{ 
-              width: '100%', 
-              height: '100%',
-              display: 'grid',
-              gridTemplateColumns: previewUrls.length === 1 ? '1fr' : '1fr 1fr',
-              gridTemplateRows: previewUrls.length <= 2 ? '1fr' : '1fr 1fr',
-              gap: '2px',
-              p: 1
-            }}>
-              {previewUrls.slice(0, 4).map((url, index) => (
-                <Box
-                  key={index}
-                  sx={{
-                    bgcolor: 'rgba(0,0,0,0.05)',
-                    borderRadius: previewTileBorderRadius,
-                    overflow: 'hidden',
-                    position: 'relative'
-                  }}
-                >
-                  <img
-                    src={url}
-                    alt={`预览 ${index + 1}`}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.parentNode.style.backgroundColor = 'rgba(0,0,0,0.05)';
-                    }}
-                  />
-                </Box>
-              ))}
-            </Box>
-          ) : (
-            // 无预览图时的文件夹图标
-            <FolderIcon sx={{ 
-              fontSize: 64, 
-              color: 'primary.main',
-              opacity: 0.6
-            }} />
-          )}
-        </Box>
-
-        {/* 文件夹统计信息 */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            bgcolor: 'rgba(0,0,0,0.7)',
-            color: 'white',
-            borderRadius: '12px',
-            px: 1,
-            py: 0.5,
-            fontSize: '0.7rem',
-            fontWeight: 'medium',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.5
-          }}
-        >
-          <FolderIcon sx={{ fontSize: '0.8rem' }} />
-          {cardData.childFolders || 0}
-        </Box>
-
-      </Box>
-    );
-  };
-  
   // 根据节点类型和预览图数量返回不同的预览布局
   const renderPreview = () => {
     if (!cardData) return null;
@@ -317,12 +224,7 @@ function AlbumCard({
       );
     }
     
-    // 文件夹类型的特殊渲染
-    if (isFolder) {
-      return renderFolderPreview();
-    }
-    
-    // 相册类型：单张封面图铺满
+    // 文件夹和相册：单张封面图铺满；仅角标区分可进入文件夹。
     return (
       <Box sx={{ height: '100%', position: 'relative' }}>
         {previewUrls.length > 0 ? (
@@ -341,25 +243,51 @@ function AlbumCard({
             <ImageIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
           </Box>
         )}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            bgcolor: 'rgba(0,0,0,0.6)',
-            color: 'white',
-            borderRadius: '50%',
-            width: '24px',
-            height: '24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.75rem',
-            fontWeight: 'medium'
-          }}
-        >
-          {cardData.imageCount || 0}
-        </Box>
+        {isFolder ? (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              bgcolor: 'rgba(0,0,0,0.58)',
+              color: 'white',
+              borderRadius: '12px',
+              minWidth: '24px',
+              height: '24px',
+              px: 0.7,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 0.4,
+              fontSize: '0.75rem',
+              fontWeight: 'medium'
+            }}
+            aria-label="文件夹"
+          >
+            <FolderIcon sx={{ fontSize: '0.9rem' }} />
+            {cardData.childFolders || 0}
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              bgcolor: 'rgba(0,0,0,0.6)',
+              color: 'white',
+              borderRadius: '50%',
+              width: '24px',
+              height: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 'medium'
+            }}
+          >
+            {cardData.imageCount || 0}
+          </Box>
+        )}
       </Box>
     );
   };

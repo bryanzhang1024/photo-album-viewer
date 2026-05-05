@@ -253,13 +253,7 @@ function HomePage({
     };
   }, [windowHeight]);
 
-  const estimatedRowHeight = useMemo(() => {
-    const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
-    const baseHeight = densityConfig.itemWidth;
-    return Math.round(baseHeight + densityConfig.gap);
-  }, [userDensity]);
-
-  const estimatedImageRowHeight = useMemo(() => {
+  const estimatedGridRowHeight = useMemo(() => {
     const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
     const baseHeight = (densityConfig.itemWidth * 3) / 2;
     return Math.round(baseHeight + densityConfig.gap);
@@ -401,48 +395,59 @@ function HomePage({
   
 
   
-  // 排序节点 - 使用 useMemo 缓存结果
-  const sortedNodesData = useMemo(() => {
-    if (!filteredNodes.length) return [];
+  const sortedDisplayItems = useMemo(() => {
+    const nodeItems = filteredNodes.map((node) => ({
+      itemKind: 'node',
+      key: `node:${node.path}`,
+      name: node.name || '',
+      path: node.path || '',
+      lastModified: node.lastModified || 0,
+      count: node.type === 'folder' ? (node.childFolders || 0) : (node.imageCount || 0),
+      node
+    }));
+    const imageItems = filteredDirectImages.map((image) => ({
+      itemKind: 'image',
+      key: `image:${image.path}`,
+      name: image.name || '',
+      path: image.path || '',
+      lastModified: image.lastModified || 0,
+      count: 1,
+      image
+    }));
 
-    return [...filteredNodes].sort((a, b) => {
-      // 文件夹总是排在相册前面
-      if (a.type !== b.type) {
-        if (a.type === 'folder' && b.type === 'album') return -1;
-        if (a.type === 'album' && b.type === 'folder') return 1;
-      }
-
+    return [...nodeItems, ...imageItems].sort((a, b) => {
       let comparison = 0;
 
       if (sortBy === 'name') {
         comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
       } else if (sortBy === 'imageCount') {
-        comparison = (a.imageCount || 0) - (b.imageCount || 0);
-      } else if (sortBy === 'lastModified') {
-        const aDate = a.lastModified || 0;
-        const bDate = b.lastModified || 0;
-        comparison = new Date(aDate) - new Date(bDate);
-      }
-
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-  }, [filteredNodes, sortBy, sortDirection]);
-
-  const sortedDirectImages = useMemo(() => {
-    if (!filteredDirectImages.length) return [];
-
-    return [...filteredDirectImages].sort((a, b) => {
-      let comparison = 0;
-
-      if (sortBy === 'name') {
-        comparison = (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+        comparison = a.count - b.count;
       } else if (sortBy === 'lastModified') {
         comparison = new Date(a.lastModified || 0) - new Date(b.lastModified || 0);
       }
 
+      if (comparison === 0) {
+        comparison = a.path.localeCompare(b.path, undefined, { numeric: true });
+      }
+
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [filteredDirectImages, sortBy, sortDirection]);
+  }, [filteredNodes, filteredDirectImages, sortBy, sortDirection]);
+
+  const sortedDirectImages = useMemo(
+    () => sortedDisplayItems
+      .filter((item) => item.itemKind === 'image')
+      .map((item) => item.image),
+    [sortedDisplayItems]
+  );
+
+  const directImageIndexByPath = useMemo(
+    () => sortedDirectImages.reduce((acc, image, index) => {
+      acc[image.path] = index;
+      return acc;
+    }, {}),
+    [sortedDirectImages]
+  );
 
   const columnsCount = useMemo(
     () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
@@ -450,18 +455,13 @@ function HomePage({
   );
 
   const gridRows = useMemo(
-    () => chunkIntoRows(sortedNodesData, columnsCount),
-    [sortedNodesData, columnsCount]
-  );
-
-  const imageRows = useMemo(
-    () => chunkIntoRows(sortedDirectImages, columnsCount),
-    [sortedDirectImages, columnsCount]
+    () => chunkIntoRows(sortedDisplayItems, columnsCount),
+    [sortedDisplayItems, columnsCount]
   );
 
   const hasActiveSearch = Boolean(normalizedSearchQuery);
   const totalItemsCount = navigationNodes.length + directImages.length;
-  const filteredItemsCount = sortedNodesData.length + sortedDirectImages.length;
+  const filteredItemsCount = sortedDisplayItems.length;
 
   // 获取节点显示路径 - 使用 useMemo 缓存路径计算
   const nodeDisplayPaths = useMemo(() => {
@@ -928,8 +928,7 @@ function HomePage({
     }
 
     const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
-    const rowsToRender = gridRows.length > 0 ? gridRows : (sortedNodesData.length ? [sortedNodesData] : []);
-    const imageRowsToRender = imageRows.length > 0 ? imageRows : (sortedDirectImages.length ? [sortedDirectImages] : []);
+    const rowsToRender = gridRows.length > 0 ? gridRows : (sortedDisplayItems.length ? [sortedDisplayItems] : []);
 
     if (hasActiveSearch && filteredItemsCount === 0) {
       return (
@@ -964,7 +963,7 @@ function HomePage({
             increaseViewportBy={overscanConfig}
             computeItemKey={(rowIndex, row) => {
               const firstItem = Array.isArray(row) ? row[0] : null;
-              return firstItem?.path ? `row-${firstItem.path}` : `row-${rowIndex}`;
+              return firstItem?.key ? `row-${firstItem.key}` : `row-${rowIndex}`;
             }}
             itemContent={(rowIndex, row) => (
               <Box
@@ -974,18 +973,32 @@ function HomePage({
                   gap: `${densityConfig.gap}px`,
                   mb: `${densityConfig.gap}px`,
                   px: { xs: 1, sm: 2, md: 3 },
-                  minHeight: `${estimatedRowHeight}px`
+                  minHeight: `${estimatedGridRowHeight}px`
                 }}
               >
                 {row.map((item, colIndex) => {
-                  const itemKey = item?.path || `${rowIndex}-${colIndex}`;
+                  const itemKey = item?.key || `${rowIndex}-${colIndex}`;
+                  if (item.itemKind === 'node') {
+                    return (
+                      <Box key={itemKey} sx={{ width: '100%' }}>
+                        <AlbumCard
+                          node={item.node}
+                          displayPath={getNodeDisplayPath(item.node)}
+                          onClick={() => handleNodeClick(item.node)}
+                          isCompactMode={userDensity === 'compact'}
+                        />
+                      </Box>
+                    );
+                  }
+
+                  const imageIndex = directImageIndexByPath[item.image.path] ?? 0;
                   return (
-                    <Box key={itemKey} sx={{ width: '100%' }}>
-                      <AlbumCard
-                        node={item}
-                        displayPath={getNodeDisplayPath(item)}
-                        onClick={() => handleNodeClick(item)}
-                        isCompactMode={userDensity === 'compact'}
+                    <Box key={itemKey} sx={{ width: '100%', aspectRatio: '2/3' }}>
+                      <ImageCard
+                        image={item.image}
+                        onClick={() => handleDirectImageClick(imageIndex)}
+                        density={userDensity}
+                        albumPath={currentPath}
                       />
                     </Box>
                   );
@@ -993,51 +1006,6 @@ function HomePage({
               </Box>
             )}
           />
-        ) : null}
-        {imageRowsToRender.length > 0 ? (
-          <Box
-            data-testid="direct-images-section"
-            style={{
-              marginTop: rowsToRender.length > 0 ? `${densityConfig.gap}px` : undefined
-            }}
-          >
-            <Virtuoso
-              data={imageRowsToRender}
-              customScrollParent={virtualScrollParent || undefined}
-              overscan={Math.max(overscanConfig.top, overscanConfig.bottom)}
-              increaseViewportBy={overscanConfig}
-              computeItemKey={(rowIndex, row) => {
-                const firstImage = Array.isArray(row) ? row[0] : null;
-                return firstImage?.path ? `image-row-${firstImage.path}` : `image-row-${rowIndex}`;
-              }}
-              itemContent={(rowIndex, row) => (
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`,
-                    gap: `${densityConfig.gap}px`,
-                    mb: `${densityConfig.gap}px`,
-                    px: { xs: 1, sm: 2, md: 3 },
-                    minHeight: `${estimatedImageRowHeight}px`
-                  }}
-                >
-                  {row.map((image, colIndex) => {
-                    const actualIndex = rowIndex * columnsCount + colIndex;
-                    return (
-                      <Box key={image.path} sx={{ width: '100%', aspectRatio: '2/3' }}>
-                        <ImageCard
-                          image={image}
-                          onClick={() => handleDirectImageClick(actualIndex)}
-                          density={userDensity}
-                          albumPath={currentPath}
-                        />
-                      </Box>
-                    );
-                  })}
-                </Box>
-              )}
-            />
-          </Box>
         ) : null}
         {viewerOpen && (
           <ImageViewer
