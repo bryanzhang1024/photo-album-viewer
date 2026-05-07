@@ -55,9 +55,10 @@ export const useAlbumImages = (albumPath) => {
   // 刷新（清除缓存后重新加载）
   const refresh = useCallback(() => {
     if (albumPath) {
-      imageCache.delete('album', albumPath);
-      loadImages();
+      imageCache.deleteEntry('album', albumPath);
+      return loadImages();
     }
+    return Promise.resolve([]);
   }, [albumPath, loadImages]);
 
   return {

@@ -6,7 +6,8 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
   default: {
     get: jest.fn(),
     set: jest.fn(),
-    delete: jest.fn()
+    delete: jest.fn(),
+    deleteEntry: jest.fn()
   }
 }));
 
@@ -96,7 +97,7 @@ describe('useAlbumImages', () => {
     expect(result.current.error).toBe('加载相簿图片时出错: boom');
   });
 
-  test('refresh clears cache and reloads album', async () => {
+  test('refresh clears the album entry and reloads album', async () => {
     const firstBatch = [{ name: 'old.jpg' }];
     const secondBatch = [{ name: 'new.jpg' }];
 
@@ -111,11 +112,12 @@ describe('useAlbumImages', () => {
       await result.current.loadImages();
     });
 
-    act(() => {
-      result.current.refresh();
+    await act(async () => {
+      await result.current.refresh();
     });
 
-    expect(imageCache.delete).toHaveBeenCalledWith('album', '/albums/refresh');
+    expect(imageCache.deleteEntry).toHaveBeenCalledWith('album', '/albums/refresh');
+    expect(imageCache.delete).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(imageCache.set).toHaveBeenLastCalledWith(

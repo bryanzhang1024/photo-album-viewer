@@ -422,6 +422,35 @@ ipcMain.handle(CHANNELS.SCAN_DIRECTORY, async (event, rootPath) => {
   }
 });
 
+ipcMain.handle(CHANNELS.RESOLVE_DROPPED_FOLDERS, async (event, droppedPaths) => {
+  const folders = [];
+  const rejected = [];
+  const candidates = Array.isArray(droppedPaths) ? droppedPaths : [];
+
+  for (const candidatePath of candidates) {
+    const normalizedPath = normalizeAbsolutePath(candidatePath);
+    if (!normalizedPath) {
+      rejected.push(candidatePath);
+      continue;
+    }
+
+    try {
+      const stats = await fs.promises.stat(normalizedPath);
+      if (!stats.isDirectory()) {
+        rejected.push(normalizedPath);
+        continue;
+      }
+
+      await registerApprovedRoot(normalizedPath);
+      folders.push(normalizedPath);
+    } catch (error) {
+      rejected.push(normalizedPath);
+    }
+  }
+
+  return { folders, rejected };
+});
+
 // 获取图片的缩略图 - 使用新的服务
 ipcMain.handle(CHANNELS.GET_IMAGE_THUMBNAIL, async (event, imagePath, priority = 0) => {
     const isAllowed = await assertApprovedPath(imagePath);

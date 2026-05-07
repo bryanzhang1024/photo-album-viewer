@@ -2,6 +2,7 @@ module.exports = {
     SELECT_DIRECTORY: 'select-directory',
     SCAN_NAVIGATION_LEVEL: 'scan-navigation-level',
     SCAN_DIRECTORY: 'scan-directory',
+    RESOLVE_DROPPED_FOLDERS: 'resolve-dropped-folders',
     GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',
     GET_THUMBNAIL: 'get-thumbnail',
     GET_BATCH_THUMBNAILS: 'get-batch-thumbnails',
