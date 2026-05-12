@@ -4,7 +4,6 @@ const fs = require('fs');
 const os = require('os');
 const isDev = require('electron-is-dev');
 const { promisify } = require('util');
-const { pathToFileURL } = require('url');
 const http = require('http');
 const sharp = require('sharp');
 const crypto = require('crypto');
@@ -167,6 +166,32 @@ function normalizePerformanceSettings(settings = {}, fallback = DEFAULT_PERFORMA
   }
 
   return resolved;
+}
+
+function escapePlistString(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function createPlistArray(values) {
+  const items = values
+    .map((value) => `\t<string>${escapePlistString(value)}</string>`)
+    .join('\n');
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0">',
+    '<array>',
+    items,
+    '</array>',
+    '</plist>',
+    ''
+  ].join('\n');
 }
 
 // 单实例锁定 - 允许多窗口
@@ -626,16 +651,11 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 
     if (normalizedMode === 'file') {
       // 写入文件引用，便于聊天工具保留原始文件名和后缀
       if (process.platform === 'darwin') {
-        const fileUrl = pathToFileURL(filePath).toString();
-        const fileName = path.basename(filePath);
         clipboard.clear();
 
-        // Finder 常见文件复制类型：多写几种以提升第三方聊天软件识别率
+        // Match macOS file pasteboard data closely so web upload targets treat it as a file.
         const fileReferenceFormats = [
-          ['NSFilenamesPboardType', Buffer.from(JSON.stringify([filePath]), 'utf8')],
-          ['public.file-url', Buffer.from(fileUrl, 'utf8')],
-          ['public.url', Buffer.from(fileUrl, 'utf8')],
-          ['text/uri-list', Buffer.from(fileUrl, 'utf8')]
+          ['NSFilenamesPboardType', Buffer.from(createPlistArray([filePath]), 'utf8')]
         ];
 
         for (const [format, buffer] of fileReferenceFormats) {
@@ -644,12 +664,6 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 
           } catch (error) {
             console.warn(`写入 ${format} 失败:`, error?.message || error);
           }
-        }
-
-        try {
-          clipboard.writeBookmark(fileName, fileUrl);
-        } catch (error) {
-          console.warn('写入 bookmark 失败:', error?.message || error);
         }
       } else {
         clipboard.clear();
