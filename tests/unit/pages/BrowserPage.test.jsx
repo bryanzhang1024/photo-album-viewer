@@ -43,6 +43,12 @@ jest.mock('../../../src/renderer/pages/HomePage', () =>
             className="scroll-container"
             data-testid="mock-scroll-container"
           />
+          <button
+            type="button"
+            onClick={() => props.onOpenFavoritesInNewTab?.()}
+          >
+            模拟打开收藏
+          </button>
         </div>
       );
     }
@@ -67,6 +73,12 @@ jest.mock('../../../src/renderer/pages/AlbumPage', () =>
         onClick={() => mockAlbumRefreshTargets.push(props.albumPath)}
       >
         模拟刷新当前相簿
+      </button>
+      <button
+        type="button"
+        onClick={() => props.onOpenFavoritesInNewTab?.()}
+      >
+        模拟打开收藏
       </button>
     </div>
   ))
@@ -327,6 +339,46 @@ describe('BrowserPage', () => {
       initialImage: null,
       replace: true,
       viewMode: 'folder'
+    });
+  });
+
+  test('opens favorites from home in a new active tab without replacing current tab', () => {
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse/%2Falbums%2Ftrip',
+      search: '?view=folder'
+    });
+
+    render(<BrowserPage colorMode="light" />);
+
+    fireEvent.click(screen.getByText('模拟打开收藏'));
+
+    expect(screen.getByRole('tab', { name: /trip/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /trip/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: /我的收藏/i })).toHaveAttribute('aria-selected', 'true');
+    expect(navigateMock).toHaveBeenLastCalledWith('', {
+      viewMode: 'favorites',
+      initialImage: null,
+      replace: false
+    });
+  });
+
+  test('opens favorites from album in a new active tab without replacing current tab', () => {
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse/%2Falbums%2Fwedding',
+      search: '?view=album'
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    fireEvent.click(screen.getByText('模拟打开收藏'));
+
+    expect(screen.getByRole('tab', { name: /wedding/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /wedding/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: /我的收藏/i })).toHaveAttribute('aria-selected', 'true');
+    expect(navigateMock).toHaveBeenLastCalledWith('', {
+      viewMode: 'favorites',
+      initialImage: null,
+      replace: false
     });
   });
 

@@ -599,6 +599,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     navigateTab(newTab.id, newTab.targetPath, newTab.viewMode, newTab.initialImage, false);
   }, [navigateTab]);
 
+  const openFavoritesInNewTab = useCallback(() => {
+    openNewTab('', 'favorites', null);
+  }, [openNewTab]);
+
   useEffect(() => {
     const handleDocumentDragOver = (event) => {
       if (!isExternalFileDrag(event)) return;
@@ -1057,6 +1061,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}
         onGoBack={handleGoBack}
+        onOpenFavoritesInNewTab={openFavoritesInNewTab}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
@@ -1083,6 +1088,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}
         onFolderClick={handleFolderClick}
+        onOpenFavoritesInNewTab={openFavoritesInNewTab}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}

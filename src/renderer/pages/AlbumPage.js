@@ -70,6 +70,7 @@ function AlbumPage({
   onBreadcrumbNavigate = null,
   onAlbumClick = null,
   onGoBack = null,
+  onOpenFavoritesInNewTab = null,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null
@@ -700,6 +701,11 @@ function AlbumPage({
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
     saveScrollPosition();
+    if (onOpenFavoritesInNewTab) {
+      onOpenFavoritesInNewTab();
+      return;
+    }
+
     if (urlMode && onNavigate) {
       onNavigate('', 'favorites');
       return;

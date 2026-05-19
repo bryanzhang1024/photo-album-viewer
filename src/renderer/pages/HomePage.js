@@ -62,6 +62,7 @@ function HomePage({
   onBreadcrumbNavigate = null,
   onAlbumClick = null,
   onFolderClick = null,
+  onOpenFavoritesInNewTab = null,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null
@@ -521,6 +522,11 @@ function HomePage({
   const handleNavigateToFavorites = () => {
     // 保存当前滚动位置
     saveScrollPosition();
+
+    if (onOpenFavoritesInNewTab) {
+      onOpenFavoritesInNewTab();
+      return;
+    }
 
     if (urlMode && onNavigate) {
       onNavigate('', 'favorites');
