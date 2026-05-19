@@ -21,6 +21,7 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
@@ -29,6 +30,53 @@ import { useSettings } from '../contexts/SettingsContext';
 import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
+
+function formatBytes(size) {
+  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
+    return '未知';
+  }
+
+  if (size === 0) {
+    return '0 B';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+  const value = size / Math.pow(1024, unitIndex);
+  const formatted = unitIndex === 0
+    ? String(Math.round(value))
+    : value.toFixed(1).replace(/\.0$/, '');
+
+  return `${formatted} ${units[unitIndex]}`;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '未知';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '未知';
+  }
+
+  return date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function getDirectoryPath(filePath = '') {
+  const lastSeparatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  if (lastSeparatorIndex <= 0) {
+    return '未知';
+  }
+  return filePath.slice(0, lastSeparatorIndex);
+}
+
+function getResolutionText(dimensions) {
+  if (!dimensions?.width || !dimensions?.height) {
+    return '未知';
+  }
+  return `${dimensions.width} x ${dimensions.height}`;
+}
 
 function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -45,6 +93,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [prevImageDimensions, setPrevImageDimensions] = useState({ width: 0, height: 0 });
   const [prevRotation, setPrevRotation] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   // 双缓冲预加载状态
   const [preloadCache, setPreloadCache] = useState(new Map());
@@ -74,6 +123,11 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       console.error('复制到剪贴板失败:', error);
     }
   }, [currentImage?.path]);
+
+  const toggleImageInfo = useCallback(() => {
+    setInfoOpen(prev => !prev);
+    setToolbarVisible(true);
+  }, []);
   
   // 使用收藏上下文和设置上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
@@ -213,6 +267,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           break;
         case 'Escape':
         case 'Backspace':
+          if (infoOpen && e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            setInfoOpen(false);
+            setToolbarVisible(true);
+            break;
+          }
           onClose();
           break;
         case '+':
@@ -231,6 +292,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           break;
         case 'o':
           handleShowInFolder();
+          break;
+        case 'i':
+        case 'I':
+          if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            toggleImageInfo();
+          }
           break;
         case 'c':
           if (!e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -253,7 +321,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, images.length, handleCopyCurrentImage]);
+  }, [currentIndex, images.length, handleCopyCurrentImage, infoOpen, onClose, toggleImageInfo]);
   
   // 监听全屏变化
   useEffect(() => {
@@ -661,12 +729,28 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
 
   // 检查当前图片是否已收藏
   const isCurrentImageFavorited = currentImage ? isImageFavorited(currentImage.path) : false;
+  const infoRows = currentImage ? [
+    ['文件名', currentImage.name || '未知'],
+    ['分辨率', getResolutionText(imageDimensions)],
+    ['大小', formatBytes(currentImage.size)],
+    ['位置', getDirectoryPath(currentImage.path)],
+    ['路径', currentImage.path || '未知'],
+    ['修改时间', formatDateTime(currentImage.lastModified)],
+    ['序号', `${currentIndex + 1} / ${images.length}`]
+  ] : [];
   
   return (
     <Dialog
       fullScreen
       open={true}
-      onClose={onClose}
+      onClose={(event, reason) => {
+        if (reason === 'escapeKeyDown' && infoOpen) {
+          setInfoOpen(false);
+          setToolbarVisible(true);
+          return;
+        }
+        onClose();
+      }}
       TransitionComponent={Fade}
       transitionDuration={300}
       sx={{ 
@@ -744,6 +828,18 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               sx={{ mr: 1 }}
             >
               <ContentCopyIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="图片信息 (I)">
+            <IconButton
+              color={infoOpen ? 'primary' : 'inherit'}
+              onClick={toggleImageInfo}
+              size="small"
+              aria-label="图片信息 (I)"
+              aria-pressed={infoOpen}
+              sx={{ mr: 1 }}
+            >
+              <InfoOutlinedIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="缩小 (Ctrl+滚轮向下)">
@@ -910,6 +1006,67 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           </Box>
         )}
       </Box>
+
+      {infoOpen && (
+        <Box
+          component="aside"
+          aria-label="图片信息面板"
+          sx={{
+            position: 'absolute',
+            top: 40,
+            right: 0,
+            bottom: 0,
+            width: { xs: 'min(100vw, 360px)', sm: 360 },
+            bgcolor: 'rgba(18, 18, 18, 0.92)',
+            color: '#fff',
+            zIndex: 1090,
+            borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.32)',
+            overflowY: 'auto',
+            p: 2.5,
+            userSelect: 'text'
+          }}
+        >
+          <Typography
+            component="h2"
+            variant="h6"
+            sx={{ fontSize: '1rem', fontWeight: 700, mb: 2 }}
+          >
+            图片信息
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+            {infoRows.map(([label, value]) => (
+              <Box key={label}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: 'block',
+                    color: 'rgba(255, 255, 255, 0.55)',
+                    mb: 0.5,
+                    lineHeight: 1.2
+                  }}
+                >
+                  {label}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'rgba(255, 255, 255, 0.92)',
+                    lineHeight: 1.45,
+                    overflowWrap: 'anywhere',
+                    wordBreak: label === '路径' ? 'break-all' : 'normal'
+                  }}
+                >
+                  {value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
     </Dialog>
   );
 }
