@@ -130,4 +130,30 @@ describe('useAlbumImages', () => {
 
     expect(ipcRenderer.invoke).toHaveBeenCalledTimes(2);
   });
+
+  test('removeImage deletes an image from state and album cache', async () => {
+    const mockImages = [
+      { path: '/albums/trip/a.jpg', name: 'a.jpg' },
+      { path: '/albums/trip/b.jpg', name: 'b.jpg' }
+    ];
+    imageCache.get.mockReturnValueOnce(null);
+    ipcRenderer.invoke.mockResolvedValueOnce(mockImages);
+
+    const { result } = renderHook(() => useAlbumImages('/albums/trip'));
+
+    await act(async () => {
+      await result.current.loadImages();
+    });
+
+    act(() => {
+      result.current.removeImage('/albums/trip/a.jpg');
+    });
+
+    expect(result.current.images).toEqual([{ path: '/albums/trip/b.jpg', name: 'b.jpg' }]);
+    expect(imageCache.set).toHaveBeenLastCalledWith(
+      'album',
+      '/albums/trip',
+      [{ path: '/albums/trip/b.jpg', name: 'b.jpg' }]
+    );
+  });
 });

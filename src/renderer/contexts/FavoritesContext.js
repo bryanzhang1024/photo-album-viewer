@@ -13,6 +13,7 @@ export const FavoritesContext = createContext({
   toggleFolderFavorite: () => {},
   toggleAlbumFavorite: () => {},
   toggleImageFavorite: () => {},
+  removeImageFavorite: () => {},
   addCollection: () => {},
   removeCollection: () => {},
   addToCollection: () => {},
@@ -238,6 +239,23 @@ export const FavoritesProvider = ({ children }) => {
     return !isCurrentlyFavorited;
   }, [favorites, isImageFavorited, saveFavorites]);
 
+  const removeImageFavorite = useCallback(async (imagePath) => {
+    if (!imagePath) return false;
+
+    const newFavorites = {
+      ...favorites,
+      images: favorites.images.filter(item => item.path !== imagePath)
+    };
+
+    if (newFavorites.images.length === favorites.images.length) {
+      return false;
+    }
+
+    setFavorites(newFavorites);
+    await saveFavorites(newFavorites);
+    return true;
+  }, [favorites, saveFavorites]);
+
   // 添加收藏集
   const addCollection = useCallback(async (name, type = 'mixed') => {
     const newCollection = {
@@ -317,6 +335,7 @@ export const FavoritesProvider = ({ children }) => {
     toggleFolderFavorite,
     toggleAlbumFavorite,
     toggleImageFavorite,
+    removeImageFavorite,
     addCollection,
     removeCollection,
     addToCollection,

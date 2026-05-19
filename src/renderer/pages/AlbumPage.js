@@ -159,7 +159,7 @@ function AlbumPage({
   });
 
   // 使用自定义 Hooks
-  const { images, loading, error: loadError, loadImages, refresh } = useAlbumImages(decodedAlbumPath);
+  const { images, loading, error: loadError, loadImages, refresh, removeImage } = useAlbumImages(decodedAlbumPath);
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
 
@@ -571,6 +571,10 @@ function AlbumPage({
   const totalImagesCount = images.length;
   const filteredImagesCount = sortedImages.length;
   const canRefreshAlbum = Boolean(decodedAlbumPath);
+
+  const handleViewerImageDeleted = useCallback((deletedPath) => {
+    removeImage(deletedPath);
+  }, [removeImage]);
 
   // 处理图片点击
   const handleImageClick = (index) => {
@@ -1069,6 +1073,7 @@ function AlbumPage({
           currentIndex={selectedImageIndex}
           onClose={handleCloseViewer}
           onIndexChange={setSelectedImageIndex}
+          onImageDeleted={handleViewerImageDeleted}
         />
       )}
       <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>

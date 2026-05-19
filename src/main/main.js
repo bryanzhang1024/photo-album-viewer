@@ -43,6 +43,7 @@ const thumbnailProtocolStats = {
 const THUMBNAIL_PROTOCOL_PREFIX = 'thumbnail-protocol://';
 const LOCAL_IMAGE_PROTOCOL_PREFIX = 'local-image-protocol://';
 const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff']);
+const DELETE_IMAGE_EXTENSIONS = new Set(FileSystemService.SUPPORTED_FORMATS || ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
 const APPROVED_ROOTS_FILE = path.join(app.getPath('userData'), 'approved-roots.json');
 const approvedRoots = new Set();
 let approvedRootsLoaded = false;
@@ -619,6 +620,40 @@ ipcMain.handle(CHANNELS.SHOW_IN_FOLDER, async (event, filePath) => {
     return { success: true };
   } catch (error) {
     console.error('在文件管理器中显示文件失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 将图片移到系统废纸篓
+ipcMain.handle(CHANNELS.TRASH_IMAGE, async (event, filePath) => {
+  try {
+    const normalizedPath = normalizeAbsolutePath(filePath);
+    if (!normalizedPath) {
+      return { success: false, error: '无效的图片路径' };
+    }
+
+    const isAllowed = await assertApprovedPath(normalizedPath);
+    if (!isAllowed) {
+      return { success: false, error: '访问路径不在已授权照片目录范围内' };
+    }
+
+    const stats = await fs.promises.stat(normalizedPath).catch(() => {
+      throw new Error('图片文件不存在');
+    });
+
+    if (!stats.isFile()) {
+      return { success: false, error: '目标不是图片文件' };
+    }
+
+    const extension = path.extname(normalizedPath).toLowerCase();
+    if (!DELETE_IMAGE_EXTENSIONS.has(extension)) {
+      return { success: false, error: '不支持删除此文件类型' };
+    }
+
+    await shell.trashItem(normalizedPath);
+    return { success: true, filePath: normalizedPath };
+  } catch (error) {
+    console.error('移动图片到废纸篓失败:', error);
     return { success: false, error: error.message };
   }
 });

@@ -14,6 +14,7 @@ module.exports = {
     CLEAR_THUMBNAIL_CACHE: 'clear-thumbnail-cache',
     SHOW_IN_FOLDER: 'show-in-folder',
     COPY_IMAGE_TO_CLIPBOARD: 'copy-image-to-clipboard',
+    TRASH_IMAGE: 'trash-image',
     CREATE_NEW_WINDOW: 'create-new-window',
     CREATE_NEW_INSTANCE: 'create-new-instance',
     GET_WINDOWS_INFO: 'get-windows-info',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ImageViewer from '../../../src/renderer/components/ImageViewer';
+import CHANNELS from '../../../src/common/ipc-channels';
 
 jest.mock('../../../src/renderer/contexts/FavoritesContext', () => ({
   useFavorites: jest.fn(() => ({
@@ -24,6 +25,12 @@ const images = [
     name: 'IMG_0001.jpg',
     size: 1536,
     lastModified: '2026-05-18T12:30:00.000Z'
+  },
+  {
+    path: '/photos/trip/IMG_0002.jpg',
+    name: 'IMG_0002.jpg',
+    size: 2048,
+    lastModified: '2026-05-18T12:31:00.000Z'
   }
 ];
 
@@ -99,5 +106,88 @@ describe('ImageViewer image info panel', () => {
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ImageViewer delete image flow', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('renders a delete button in the viewer toolbar', () => {
+    renderViewer();
+
+    expect(screen.getByRole('button', { name: /删除图片/i })).toBeInTheDocument();
+  });
+
+  test('opens delete confirmation with the current image path from the Delete key', () => {
+    renderViewer();
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+
+    expect(screen.getByRole('heading', { name: '删除图片' })).toBeInTheDocument();
+    expect(screen.getByText('/photos/trip/IMG_0001.jpg')).toBeInTheDocument();
+    expect(screen.getByText('移到系统废纸篓')).toBeInTheDocument();
+  });
+
+  test('cancels delete confirmation without invoking IPC', () => {
+    renderViewer();
+
+    fireEvent.click(screen.getByRole('button', { name: /删除图片/i }));
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    expect(global.electronMock.ipcRenderer.invoke).not.toHaveBeenCalledWith(
+      CHANNELS.TRASH_IMAGE,
+      expect.any(String)
+    );
+    expect(screen.queryByRole('heading', { name: '删除图片' })).not.toBeInTheDocument();
+  });
+
+  test('moves the current image to trash and notifies the parent when confirmed', async () => {
+    global.electronMock.ipcRenderer.invoke.mockResolvedValueOnce({ success: true });
+    const props = renderViewer({ onImageDeleted: jest.fn() });
+
+    fireEvent.click(screen.getByRole('button', { name: /删除图片/i }));
+    fireEvent.click(screen.getByRole('button', { name: '移到废纸篓' }));
+
+    await waitFor(() => {
+      expect(global.electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.TRASH_IMAGE,
+        '/photos/trip/IMG_0001.jpg'
+      );
+      expect(props.onImageDeleted).toHaveBeenCalledWith('/photos/trip/IMG_0001.jpg');
+    });
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  test('closes the viewer after deleting the only image', async () => {
+    global.electronMock.ipcRenderer.invoke.mockResolvedValueOnce({ success: true });
+    const props = renderViewer({
+      images: [images[0]],
+      onImageDeleted: jest.fn()
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /删除图片/i }));
+    fireEvent.click(screen.getByRole('button', { name: '移到废纸篓' }));
+
+    await waitFor(() => {
+      expect(props.onImageDeleted).toHaveBeenCalledWith('/photos/trip/IMG_0001.jpg');
+      expect(props.onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  test('shows delete failure and keeps the viewer open', async () => {
+    global.electronMock.ipcRenderer.invoke.mockResolvedValueOnce({
+      success: false,
+      error: '移动到废纸篓失败'
+    });
+    const props = renderViewer({ onImageDeleted: jest.fn() });
+
+    fireEvent.click(screen.getByRole('button', { name: /删除图片/i }));
+    fireEvent.click(screen.getByRole('button', { name: '移到废纸篓' }));
+
+    expect(await screen.findByText('移动到废纸篓失败')).toBeInTheDocument();
+    expect(props.onImageDeleted).not.toHaveBeenCalled();
+    expect(props.onClose).not.toHaveBeenCalled();
   });
 });

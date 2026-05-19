@@ -61,12 +61,25 @@ export const useAlbumImages = (albumPath) => {
     return Promise.resolve([]);
   }, [albumPath, loadImages]);
 
+  const removeImage = useCallback((imagePath) => {
+    if (!albumPath || !imagePath) {
+      return;
+    }
+
+    setImages(prevImages => {
+      const nextImages = prevImages.filter(image => image.path !== imagePath);
+      imageCache.set('album', albumPath, nextImages);
+      return nextImages;
+    });
+  }, [albumPath]);
+
   return {
     images,
     loading,
     error,
     loadImages,
-    refresh
+    refresh,
+    removeImage
   };
 };
 
