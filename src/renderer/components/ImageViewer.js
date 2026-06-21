@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Dialog,
   AppBar,
@@ -28,8 +28,15 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
+import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useSettings } from '../contexts/SettingsContext';
+import {
+  DEFAULT_DUAL_PAGE_GAP,
+  getNextPageIndex,
+  getPreviousPageIndex,
+  getVisibleImageIndices
+} from '../utils/viewerPages';
 import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
@@ -90,7 +97,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const [toolbarVisible, setToolbarVisible] = useState(true);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
-  const [isVertical, setIsVertical] = useState(false);
   const [manualRotation, setManualRotation] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [prevImageDimensions, setPrevImageDimensions] = useState({ width: 0, height: 0 });
@@ -100,6 +106,11 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [dualPageEnabled, setDualPageEnabled] = useState(false);
+  const [viewportSize, setViewportSize] = useState(() => ({
+    width: typeof window === 'undefined' ? 0 : window.innerWidth,
+    height: typeof window === 'undefined' ? 0 : window.innerHeight
+  }));
 
   // 双缓冲预加载状态
   const [preloadCache, setPreloadCache] = useState(new Map());
@@ -110,6 +121,35 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const imgRef = useRef(null);
   
   const currentImage = images[currentIndex];
+  const dimensionsByIndex = useMemo(() => {
+    const dimensions = new Map();
+    preloadCache.forEach((cacheEntry, index) => {
+      if (cacheEntry?.naturalWidth && cacheEntry?.naturalHeight) {
+        dimensions.set(index, {
+          width: cacheEntry.naturalWidth,
+          height: cacheEntry.naturalHeight
+        });
+      }
+    });
+    return dimensions;
+  }, [preloadCache]);
+  const visibleImageIndices = useMemo(() => getVisibleImageIndices({
+    images,
+    currentIndex,
+    dimensionsByIndex,
+    viewport: viewportSize,
+    dualPageEnabled
+  }), [currentIndex, dimensionsByIndex, dualPageEnabled, images, viewportSize]);
+  const visibleImages = useMemo(
+    () => visibleImageIndices.map(index => ({ image: images[index], index })).filter(item => item.image),
+    [images, visibleImageIndices]
+  );
+  const titleIndexText = visibleImageIndices.length > 1
+    ? `${visibleImageIndices[0] + 1}-${visibleImageIndices[visibleImageIndices.length - 1] + 1}`
+    : `${currentIndex + 1}`;
+  const titleText = visibleImages.length > 1
+    ? `${visibleImages[0].image.name} + ${visibleImages[1].image.name}`
+    : currentImage?.name;
   const getSafeImageUrl = useCallback((imagePath) => {
     if (!imagePath || !ipcRenderer || typeof ipcRenderer.getLocalImageUrl !== 'function') {
       return null;
@@ -242,7 +282,8 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     const preloadImages = () => {
       const preloadIndices = [
         (currentIndex - 1 + images.length) % images.length,
-        (currentIndex + 1) % images.length
+        (currentIndex + 1) % images.length,
+        (currentIndex + 2) % images.length
       ];
 
       preloadIndices.forEach(index => {
@@ -360,6 +401,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
             toggleImageInfo();
           }
           break;
+        case 'v':
+        case 'V':
+          if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            toggleDualPageMode();
+          }
+          break;
         case 'c':
           if (!e.metaKey && !e.ctrlKey && !e.altKey) {
             handleToggleFavorite();
@@ -381,7 +429,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, images.length, handleCopyCurrentImage, infoOpen, onClose, toggleImageInfo, deleteConfirmOpen, closeDeleteConfirmation, openDeleteConfirmation]);
+  }, [currentIndex, dimensionsByIndex, dualPageEnabled, handleCopyCurrentImage, images, infoOpen, onClose, toggleImageInfo, deleteConfirmOpen, closeDeleteConfirmation, openDeleteConfirmation, viewportSize]);
   
   // 监听全屏变化
   useEffect(() => {
@@ -391,6 +439,18 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
   
   // 监听鼠标移动，控制工具栏显示
@@ -464,8 +524,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   // 检测图片是否为竖屏
   const detectImageOrientation = (img) => {
     if (img && img.naturalWidth && img.naturalHeight) {
-      const isVerticalImg = img.naturalHeight > img.naturalWidth;
-      setIsVertical(isVerticalImg);
       setImageDimensions({
         width: img.naturalWidth,
         height: img.naturalHeight
@@ -499,9 +557,14 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
 
   // 计算旋转角度
   const calculateRotation = () => {
+    return calculateRotationForDimensions(imageDimensions);
+  };
+
+  const calculateRotationForDimensions = (dimensions) => {
     let rotation = manualRotation;
-    
-    if (settings.autoRotateVerticalImages && isVertical) {
+    const shouldAutoRotate = dimensions?.height > dimensions?.width;
+
+    if (settings.autoRotateVerticalImages && shouldAutoRotate) {
       const autoRotation = settings.rotationDirection === 'right' ? 90 : -90;
       rotation += autoRotation;
     }
@@ -511,12 +574,21 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
 
   // 导航到上一张/下一张图片 - 双缓冲优化版
   const handleNavigate = (direction) => {
-    let newIndex;
-    if (direction === 'prev') {
-      newIndex = currentIndex === 0 ? images.length - 1 : currentIndex - 1;
-    } else {
-      newIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
-    }
+    const newIndex = direction === 'prev'
+      ? getPreviousPageIndex({
+        images,
+        currentIndex,
+        dimensionsByIndex,
+        viewport: viewportSize,
+        dualPageEnabled
+      })
+      : getNextPageIndex({
+        images,
+        currentIndex,
+        dimensionsByIndex,
+        viewport: viewportSize,
+        dualPageEnabled
+      });
 
     // 切换图片前重置状态
     setZoomLevel(1);
@@ -571,6 +643,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
         img.src = imageSrc;
       }
     }
+  };
+
+  const toggleDualPageMode = () => {
+    setDualPageEnabled(prev => !prev);
+    setZoomLevel(1);
+    setDragOffset({ x: 0, y: 0 });
+    setToolbarVisible(true);
   };
 
   // 手动旋转图片
@@ -798,6 +877,75 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     ['修改时间', formatDateTime(currentImage.lastModified)],
     ['序号', `${currentIndex + 1} / ${images.length}`]
   ] : [];
+
+  const getImageDimensionsForIndex = (index) => {
+    return dimensionsByIndex.get(index) || (index === currentIndex ? imageDimensions : null);
+  };
+
+  const getViewerImageStyle = (index) => {
+    const dimensions = getImageDimensionsForIndex(index);
+    const rotation = calculateRotationForDimensions(dimensions);
+    const sharedStyle = {
+      transition: 'none',
+      cursor: zoomLevel > 1 ? 'move' : 'default',
+      transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${rotation}deg)`,
+      userSelect: 'none',
+      objectFit: 'contain'
+    };
+
+    if (visibleImages.length > 1) {
+      return {
+        ...sharedStyle,
+        width: `calc((100% - ${DEFAULT_DUAL_PAGE_GAP}px) / 2)`,
+        height: `${zoomLevel * 100}%`,
+        maxWidth: `calc((100% - ${DEFAULT_DUAL_PAGE_GAP}px) / 2)`,
+        maxHeight: '100%',
+        position: 'relative'
+      };
+    }
+
+    return {
+      ...sharedStyle,
+      ...calculateRotatedDimensions(),
+      position: 'absolute'
+    };
+  };
+
+  const handleRenderedImageLoad = (index, event) => {
+    const target = event.target;
+    if (target?.naturalWidth && target?.naturalHeight) {
+      setPreloadCache(prev => {
+        const currentEntry = prev.get(index);
+        if (
+          currentEntry?.naturalWidth === target.naturalWidth &&
+          currentEntry?.naturalHeight === target.naturalHeight
+        ) {
+          return prev;
+        }
+
+        const newCache = new Map(prev);
+        newCache.set(index, {
+          ...currentEntry,
+          loaded: true,
+          naturalWidth: target.naturalWidth,
+          naturalHeight: target.naturalHeight
+        });
+        return newCache;
+      });
+    }
+
+    if (index === currentIndex) {
+      const cachedImage = preloadCache.get(currentIndex);
+      if (cachedImage && cachedImage.naturalWidth && cachedImage.naturalHeight) {
+        detectImageOrientation({
+          naturalWidth: cachedImage.naturalWidth,
+          naturalHeight: cachedImage.naturalHeight
+        });
+      } else {
+        detectImageOrientation(target);
+      }
+    }
+  };
   
   return (
     <Dialog
@@ -852,7 +1000,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
             <CloseIcon />
           </IconButton>
           <Typography variant="subtitle1" sx={{ ml: 2, flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {currentImage?.name} ({currentIndex + 1} / {images.length})
+            {titleText} ({titleIndexText} / {images.length})
           </Typography>
           <Tooltip title="随机图片 (R)">
             <IconButton 
@@ -904,6 +1052,18 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
               sx={{ mr: 1 }}
             >
               <InfoOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={dualPageEnabled ? '退出双页展示 (V)' : '双页展示 (V)'}>
+            <IconButton
+              color={dualPageEnabled ? 'primary' : 'inherit'}
+              onClick={toggleDualPageMode}
+              size="small"
+              aria-label={dualPageEnabled ? '退出双页展示 (V)' : '双页展示 (V)'}
+              aria-pressed={dualPageEnabled}
+              sx={{ mr: 1 }}
+            >
+              <ViewColumnIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="删除图片 (Delete)">
@@ -990,6 +1150,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: visibleImages.length > 1 ? `${DEFAULT_DUAL_PAGE_GAP}px` : 0,
         position: 'relative',
         overflow: 'hidden'
       }}
@@ -1000,40 +1161,32 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
       >
-        {currentImage && (
-          <img
-            ref={imgRef}
-            src={getSafeImageUrl(currentImage.path) || ''}
-            alt={currentImage.name}
-            onLoad={(e) => {
-              // 如果有缓存的尺寸信息，立即使用
-              const cachedImage = preloadCache.get(currentIndex);
-              if (cachedImage && cachedImage.naturalWidth && cachedImage.naturalHeight) {
-                detectImageOrientation({
-                  naturalWidth: cachedImage.naturalWidth,
-                  naturalHeight: cachedImage.naturalHeight
-                });
-              } else {
-                detectImageOrientation(e.target);
-              }
-            }}
-            onError={(e) => {
-              console.error('图片加载失败:', currentImage.path);
-              setImageLoaded(true);
-            }}
-            style={{
-              ...calculateRotatedDimensions(),
-              transition: 'none',
-              cursor: zoomLevel > 1 ? 'move' : 'default',
-              transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${calculateRotation()}deg)`,
-              userSelect: 'none',
-              position: 'absolute',
-              opacity: imageLoaded ? 1 : 0,
-              visibility: imageLoaded ? 'visible' : 'hidden'
-            }}
-            draggable={false}
-          />
-        )}
+        {visibleImages.map(({ image, index }, visibleIndex) => {
+          const isCurrentVisibleImage = index === currentIndex;
+          const isRenderedImageLoaded = isCurrentVisibleImage ? imageLoaded : true;
+
+          return (
+            <img
+              key={image.path || index}
+              ref={visibleIndex === 0 ? imgRef : null}
+              src={getSafeImageUrl(image.path) || ''}
+              alt={image.name}
+              onLoad={(event) => handleRenderedImageLoad(index, event)}
+              onError={() => {
+                console.error('图片加载失败:', image.path);
+                if (isCurrentVisibleImage) {
+                  setImageLoaded(true);
+                }
+              }}
+              style={{
+                ...getViewerImageStyle(index),
+                opacity: isRenderedImageLoaded ? 1 : 0,
+                visibility: isRenderedImageLoaded ? 'visible' : 'hidden'
+              }}
+              draggable={false}
+            />
+          );
+        })}
         
         {(!imageLoaded || isTransitioning) && currentImage && (
           <Box sx={{
