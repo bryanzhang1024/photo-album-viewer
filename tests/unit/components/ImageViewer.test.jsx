@@ -52,6 +52,22 @@ describe('ImageViewer image info panel', () => {
     jest.clearAllMocks();
   });
 
+  test('renders a dual-page mode toggle in the viewer toolbar', () => {
+    renderViewer();
+
+    expect(screen.getByRole('button', { name: /双页展示/i })).toBeInTheDocument();
+  });
+
+  test('toggles dual-page mode from the toolbar button', () => {
+    renderViewer();
+
+    const button = screen.getByRole('button', { name: /双页展示/i });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: /退出双页展示/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('renders an image info button in the viewer toolbar', () => {
     renderViewer();
 
