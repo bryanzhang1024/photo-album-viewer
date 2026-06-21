@@ -62,7 +62,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   
   // 使用收藏上下文
-  const { favorites, isLoading } = useFavorites();
+  const { favorites, isLoading, removeImageFavorite } = useFavorites();
   
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
@@ -201,6 +201,11 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
     setViewerImages(images);
     setSelectedImageIndex(index);
     setViewerOpen(true);
+  };
+
+  const handleViewerImageDeleted = async (deletedPath) => {
+    setViewerImages(prevImages => prevImages.filter(image => image.path !== deletedPath));
+    await removeImageFavorite(deletedPath);
   };
 
   // 处理导航到相册
@@ -620,6 +625,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
           currentIndex={selectedImageIndex}
           onClose={handleCloseViewer}
           onIndexChange={setSelectedImageIndex}
+          onImageDeleted={handleViewerImageDeleted}
         />
       )}
     </Box>

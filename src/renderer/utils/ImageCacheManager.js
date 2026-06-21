@@ -146,6 +146,14 @@ class ImageCacheManager {
     }
 
     /**
+     * 按公开缓存坐标删除缓存项。
+     */
+    deleteEntry(type, identifier, options = {}) {
+        const key = this.generateCacheKey(type, identifier, options);
+        this.delete(key);
+    }
+
+    /**
      * 更新LRU队列
      */
     updateLRU(key) {

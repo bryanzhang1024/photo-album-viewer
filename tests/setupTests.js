@@ -65,6 +65,7 @@ if (typeof window !== 'undefined') {
     on: electronMock.ipcRenderer.on,
     once: electronMock.ipcRenderer.once,
     removeListener: electronMock.ipcRenderer.removeListener,
+    getPathForFile: jest.fn((file) => file?.mockPath || ''),
     getThumbnailUrl: jest.fn((imagePath) => (imagePath ? `thumbnail-protocol://mock-${encodeURIComponent(imagePath)}.webp` : null)),
     getLocalImageUrl: jest.fn((imagePath) => (imagePath ? `local-image-protocol://${encodeURIComponent(imagePath)}` : null)),
     saveToDiskCache: jest.fn(() => false)

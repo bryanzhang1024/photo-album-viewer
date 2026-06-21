@@ -140,6 +140,15 @@ const createViewState = (targetPath = '', viewMode = 'folder', initialImage = nu
   };
 };
 
+const viewStateMatches = (state, targetPath = '', viewMode = 'folder', initialImage = null) => {
+  if (!state) return false;
+  return (
+    state.targetPath === normalizeTargetPath(targetPath || '')
+    && state.viewMode === normalizeViewMode(viewMode)
+    && (state.initialImage || null) === (initialImage || null)
+  );
+};
+
 const sanitizeTabFromSession = (tab) => {
   if (!tab || typeof tab !== 'object') return null;
 
@@ -239,6 +248,11 @@ const loadTabsSession = (storageKey = TABS_SESSION_KEY) => {
 
 const ipcRenderer = window.electronAPI || null;
 
+const isExternalFileDrag = (event) => {
+  const types = Array.from(event.dataTransfer?.types || []);
+  return types.includes('Files');
+};
+
 function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = false }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -246,6 +260,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   const hasRestoredSession = useRef(false);
   const hasInitializedTabsSession = useRef(false);
   const initialTabRef = useRef(null);
+  const pendingNavigationRef = useRef(null);
   const [openFolderMenuAnchorEl, setOpenFolderMenuAnchorEl] = useState(null);
   const [tabsMenuAnchorEl, setTabsMenuAnchorEl] = useState(null);
   const [hasSavedTabsSnapshot, setHasSavedTabsSnapshot] = useState(
@@ -451,12 +466,28 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   }, [urlState.targetPath, urlState.isRoot]);
 
   useEffect(() => {
+    const pendingNavigation = pendingNavigationRef.current;
+    if (pendingNavigation) {
+      if (!viewStateMatches(pendingNavigation, urlState.targetPath, urlState.viewMode, urlState.initialImage)) {
+        return;
+      }
+      pendingNavigationRef.current = null;
+    }
+
     setDisplayState(createViewState(urlState.targetPath, urlState.viewMode, urlState.initialImage));
   }, [urlState.targetPath, urlState.viewMode, urlState.initialImage]);
 
   // URL变化时，将当前URL同步回激活标签
   useEffect(() => {
     if (redirectFromOldRoute) return;
+
+    const pendingNavigation = pendingNavigationRef.current;
+    if (pendingNavigation) {
+      if (!viewStateMatches(pendingNavigation, urlState.targetPath, urlState.viewMode, urlState.initialImage)) {
+        return;
+      }
+      pendingNavigationRef.current = null;
+    }
 
     setTabs((prevTabs) => {
       const activeIndex = prevTabs.findIndex((tab) => tab.id === activeTabId);
@@ -493,24 +524,30 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   const navigateTab = useCallback((tabId, targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
     const normalizedTargetPath = normalizeTargetPath(targetPath || '');
     const nextViewMode = normalizeViewMode(viewMode);
+    const nextInitialImage = initialImage || null;
     if (tabId !== activeTabId) {
       saveActiveTabScrollPosition();
     }
+    pendingNavigationRef.current = {
+      targetPath: normalizedTargetPath,
+      viewMode: nextViewMode,
+      initialImage: nextInitialImage
+    };
     setTabs((prevTabs) => prevTabs.map((tab) => (
       tab.id === tabId
         ? {
             ...tab,
             targetPath: normalizedTargetPath,
             viewMode: nextViewMode,
-            initialImage: initialImage || null,
+            initialImage: nextInitialImage,
             title: getTabTitle(normalizedTargetPath, nextViewMode)
           }
         : tab
     )));
 
     setActiveTabId(tabId);
-    setDisplayState(createViewState(normalizedTargetPath, nextViewMode, initialImage));
-    navigateWithPersist(normalizedTargetPath, { viewMode: nextViewMode, initialImage, replace });
+    setDisplayState(createViewState(normalizedTargetPath, nextViewMode, nextInitialImage));
+    navigateWithPersist(normalizedTargetPath, { viewMode: nextViewMode, initialImage: nextInitialImage, replace });
   }, [activeTabId, navigateWithPersist, saveActiveTabScrollPosition]);
 
   // 导航函数 - 供子组件使用
@@ -561,6 +598,68 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     setTabs((prevTabs) => [...prevTabs, newTab]);
     navigateTab(newTab.id, newTab.targetPath, newTab.viewMode, newTab.initialImage, false);
   }, [navigateTab]);
+
+  const openFavoritesInNewTab = useCallback(() => {
+    openNewTab('', 'favorites', null);
+  }, [openNewTab]);
+
+  useEffect(() => {
+    const handleDocumentDragOver = (event) => {
+      if (!isExternalFileDrag(event)) return;
+
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleDocumentDrop = async (event) => {
+      if (!isExternalFileDrag(event)) return;
+
+      event.preventDefault();
+      if (!ipcRenderer) return;
+
+      const droppedPaths = Array.from(event.dataTransfer?.files || [])
+        .map((file) => {
+          try {
+            return ipcRenderer.getPathForFile?.(file) || file.path || '';
+          } catch (error) {
+            return '';
+          }
+        })
+        .filter(Boolean);
+
+      if (droppedPaths.length === 0) {
+        setErrorMessage('只支持拖入文件夹');
+        return;
+      }
+
+      try {
+        const result = await ipcRenderer.invoke(CHANNELS.RESOLVE_DROPPED_FOLDERS, droppedPaths);
+        const folders = Array.isArray(result?.folders) ? result.folders : [];
+
+        if (folders.length === 0) {
+          setErrorMessage('只支持拖入文件夹');
+          return;
+        }
+
+        folders.forEach((folderPath) => {
+          openNewTab(folderPath, 'folder', null);
+        });
+      } catch (error) {
+        console.error('处理拖入文件夹失败:', error);
+        setErrorMessage('打开拖入文件夹失败');
+      }
+    };
+
+    document.addEventListener('dragover', handleDocumentDragOver);
+    document.addEventListener('drop', handleDocumentDrop);
+
+    return () => {
+      document.removeEventListener('dragover', handleDocumentDragOver);
+      document.removeEventListener('drop', handleDocumentDrop);
+    };
+  }, [openNewTab]);
 
   const clearTabDragIndicator = useCallback(() => {
     setDragIndicator((prev) => (prev.tabId ? { tabId: null, position: DRAG_INSERT_BEFORE } : prev));
@@ -962,6 +1061,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}
         onGoBack={handleGoBack}
+        onOpenFavoritesInNewTab={openFavoritesInNewTab}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
@@ -988,6 +1088,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}
         onFolderClick={handleFolderClick}
+        onOpenFavoritesInNewTab={openFavoritesInNewTab}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}

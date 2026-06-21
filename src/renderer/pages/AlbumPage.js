@@ -70,6 +70,7 @@ function AlbumPage({
   onBreadcrumbNavigate = null,
   onAlbumClick = null,
   onGoBack = null,
+  onOpenFavoritesInNewTab = null,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null
@@ -159,7 +160,7 @@ function AlbumPage({
   });
 
   // 使用自定义 Hooks
-  const { images, loading, error: loadError, loadImages, refresh } = useAlbumImages(decodedAlbumPath);
+  const { images, loading, error: loadError, loadImages, refresh, removeImage } = useAlbumImages(decodedAlbumPath);
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
 
@@ -572,6 +573,10 @@ function AlbumPage({
   const filteredImagesCount = sortedImages.length;
   const canRefreshAlbum = Boolean(decodedAlbumPath);
 
+  const handleViewerImageDeleted = useCallback((deletedPath) => {
+    removeImage(deletedPath);
+  }, [removeImage]);
+
   // 处理图片点击
   const handleImageClick = (index) => {
     setSelectedImageIndex(index);
@@ -696,6 +701,11 @@ function AlbumPage({
   // 处理导航到收藏页面
   const handleNavigateToFavorites = () => {
     saveScrollPosition();
+    if (onOpenFavoritesInNewTab) {
+      onOpenFavoritesInNewTab();
+      return;
+    }
+
     if (urlMode && onNavigate) {
       onNavigate('', 'favorites');
       return;
@@ -1069,6 +1079,7 @@ function AlbumPage({
           currentIndex={selectedImageIndex}
           onClose={handleCloseViewer}
           onIndexChange={setSelectedImageIndex}
+          onImageDeleted={handleViewerImageDeleted}
         />
       )}
       <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>

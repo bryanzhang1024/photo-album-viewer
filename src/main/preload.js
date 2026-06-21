@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 let crypto = null;
 try {
@@ -16,6 +16,7 @@ try {
     SELECT_DIRECTORY: 'select-directory',
     SCAN_NAVIGATION_LEVEL: 'scan-navigation-level',
     SCAN_DIRECTORY: 'scan-directory',
+    RESOLVE_DROPPED_FOLDERS: 'resolve-dropped-folders',
     GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',
     GET_THUMBNAIL: 'get-thumbnail',
     GET_BATCH_THUMBNAILS: 'get-batch-thumbnails',
@@ -27,6 +28,7 @@ try {
     CLEAR_THUMBNAIL_CACHE: 'clear-thumbnail-cache',
     SHOW_IN_FOLDER: 'show-in-folder',
     COPY_IMAGE_TO_CLIPBOARD: 'copy-image-to-clipboard',
+    TRASH_IMAGE: 'trash-image',
     CREATE_NEW_WINDOW: 'create-new-window',
     CREATE_NEW_INSTANCE: 'create-new-instance',
     GET_WINDOWS_INFO: 'get-windows-info',
@@ -39,6 +41,7 @@ const INVOKE_CHANNELS = new Set([
   CHANNELS.SELECT_DIRECTORY,
   CHANNELS.SCAN_NAVIGATION_LEVEL,
   CHANNELS.SCAN_DIRECTORY,
+  CHANNELS.RESOLVE_DROPPED_FOLDERS,
   CHANNELS.GET_IMAGE_THUMBNAIL,
   CHANNELS.GET_THUMBNAIL,
   CHANNELS.GET_BATCH_THUMBNAILS,
@@ -50,6 +53,7 @@ const INVOKE_CHANNELS = new Set([
   CHANNELS.CLEAR_THUMBNAIL_CACHE,
   CHANNELS.SHOW_IN_FOLDER,
   CHANNELS.COPY_IMAGE_TO_CLIPBOARD,
+  CHANNELS.TRASH_IMAGE,
   CHANNELS.CREATE_NEW_WINDOW,
   CHANNELS.CREATE_NEW_INSTANCE,
   CHANNELS.GET_WINDOWS_INFO,
@@ -125,6 +129,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return null;
     }
     return `local-image-protocol://${encodeURIComponent(imagePath)}`;
+  },
+  getPathForFile(file) {
+    if (!file || !webUtils?.getPathForFile) {
+      return '';
+    }
+    return webUtils.getPathForFile(file);
   },
   // Reserved for future disk cache integration.
   saveToDiskCache() {

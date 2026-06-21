@@ -4,7 +4,6 @@ const fs = require('fs');
 const os = require('os');
 const isDev = require('electron-is-dev');
 const { promisify } = require('util');
-const { pathToFileURL } = require('url');
 const http = require('http');
 const sharp = require('sharp');
 const crypto = require('crypto');
@@ -44,6 +43,7 @@ const thumbnailProtocolStats = {
 const THUMBNAIL_PROTOCOL_PREFIX = 'thumbnail-protocol://';
 const LOCAL_IMAGE_PROTOCOL_PREFIX = 'local-image-protocol://';
 const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff']);
+const DELETE_IMAGE_EXTENSIONS = new Set(FileSystemService.SUPPORTED_FORMATS || ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
 const APPROVED_ROOTS_FILE = path.join(app.getPath('userData'), 'approved-roots.json');
 const approvedRoots = new Set();
 let approvedRootsLoaded = false;
@@ -167,6 +167,32 @@ function normalizePerformanceSettings(settings = {}, fallback = DEFAULT_PERFORMA
   }
 
   return resolved;
+}
+
+function escapePlistString(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function createPlistArray(values) {
+  const items = values
+    .map((value) => `\t<string>${escapePlistString(value)}</string>`)
+    .join('\n');
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0">',
+    '<array>',
+    items,
+    '</array>',
+    '</plist>',
+    ''
+  ].join('\n');
 }
 
 // 单实例锁定 - 允许多窗口
@@ -422,6 +448,35 @@ ipcMain.handle(CHANNELS.SCAN_DIRECTORY, async (event, rootPath) => {
   }
 });
 
+ipcMain.handle(CHANNELS.RESOLVE_DROPPED_FOLDERS, async (event, droppedPaths) => {
+  const folders = [];
+  const rejected = [];
+  const candidates = Array.isArray(droppedPaths) ? droppedPaths : [];
+
+  for (const candidatePath of candidates) {
+    const normalizedPath = normalizeAbsolutePath(candidatePath);
+    if (!normalizedPath) {
+      rejected.push(candidatePath);
+      continue;
+    }
+
+    try {
+      const stats = await fs.promises.stat(normalizedPath);
+      if (!stats.isDirectory()) {
+        rejected.push(normalizedPath);
+        continue;
+      }
+
+      await registerApprovedRoot(normalizedPath);
+      folders.push(normalizedPath);
+    } catch (error) {
+      rejected.push(normalizedPath);
+    }
+  }
+
+  return { folders, rejected };
+});
+
 // 获取图片的缩略图 - 使用新的服务
 ipcMain.handle(CHANNELS.GET_IMAGE_THUMBNAIL, async (event, imagePath, priority = 0) => {
     const isAllowed = await assertApprovedPath(imagePath);
@@ -569,6 +624,40 @@ ipcMain.handle(CHANNELS.SHOW_IN_FOLDER, async (event, filePath) => {
   }
 });
 
+// 将图片移到系统废纸篓
+ipcMain.handle(CHANNELS.TRASH_IMAGE, async (event, filePath) => {
+  try {
+    const normalizedPath = normalizeAbsolutePath(filePath);
+    if (!normalizedPath) {
+      return { success: false, error: '无效的图片路径' };
+    }
+
+    const isAllowed = await assertApprovedPath(normalizedPath);
+    if (!isAllowed) {
+      return { success: false, error: '访问路径不在已授权照片目录范围内' };
+    }
+
+    const stats = await fs.promises.stat(normalizedPath).catch(() => {
+      throw new Error('图片文件不存在');
+    });
+
+    if (!stats.isFile()) {
+      return { success: false, error: '目标不是图片文件' };
+    }
+
+    const extension = path.extname(normalizedPath).toLowerCase();
+    if (!DELETE_IMAGE_EXTENSIONS.has(extension)) {
+      return { success: false, error: '不支持删除此文件类型' };
+    }
+
+    await shell.trashItem(normalizedPath);
+    return { success: true, filePath: normalizedPath };
+  } catch (error) {
+    console.error('移动图片到废纸篓失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // 复制图片到剪贴板
 ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 'image') => {
   try {
@@ -597,16 +686,11 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 
     if (normalizedMode === 'file') {
       // 写入文件引用，便于聊天工具保留原始文件名和后缀
       if (process.platform === 'darwin') {
-        const fileUrl = pathToFileURL(filePath).toString();
-        const fileName = path.basename(filePath);
         clipboard.clear();
 
-        // Finder 常见文件复制类型：多写几种以提升第三方聊天软件识别率
+        // Match macOS file pasteboard data closely so web upload targets treat it as a file.
         const fileReferenceFormats = [
-          ['NSFilenamesPboardType', Buffer.from(JSON.stringify([filePath]), 'utf8')],
-          ['public.file-url', Buffer.from(fileUrl, 'utf8')],
-          ['public.url', Buffer.from(fileUrl, 'utf8')],
-          ['text/uri-list', Buffer.from(fileUrl, 'utf8')]
+          ['NSFilenamesPboardType', Buffer.from(createPlistArray([filePath]), 'utf8')]
         ];
 
         for (const [format, buffer] of fileReferenceFormats) {
@@ -615,12 +699,6 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 
           } catch (error) {
             console.warn(`写入 ${format} 失败:`, error?.message || error);
           }
-        }
-
-        try {
-          clipboard.writeBookmark(fileName, fileUrl);
-        } catch (error) {
-          console.warn('写入 bookmark 失败:', error?.message || error);
         }
       } else {
         clipboard.clear();

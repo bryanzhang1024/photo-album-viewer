@@ -4,11 +4,13 @@ import {
   AppBar,
   Toolbar,
   IconButton,
+  Button,
   Typography,
   Box,
   Fade,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
@@ -19,8 +21,10 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
@@ -30,7 +34,54 @@ import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
 
-function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
+function formatBytes(size) {
+  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
+    return '未知';
+  }
+
+  if (size === 0) {
+    return '0 B';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+  const value = size / Math.pow(1024, unitIndex);
+  const formatted = unitIndex === 0
+    ? String(Math.round(value))
+    : value.toFixed(1).replace(/\.0$/, '');
+
+  return `${formatted} ${units[unitIndex]}`;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '未知';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '未知';
+  }
+
+  return date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function getDirectoryPath(filePath = '') {
+  const lastSeparatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  if (lastSeparatorIndex <= 0) {
+    return '未知';
+  }
+  return filePath.slice(0, lastSeparatorIndex);
+}
+
+function getResolutionText(dimensions) {
+  if (!dimensions?.width || !dimensions?.height) {
+    return '未知';
+  }
+  return `${dimensions.width} x ${dimensions.height}`;
+}
+
+function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted }) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -45,6 +96,10 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
   const [prevImageDimensions, setPrevImageDimensions] = useState({ width: 0, height: 0 });
   const [prevRotation, setPrevRotation] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // 双缓冲预加载状态
   const [preloadCache, setPreloadCache] = useState(new Map());
@@ -74,6 +129,53 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
       console.error('复制到剪贴板失败:', error);
     }
   }, [currentImage?.path]);
+
+  const toggleImageInfo = useCallback(() => {
+    setInfoOpen(prev => !prev);
+    setToolbarVisible(true);
+  }, []);
+
+  const openDeleteConfirmation = useCallback(() => {
+    if (!currentImage?.path || deleteInProgress) return;
+    setDeleteError('');
+    setDeleteConfirmOpen(true);
+    setToolbarVisible(true);
+  }, [currentImage?.path, deleteInProgress]);
+
+  const closeDeleteConfirmation = useCallback(() => {
+    if (deleteInProgress) return;
+    setDeleteConfirmOpen(false);
+    setDeleteError('');
+  }, [deleteInProgress]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!currentImage?.path || deleteInProgress) return;
+
+    setDeleteInProgress(true);
+    setDeleteError('');
+
+    try {
+      const deletedPath = currentImage.path;
+      const result = await ipcRenderer.invoke(CHANNELS.TRASH_IMAGE, deletedPath);
+      if (!result?.success) {
+        throw new Error(result?.error || '移动到废纸篓失败');
+      }
+
+      setDeleteConfirmOpen(false);
+      onImageDeleted?.(deletedPath);
+
+      if (images.length <= 1) {
+        onClose();
+      } else {
+        const nextIndex = currentIndex >= images.length - 1 ? currentIndex - 1 : currentIndex;
+        onIndexChange(Math.max(0, nextIndex));
+      }
+    } catch (error) {
+      setDeleteError(error.message || '移动到废纸篓失败');
+    } finally {
+      setDeleteInProgress(false);
+    }
+  }, [currentImage?.path, currentIndex, deleteInProgress, images.length, onClose, onImageDeleted, onIndexChange]);
   
   // 使用收藏上下文和设置上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
@@ -213,6 +315,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           break;
         case 'Escape':
         case 'Backspace':
+          if (deleteConfirmOpen && e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeDeleteConfirmation();
+            break;
+          }
+          if (infoOpen && e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            setInfoOpen(false);
+            setToolbarVisible(true);
+            break;
+          }
           onClose();
           break;
         case '+':
@@ -231,6 +346,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           break;
         case 'o':
           handleShowInFolder();
+          break;
+        case 'Delete':
+          if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            openDeleteConfirmation();
+          }
+          break;
+        case 'i':
+        case 'I':
+          if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            toggleImageInfo();
+          }
           break;
         case 'c':
           if (!e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -253,7 +381,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, images.length, handleCopyCurrentImage]);
+  }, [currentIndex, images.length, handleCopyCurrentImage, infoOpen, onClose, toggleImageInfo, deleteConfirmOpen, closeDeleteConfirmation, openDeleteConfirmation]);
   
   // 监听全屏变化
   useEffect(() => {
@@ -661,12 +789,32 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
 
   // 检查当前图片是否已收藏
   const isCurrentImageFavorited = currentImage ? isImageFavorited(currentImage.path) : false;
+  const infoRows = currentImage ? [
+    ['文件名', currentImage.name || '未知'],
+    ['分辨率', getResolutionText(imageDimensions)],
+    ['大小', formatBytes(currentImage.size)],
+    ['位置', getDirectoryPath(currentImage.path)],
+    ['路径', currentImage.path || '未知'],
+    ['修改时间', formatDateTime(currentImage.lastModified)],
+    ['序号', `${currentIndex + 1} / ${images.length}`]
+  ] : [];
   
   return (
     <Dialog
       fullScreen
       open={true}
-      onClose={onClose}
+      onClose={(event, reason) => {
+        if (reason === 'escapeKeyDown' && deleteConfirmOpen) {
+          closeDeleteConfirmation();
+          return;
+        }
+        if (reason === 'escapeKeyDown' && infoOpen) {
+          setInfoOpen(false);
+          setToolbarVisible(true);
+          return;
+        }
+        onClose();
+      }}
       TransitionComponent={Fade}
       transitionDuration={300}
       sx={{ 
@@ -744,6 +892,29 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
               sx={{ mr: 1 }}
             >
               <ContentCopyIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="图片信息 (I)">
+            <IconButton
+              color={infoOpen ? 'primary' : 'inherit'}
+              onClick={toggleImageInfo}
+              size="small"
+              aria-label="图片信息 (I)"
+              aria-pressed={infoOpen}
+              sx={{ mr: 1 }}
+            >
+              <InfoOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="删除图片 (Delete)">
+            <IconButton
+              color="inherit"
+              onClick={openDeleteConfirmation}
+              size="small"
+              aria-label="删除图片 (Delete)"
+              sx={{ mr: 1 }}
+            >
+              <DeleteOutlineIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="缩小 (Ctrl+滚轮向下)">
@@ -910,6 +1081,164 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange }) {
           </Box>
         )}
       </Box>
+
+      {infoOpen && (
+        <Box
+          component="aside"
+          aria-label="图片信息面板"
+          sx={{
+            position: 'absolute',
+            top: 40,
+            right: 0,
+            bottom: 0,
+            width: { xs: 'min(100vw, 360px)', sm: 360 },
+            bgcolor: 'rgba(18, 18, 18, 0.92)',
+            color: '#fff',
+            zIndex: 1090,
+            borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.32)',
+            overflowY: 'auto',
+            p: 2.5,
+            userSelect: 'text'
+          }}
+        >
+          <Typography
+            component="h2"
+            variant="h6"
+            sx={{ fontSize: '1rem', fontWeight: 700, mb: 2 }}
+          >
+            图片信息
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+            {infoRows.map(([label, value]) => (
+              <Box key={label}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: 'block',
+                    color: 'rgba(255, 255, 255, 0.55)',
+                    mb: 0.5,
+                    lineHeight: 1.2
+                  }}
+                >
+                  {label}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'rgba(255, 255, 255, 0.92)',
+                    lineHeight: 1.45,
+                    overflowWrap: 'anywhere',
+                    wordBreak: label === '路径' ? 'break-all' : 'normal'
+                  }}
+                >
+                  {value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {deleteConfirmOpen && currentImage && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1300,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: 'rgba(0, 0, 0, 0.62)',
+            px: 2
+          }}
+        >
+          <Box
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-image-title"
+            sx={{
+              width: 'min(92vw, 520px)',
+              bgcolor: 'rgba(24, 24, 24, 0.96)',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
+              borderRadius: 1,
+              boxShadow: '0 18px 48px rgba(0, 0, 0, 0.45)',
+              p: 3
+            }}
+          >
+            <Typography
+              id="delete-image-title"
+              component="h2"
+              variant="h6"
+              sx={{ fontSize: '1.05rem', fontWeight: 700, mb: 2 }}
+            >
+              删除图片
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.72)', mb: 2 }}>
+              这张图片将被移到系统废纸篓，可在系统废纸篓中恢复。
+            </Typography>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2.5 }}>
+              <Box>
+                <Typography variant="caption" sx={{ display: 'block', color: 'rgba(255, 255, 255, 0.55)', mb: 0.5 }}>
+                  操作类型
+                </Typography>
+                <Typography variant="body2">移到系统废纸篓</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" sx={{ display: 'block', color: 'rgba(255, 255, 255, 0.55)', mb: 0.5 }}>
+                  影响范围
+                </Typography>
+                <Typography variant="body2">仅当前这一张原始图片文件</Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" sx={{ display: 'block', color: 'rgba(255, 255, 255, 0.55)', mb: 0.5 }}>
+                  完整路径
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-all',
+                    userSelect: 'text'
+                  }}
+                >
+                  {currentImage.path}
+                </Typography>
+              </Box>
+            </Box>
+
+            {deleteError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {deleteError}
+              </Alert>
+            )}
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+              <Button
+                color="inherit"
+                onClick={closeDeleteConfirmation}
+                disabled={deleteInProgress}
+              >
+                取消
+              </Button>
+              <Button
+                color="error"
+                variant="contained"
+                onClick={handleConfirmDelete}
+                disabled={deleteInProgress}
+              >
+                {deleteInProgress ? '删除中...' : '移到废纸篓'}
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      )}
     </Dialog>
   );
 }

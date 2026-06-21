@@ -62,6 +62,7 @@ function HomePage({
   onBreadcrumbNavigate = null,
   onAlbumClick = null,
   onFolderClick = null,
+  onOpenFavoritesInNewTab = null,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null
@@ -472,6 +473,35 @@ function HomePage({
   const totalItemsCount = navigationNodes.length + directImages.length;
   const filteredItemsCount = sortedDisplayItems.length;
 
+  const handleViewerImageDeleted = useCallback((deletedPath) => {
+    if (!deletedPath) return;
+
+    setNavigationState(prevState => {
+      const nextDirectImages = (prevState.directImages || []).filter(image => image.path !== deletedPath);
+      const nextState = {
+        ...prevState,
+        directImages: nextDirectImages,
+        metadata: prevState.metadata
+          ? {
+              ...prevState.metadata,
+              directImageCount: nextDirectImages.length
+            }
+          : prevState.metadata
+      };
+
+      imageCache.set('navigation', prevState.path || currentPath, {
+        success: true,
+        currentPath: nextState.path,
+        nodes: nextState.nodes,
+        directImages: nextState.directImages,
+        breadcrumbs: nextState.breadcrumbs,
+        metadata: nextState.metadata
+      });
+
+      return nextState;
+    });
+  }, [currentPath]);
+
   // 获取节点显示路径 - 使用 useMemo 缓存路径计算
   const nodeDisplayPaths = useMemo(() => {
     if (!currentPath || !navigationNodes.length) return {};
@@ -492,6 +522,11 @@ function HomePage({
   const handleNavigateToFavorites = () => {
     // 保存当前滚动位置
     saveScrollPosition();
+
+    if (onOpenFavoritesInNewTab) {
+      onOpenFavoritesInNewTab();
+      return;
+    }
 
     if (urlMode && onNavigate) {
       onNavigate('', 'favorites');
@@ -1022,6 +1057,7 @@ function HomePage({
             currentIndex={selectedImageIndex}
             onClose={handleCloseViewer}
             onIndexChange={setSelectedImageIndex}
+            onImageDeleted={handleViewerImageDeleted}
           />
         )}
       </Box>
