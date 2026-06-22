@@ -1,4 +1,4 @@
-const DEFAULT_DUAL_PAGE_GAP = 24;
+const DEFAULT_DUAL_PAGE_GAP = 0;
 
 function getDimension(dimensionsByIndex, index) {
   if (!dimensionsByIndex || index < 0) {

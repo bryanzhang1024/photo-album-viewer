@@ -882,7 +882,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     return dimensionsByIndex.get(index) || (index === currentIndex ? imageDimensions : null);
   };
 
-  const getViewerImageStyle = (index) => {
+  const getViewerImageStyle = (index, visiblePosition = 0) => {
     const dimensions = getImageDimensionsForIndex(index);
     const rotation = calculateRotationForDimensions(dimensions);
     const sharedStyle = {
@@ -896,10 +896,11 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     if (visibleImages.length > 1) {
       return {
         ...sharedStyle,
-        width: `calc((100% - ${DEFAULT_DUAL_PAGE_GAP}px) / 2)`,
+        width: '50%',
         height: `${zoomLevel * 100}%`,
-        maxWidth: `calc((100% - ${DEFAULT_DUAL_PAGE_GAP}px) / 2)`,
+        maxWidth: '50%',
         maxHeight: '100%',
+        objectPosition: visiblePosition === 0 ? 'right center' : 'left center',
         position: 'relative'
       };
     }
@@ -1179,7 +1180,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
                 }
               }}
               style={{
-                ...getViewerImageStyle(index),
+                ...getViewerImageStyle(index, visibleIndex),
                 opacity: isRenderedImageLoaded ? 1 : 0,
                 visibility: isRenderedImageLoaded ? 'visible' : 'hidden'
               }}
