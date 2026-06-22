@@ -13,6 +13,7 @@ jest.mock('../../../src/renderer/contexts/SettingsContext', () => ({
     settings: {
       autoRotateVerticalImages: false,
       rotationDirection: 'right',
+      defaultDualPageViewer: false,
       showFilename: true,
       homeSortGrouping: 'mixed'
     },
@@ -63,6 +64,25 @@ describe('SettingsPage sorting preferences', () => {
     fireEvent.click(screen.getByLabelText('文件夹和相簿排在照片前'));
 
     expect(mockUpdateSetting).toHaveBeenCalledWith('homeSortGrouping', 'containersFirst');
+
+    await waitFor(() => {
+      expect(global.electronMock.ipcRenderer.invoke).toHaveBeenCalled();
+    });
+  });
+
+  test('lets users choose whether dual-page view opens by default', async () => {
+    render(
+      <SettingsPage
+        colorMode={{ mode: 'light', toggleColorMode: jest.fn() }}
+      />
+    );
+
+    const switchControl = screen.getByLabelText('默认启用双页展示');
+    expect(switchControl).not.toBeChecked();
+
+    fireEvent.click(switchControl);
+
+    expect(mockUpdateSetting).toHaveBeenCalledWith('defaultDualPageViewer', true);
 
     await waitFor(() => {
       expect(global.electronMock.ipcRenderer.invoke).toHaveBeenCalled();

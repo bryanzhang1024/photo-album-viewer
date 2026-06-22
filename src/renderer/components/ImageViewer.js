@@ -89,6 +89,10 @@ function getResolutionText(dimensions) {
 }
 
 function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted }) {
+  // 使用收藏上下文和设置上下文
+  const { isImageFavorited, toggleImageFavorite } = useFavorites();
+  const { settings } = useSettings();
+
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -106,7 +110,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const [dualPageEnabled, setDualPageEnabled] = useState(false);
+  const [dualPageEnabled, setDualPageEnabled] = useState(Boolean(settings.defaultDualPageViewer));
   const [viewportSize, setViewportSize] = useState(() => ({
     width: typeof window === 'undefined' ? 0 : window.innerWidth,
     height: typeof window === 'undefined' ? 0 : window.innerHeight
@@ -216,10 +220,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
       setDeleteInProgress(false);
     }
   }, [currentImage?.path, currentIndex, deleteInProgress, images.length, onClose, onImageDeleted, onIndexChange]);
-  
-  // 使用收藏上下文和设置上下文
-  const { isImageFavorited, toggleImageFavorite } = useFavorites();
-  const { settings } = useSettings();
   
   // 预加载图片并平滑过渡
   useEffect(() => {
