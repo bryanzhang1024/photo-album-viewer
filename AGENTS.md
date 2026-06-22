@@ -13,6 +13,7 @@
 
 - 日常开发交付前，必须运行与改动范围匹配的测试；涉及前端打包链路、模块导入、webpack 配置或发布前检查时，至少运行 `npm run build:webpack`。
 - 需要生成可安装应用、验证 Electron 打包、修改 `package.json` 的 `build` 配置、调整主进程/预加载打包相关代码，或用户明确要求“打包”“构建安装包”“npm run build”时，必须运行 `npm run build`。
+- 已合并到 `main`、且用户需要通过本地安装包才能实际使用的可视功能或修复，交付前必须运行 `npm run build`，不能只运行 `npm run build:webpack`。
 - `npm run build` 生成的 `dist/` 产物默认视为本地构建输出，不纳入提交，除非用户明确要求保存或发布这些产物。
 - 如果 `npm run build` 因签名证书缺失只跳过 macOS 代码签名但产物成功生成，应记录为分发风险，不视为构建失败。
 
