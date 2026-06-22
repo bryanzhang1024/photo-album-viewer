@@ -1,4 +1,5 @@
 import {
+  DEFAULT_DUAL_PAGE_GAP,
   canShowDualPage,
   getNextPageIndex,
   getPreviousPageIndex,
@@ -17,6 +18,10 @@ const landscape = { width: 3000, height: 2000 };
 const viewport16By9 = { width: 1600, height: 900 };
 
 describe('viewerPages', () => {
+  test('uses no fixed gap between dual pages by default', () => {
+    expect(DEFAULT_DUAL_PAGE_GAP).toBe(0);
+  });
+
   test('allows two portrait images on a 16:9 viewport', () => {
     expect(canShowDualPage(portrait, portrait, viewport16By9)).toBe(true);
   });
