@@ -187,6 +187,17 @@ function SettingsPage({ colorMode }) {
           <FormControlLabel
             control={
               <Switch
+                checked={Boolean(settings.defaultDualPageViewer)}
+                onChange={handleToggle('defaultDualPageViewer')}
+              />
+            }
+            label="默认启用双页展示"
+            sx={{ mb: 2 }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
                 checked={settings.autoRotateVerticalImages}
                 onChange={handleToggle('autoRotateVerticalImages')}
               />

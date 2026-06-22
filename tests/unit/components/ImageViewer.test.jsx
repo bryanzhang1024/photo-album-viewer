@@ -14,10 +14,13 @@ jest.mock('../../../src/renderer/contexts/SettingsContext', () => ({
   useSettings: jest.fn(() => ({
     settings: {
       autoRotateVerticalImages: false,
-      rotationDirection: 'right'
+      rotationDirection: 'right',
+      defaultDualPageViewer: false
     }
   }))
 }));
+
+const { useSettings } = require('../../../src/renderer/contexts/SettingsContext');
 
 const images = [
   {
@@ -65,6 +68,20 @@ describe('ImageViewer image info panel', () => {
     expect(button).toHaveAttribute('aria-pressed', 'false');
 
     fireEvent.click(button);
+    expect(screen.getByRole('button', { name: /退出双页展示/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('uses the default dual-page setting when opening the viewer', () => {
+    useSettings.mockReturnValueOnce({
+      settings: {
+        autoRotateVerticalImages: false,
+        rotationDirection: 'right',
+        defaultDualPageViewer: true
+      }
+    });
+
+    renderViewer();
+
     expect(screen.getByRole('button', { name: /退出双页展示/i })).toHaveAttribute('aria-pressed', 'true');
   });
 

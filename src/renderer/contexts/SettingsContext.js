@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   zoomStep: 0.2,
   slideshowDelay: 3000,
   showFilename: true,
+  defaultDualPageViewer: false,
   theme: 'auto',
   homeSortGrouping: 'mixed'
 };
