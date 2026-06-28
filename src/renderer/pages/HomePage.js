@@ -108,7 +108,7 @@ function HomePage({
     legacyKeys: homeLegacySortKeys
   });
   const albumNodes = useMemo(
-    () => navigationNodes.filter(node => node.type === 'album'),
+    () => navigationNodes.filter(node => node.canOpenAlbum || node.type === 'album'),
     [navigationNodes]
   );
   const updateNavigationState = useCallback((data, fallbackPath = '') => {
@@ -367,6 +367,18 @@ function HomePage({
       }
     }
   }, [urlMode, onFolderClick, onAlbumClick, handleNavigate, navigate, saveScrollPosition]);
+
+  const handleNodeBrowseChildren = useCallback(async (node) => {
+    if (!node?.path) return;
+
+    saveScrollPosition();
+    if (urlMode && onFolderClick) {
+      onFolderClick(node.path);
+      return;
+    }
+
+    await handleNavigate(node.path);
+  }, [urlMode, onFolderClick, handleNavigate, saveScrollPosition]);
 
   const handleDirectImageClick = useCallback((index) => {
     saveScrollPosition();
@@ -1029,6 +1041,7 @@ function HomePage({
                           node={item.node}
                           displayPath={getNodeDisplayPath(item.node)}
                           onClick={() => handleNodeClick(item.node)}
+                          onBrowseChildren={() => handleNodeBrowseChildren(item.node)}
                           isCompactMode={userDensity === 'compact'}
                         />
                       </Box>

@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import ImageIcon from '@mui/icons-material/Image';
 import FolderIcon from '@mui/icons-material/Folder';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -44,6 +45,7 @@ function AlbumCard({
   album,          // 兼容性：旧的相册数据 
   displayPath, 
   onClick, 
+  onBrowseChildren,
   isCompactMode, 
   isFavoritesPage = false 
 }) {
@@ -68,6 +70,8 @@ function AlbumCard({
         path: node.path,
         name: node.name,
         type: node.type,
+        contentKind: node.contentKind,
+        canBrowseChildren: Boolean(node.canBrowseChildren),
         imageCount: node.imageCount,
         samples: node.samples || node.previewSamples || [],
         hasImages: node.hasImages,
@@ -80,6 +84,8 @@ function AlbumCard({
         name: album.name,
         kind,
         type: kind === 'folder' ? 'folder' : 'album',
+        contentKind: album.contentKind || (kind === 'folder' ? 'container' : 'photoSet'),
+        canBrowseChildren: Boolean(album.canBrowseChildren),
         imageCount: album.imageCount,
         samples: album.previewSamples || album.samples || album.previewImages?.map(img => (typeof img === 'string' ? img : img.path)).filter(Boolean) || [],
         hasImages: kind !== 'folder',
@@ -210,6 +216,17 @@ function AlbumCard({
     </Box>
   );
 
+  const handleBrowseChildrenClick = (e) => {
+    e.stopPropagation();
+    onBrowseChildren?.(cardData);
+  };
+
+  const showChildFolderEntry = (
+    cardData.type !== 'folder'
+    && (cardData.canBrowseChildren || cardData.contentKind === 'hybrid')
+    && (cardData.childFolders || 0) > 0
+  );
+
   // 根据节点类型和预览图数量返回不同的预览布局
   const renderPreview = () => {
     if (!cardData) return null;
@@ -288,6 +305,35 @@ function AlbumCard({
             {cardData.imageCount || 0}
           </Box>
         )}
+        {showChildFolderEntry && (
+          <IconButton
+            size="small"
+            onClick={handleBrowseChildrenClick}
+            aria-label={`进入 ${cardData.name} 的子文件夹`}
+            title="进入子文件夹"
+            sx={{
+              position: 'absolute',
+              bottom: 8,
+              right: 8,
+              bgcolor: 'rgba(0,0,0,0.58)',
+              color: 'white',
+              borderRadius: '12px',
+              minWidth: '28px',
+              height: '24px',
+              px: 0.6,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.3,
+              fontSize: '0.72rem',
+              '&:hover': {
+                bgcolor: 'rgba(0,0,0,0.74)'
+              }
+            }}
+          >
+            <FolderOpenIcon sx={{ fontSize: '0.9rem' }} />
+            {cardData.childFolders || 0}
+          </IconButton>
+        )}
       </Box>
     );
   };
@@ -303,6 +349,8 @@ function AlbumCard({
         name: cardData.name,
         imageCount: cardData.imageCount,
         childFolders: cardData.childFolders,
+        contentKind: cardData.contentKind,
+        canBrowseChildren: cardData.canBrowseChildren,
         samples: cardData.samples
       };
       if (cardData.type === 'folder') {

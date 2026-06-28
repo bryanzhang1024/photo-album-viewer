@@ -81,8 +81,8 @@ export const useNeighboringAlbums = (albumPath) => {
         imageCache.set('navigation', parentPath, response);
       }
 
-      // 从节点中只筛选出相册
-      const albums = response.nodes.filter(node => node.type === 'album');
+      // 从节点中筛选可打开的套图，兼容旧的 type 字段和新的能力字段。
+      const albums = response.nodes.filter(node => node.canOpenAlbum || node.type === 'album');
 
       if (albums.length === 0) {
         setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: 0 });
