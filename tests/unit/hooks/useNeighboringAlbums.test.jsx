@@ -83,6 +83,42 @@ describe('useNeighboringAlbums', () => {
     expect(result.current.neighboringAlbums.next.name).toBe('Album2');
   });
 
+  test('includes hybrid album nodes marked by canOpenAlbum in sibling navigation', async () => {
+    imageCache.get.mockReturnValue({
+      success: true,
+      nodes: [
+        { type: 'album', name: 'Album1', path: '/photos/Album1', imageCount: 5, lastModified: '2024-01-01' },
+        {
+          type: 'folder',
+          contentKind: 'hybrid',
+          canOpenAlbum: true,
+          canBrowseChildren: true,
+          name: 'Album2',
+          path: '/photos/Album2',
+          imageCount: 8,
+          childFolders: 1,
+          lastModified: '2024-01-02'
+        },
+        { type: 'album', name: 'Album3', path: '/photos/Album3', imageCount: 3, lastModified: '2024-01-03' }
+      ],
+      metadata: { folderCount: 0, albumCount: 3 }
+    });
+
+    const { result } = renderHook(() => useNeighboringAlbums('/photos/Album2'));
+
+    await act(async () => {
+      await result.current.loadNeighboringAlbums();
+    });
+
+    expect(result.current.neighboringAlbums.prev.name).toBe('Album1');
+    expect(result.current.neighboringAlbums.next.name).toBe('Album3');
+    expect(result.current.siblingAlbums.map((a) => a.name)).toEqual([
+      'Album1',
+      'Album2',
+      'Album3'
+    ]);
+  });
+
   test('skips loading when albumPath missing', async () => {
     const { result } = renderHook(() => useNeighboringAlbums(''));
 

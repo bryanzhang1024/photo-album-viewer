@@ -123,4 +123,39 @@ describe('card radius styling', () => {
     );
     expect(favoriteMocks.toggleAlbumFavorite).not.toHaveBeenCalled();
   });
+
+  test('AlbumCard exposes child folder entry for hybrid albums without triggering the main click', () => {
+    const onClick = jest.fn();
+    const onBrowseChildren = jest.fn();
+    const { container, getByLabelText } = renderWithTheme(
+      <AlbumCard
+        node={{
+          path: '/albums/trip',
+          name: 'trip',
+          type: 'album',
+          contentKind: 'hybrid',
+          canBrowseChildren: true,
+          imageCount: 24,
+          samples: ['/a.jpg'],
+          childFolders: 1
+        }}
+        onClick={onClick}
+        onBrowseChildren={onBrowseChildren}
+      />
+    );
+
+    fireEvent.click(container.firstChild);
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(getByLabelText('进入 trip 的子文件夹'));
+
+    expect(onBrowseChildren).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/albums/trip',
+        contentKind: 'hybrid',
+        childFolders: 1
+      })
+    );
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
 });

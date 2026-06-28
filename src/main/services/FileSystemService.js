@@ -29,6 +29,12 @@ const NODE_TYPES = {
   EMPTY: 'empty'
 };
 
+const CONTENT_KINDS = {
+  CONTAINER: 'container',
+  PHOTO_SET: 'photoSet',
+  HYBRID: 'hybrid'
+};
+
 function compareImageNameNaturalAsc(left, right) {
   const leftName = left?.name || path.basename(left?.path || '');
   const rightName = right?.name || path.basename(right?.path || '');
@@ -223,15 +229,13 @@ async function determineNodeType(dirPath) {
     let hasSubdirectories = false;
     let hasImages = false;
 
-    // 遍历所有条目来确定是否存在子目录和图片
+    // 直接图片优先决定“可浏览套图”语义；子目录只补充可进入子文件夹能力。
     for (const entry of entries) {
       const entryPath = path.join(dirPath, entry);
       try {
         const stats = await stat(entryPath);
         if (stats.isDirectory()) {
           hasSubdirectories = true;
-          // 发现子目录，可以立即确定是文件夹类型，中断循环
-          break;
         } else if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
           hasImages = true;
         }
@@ -241,14 +245,13 @@ async function determineNodeType(dirPath) {
       }
     }
 
-    // 核心逻辑：只要有子目录，就一定是文件夹
-    if (hasSubdirectories) {
-      return NODE_TYPES.FOLDER;
-    }
-
-    // 没有子目录，但有图片，是相册
+    // 有直接图片就是可浏览套图，即使同时含有“自拍/花絮”等子文件夹。
     if (hasImages) {
       return NODE_TYPES.ALBUM;
+    }
+
+    if (hasSubdirectories) {
+      return NODE_TYPES.FOLDER;
     }
 
     // 没有子目录，也没有图片，视为空文件夹
@@ -267,13 +270,16 @@ async function getAlbumStats(dirPath) {
   try {
     const entries = await readdir(dirPath);
     const imageFiles = [];
+    let childFolders = 0;
     
     for (const entry of entries) {
       const entryPath = path.join(dirPath, entry);
       try {
         const stats = await stat(entryPath);
         
-        if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+        if (stats.isDirectory()) {
+          childFolders += 1;
+        } else if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
           imageFiles.push({
             path: entryPath,
             name: entry,
@@ -292,6 +298,10 @@ async function getAlbumStats(dirPath) {
     
     return {
       imageCount: imageFiles.length,
+      childFolders,
+      contentKind: childFolders > 0 ? CONTENT_KINDS.HYBRID : CONTENT_KINDS.PHOTO_SET,
+      canOpenAlbum: true,
+      canBrowseChildren: childFolders > 0,
       previewImages: previewImages.map(img => img.path),
       firstImageDate: dateStats.firstImageDate,
       lastImageDate: dateStats.lastImageDate,
@@ -303,6 +313,10 @@ async function getAlbumStats(dirPath) {
     console.warn(`获取相册统计失败 ${dirPath}:`, error.message);
     return {
       imageCount: 0,
+      childFolders: 0,
+      contentKind: CONTENT_KINDS.PHOTO_SET,
+      canOpenAlbum: true,
+      canBrowseChildren: false,
       previewImages: [],
       firstImageDate: null,
       lastImageDate: null,
@@ -603,6 +617,9 @@ function createFolderNode(path, name, stats) {
     path,
     name,
     type: NODE_TYPES.FOLDER,
+    contentKind: CONTENT_KINDS.CONTAINER,
+    canOpenAlbum: false,
+    canBrowseChildren: true,
     hasImages: false,
     imageCount: 0,
     childFolders: stats.childFolders || 0,
@@ -626,9 +643,12 @@ function createAlbumNode(path, name, stats) {
     path,
     name,
     type: NODE_TYPES.ALBUM,
+    contentKind: stats.contentKind || CONTENT_KINDS.PHOTO_SET,
+    canOpenAlbum: stats.canOpenAlbum !== false,
+    canBrowseChildren: Boolean(stats.canBrowseChildren),
     hasImages: true,
     imageCount: stats.imageCount || 0,
-    childFolders: 0,
+    childFolders: stats.childFolders || 0,
     samples: stats.previewImages || [],
     lastModified: stats.lastModified || new Date(),
     // 相册特有属性

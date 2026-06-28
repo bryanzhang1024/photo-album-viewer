@@ -88,6 +88,9 @@ describe('FileSystemService', () => {
           raw: {},
           'portrait.png': Buffer.from('image-data')
         },
+        archive: {
+          nested: {}
+        },
         'cover.jpg': Buffer.from('root-image'),
         'document.pdf': 'ignored'
       }
@@ -96,22 +99,41 @@ describe('FileSystemService', () => {
     const result = await scanNavigationLevel('/photos');
 
     expect(result.success).toBe(true);
-    expect(result.nodes).toHaveLength(2);
+    expect(result.nodes).toHaveLength(3);
 
     const folderNode = result.nodes.find((node) => node.type === 'folder');
+    const hybridNode = result.nodes.find(
+      (node) => node.type === 'album' && node.name === 'family'
+    );
     const albumNode = result.nodes.find(
       (node) => node.type === 'album' && node.name === 'trip1'
     );
 
     expect(folderNode).toMatchObject({
-      name: 'family',
+      name: 'archive',
       hasImages: false,
-      type: 'folder'
+      type: 'folder',
+      contentKind: 'container',
+      canOpenAlbum: false,
+      canBrowseChildren: true
+    });
+    expect(hybridNode).toMatchObject({
+      name: 'family',
+      hasImages: true,
+      type: 'album',
+      contentKind: 'hybrid',
+      canOpenAlbum: true,
+      canBrowseChildren: true,
+      childFolders: 1,
+      imageCount: 1
     });
     expect(albumNode).toMatchObject({
       name: 'trip1',
       hasImages: true,
-      type: 'album'
+      type: 'album',
+      contentKind: 'photoSet',
+      canOpenAlbum: true,
+      canBrowseChildren: false
     });
     expect(result.directImages).toEqual([
       expect.objectContaining({
@@ -121,14 +143,40 @@ describe('FileSystemService', () => {
     ]);
     expect(result.nodes.some((node) => node.path === '/photos' && node.type === 'album')).toBe(false);
     expect(result.metadata).toMatchObject({
-      totalNodes: 2,
+      totalNodes: 3,
       folderCount: 1,
-      albumCount: 1,
+      albumCount: 2,
       directImageCount: 1
     });
     expect(result.breadcrumbs).toEqual([
       { name: 'photos', path: '/photos' }
     ]);
+  });
+
+  test('scanNavigationLevel classifies directories with direct images and child folders as hybrid albums', async () => {
+    mockFs = createFsMock({
+      '/photos': {
+        coser: {
+          '001.jpg': Buffer.from('image'),
+          selfie: {
+            'selfie-001.jpg': Buffer.from('nested-image')
+          }
+        }
+      }
+    });
+
+    const result = await scanNavigationLevel('/photos');
+    const hybridNode = result.nodes.find((node) => node.name === 'coser');
+
+    expect(hybridNode).toMatchObject({
+      type: 'album',
+      contentKind: 'hybrid',
+      canOpenAlbum: true,
+      canBrowseChildren: true,
+      childFolders: 1,
+      imageCount: 1,
+      previewImages: ['/photos/coser/001.jpg']
+    });
   });
 
   test('scanNavigationLevel returns direct images for pure image directories', async () => {
@@ -233,6 +281,9 @@ describe('FileSystemService', () => {
 
     expect(folderNode).toMatchObject({
       type: 'folder',
+      contentKind: 'container',
+      canOpenAlbum: false,
+      canBrowseChildren: true,
       hasImages: false,
       imageCount: 0,
       childFolders: 2,
