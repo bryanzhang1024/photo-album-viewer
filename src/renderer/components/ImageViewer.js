@@ -281,6 +281,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
 
     const preloadImages = () => {
       const preloadIndices = [
+        (currentIndex - 2 + images.length) % images.length,
         (currentIndex - 1 + images.length) % images.length,
         (currentIndex + 1) % images.length,
         (currentIndex + 2) % images.length

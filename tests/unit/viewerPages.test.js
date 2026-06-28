@@ -75,6 +75,56 @@ describe('viewerPages', () => {
     })).toBe(1);
   });
 
+  test('does not move to an overlapping previous pair when earlier dimensions are unavailable', () => {
+    const dimensionsByIndex = new Map([
+      [1, portrait],
+      [2, portrait],
+      [3, portrait]
+    ]);
+
+    expect(getPreviousPageIndex({
+      images,
+      currentIndex: 2,
+      dimensionsByIndex,
+      viewport: viewport16By9,
+      dualPageEnabled: true
+    })).toBe(0);
+  });
+
+  test('moves to the previous dual-page group when every adjacent pair fits', () => {
+    const dimensionsByIndex = new Map([
+      [0, portrait],
+      [1, portrait],
+      [2, portrait],
+      [3, portrait]
+    ]);
+
+    expect(getPreviousPageIndex({
+      images,
+      currentIndex: 2,
+      dimensionsByIndex,
+      viewport: viewport16By9,
+      dualPageEnabled: true
+    })).toBe(0);
+  });
+
+  test('wraps from the first dual-page group to the final dual-page group', () => {
+    const dimensionsByIndex = new Map([
+      [0, portrait],
+      [1, portrait],
+      [2, portrait],
+      [3, portrait]
+    ]);
+
+    expect(getPreviousPageIndex({
+      images,
+      currentIndex: 0,
+      dimensionsByIndex,
+      viewport: viewport16By9,
+      dualPageEnabled: true
+    })).toBe(2);
+  });
+
   test('falls back to single-page display while dimensions are unavailable', () => {
     expect(getVisibleImageIndices({
       images,
