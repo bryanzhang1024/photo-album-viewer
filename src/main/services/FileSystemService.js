@@ -16,6 +16,54 @@ const SCAN_CONFIG = {
   PARALLEL_LIMIT: 5      // 并行限制
 };
 
+class ConcurrencyLimiter {
+  constructor(limit) {
+    this.limit = Math.max(1, limit);
+    this.active = 0;
+    this.queue = [];
+  }
+
+  async run(task) {
+    if (this.active >= this.limit) {
+      await new Promise((resolve) => {
+        this.queue.push(resolve);
+      });
+    }
+
+    this.active += 1;
+    try {
+      return await task();
+    } finally {
+      this.active -= 1;
+      const next = this.queue.shift();
+      if (next) {
+        next();
+      }
+    }
+  }
+}
+
+async function mapWithConcurrency(items, limit, mapper, onProgress) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return [];
+  }
+
+  const limiter = new ConcurrencyLimiter(limit);
+  let processed = 0;
+  const total = items.length;
+
+  const results = await Promise.all(items.map((item, index) => limiter.run(async () => {
+    const result = await mapper(item, index);
+    processed += 1;
+    if (typeof onProgress === 'function') {
+      onProgress({ processed, total, item: result });
+    }
+    return result;
+  })));
+
+  return results.filter(Boolean);
+}
+
 const DEEP_SCAN_CONFIG = {
   MAX_DEPTH: 3,             // 最大递归深度
   MAX_VISITED_DIRS: 40,     // 最大遍历目录数
@@ -127,8 +175,15 @@ function pickEvenlySpacedItems(items = [], limit = 0) {
  * @param {string} targetPath - 目标路径
  * @returns {Promise<Object>} 导航响应
  */
-async function scanNavigationLevel(targetPath) {
+async function scanNavigationLevel(targetPath, options = {}) {
   const startTime = Date.now();
+  const concurrencyLimit = Math.max(
+    1,
+    Math.min(8, Number(options.concurrencyLimit) || SCAN_CONFIG.PARALLEL_LIMIT)
+  );
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+  const limiter = new ConcurrencyLimiter(concurrencyLimit);
+  const scanOptions = { ...options, limiter };
   
   try {
     const entries = await readdir(targetPath);
@@ -155,9 +210,28 @@ async function scanNavigationLevel(targetPath) {
       }
     }
 
-    // 2. 处理所有子目录
-    const nodePromises = directoryEntries.map(entry => processNavigationEntry(targetPath, entry));
-    const nodes = (await Promise.all(nodePromises)).filter(Boolean);
+    // 2. 处理所有子目录（并发受限）
+    if (onProgress && directoryEntries.length > 0) {
+      onProgress({
+        phase: 'entries',
+        processed: 0,
+        total: directoryEntries.length
+      });
+    }
+
+    const nodes = await mapWithConcurrency(
+      directoryEntries,
+      concurrencyLimit,
+      (entry) => processNavigationEntry(targetPath, entry, scanOptions),
+      (progress) => {
+        if (!onProgress) return;
+        onProgress({
+          phase: 'entries',
+          processed: progress.processed,
+          total: progress.total
+        });
+      }
+    );
 
     const directImages = buildDirectImageList(imageFiles);
     
@@ -187,11 +261,13 @@ async function scanNavigationLevel(targetPath) {
 /**
  * 处理单个目录项，返回导航节点
  */
-async function processNavigationEntry(parentPath, entry) {
+async function processNavigationEntry(parentPath, entry, options = {}) {
   const fullPath = path.join(parentPath, entry);
+  const limiter = options.limiter;
+  const runTask = (task) => (limiter ? limiter.run(task) : task());
   
   try {
-    const stats = await stat(fullPath);
+    const stats = await runTask(() => stat(fullPath));
     
     if (stats.isFile()) {
       return null; // 跳过文件
@@ -202,12 +278,12 @@ async function processNavigationEntry(parentPath, entry) {
     }
     
     // 检查目录类型
-    const nodeType = await determineNodeType(fullPath);
+    const nodeType = await runTask(() => determineNodeType(fullPath));
     
     if (nodeType === NODE_TYPES.ALBUM) {
-      return createAlbumNode(fullPath, entry, await getAlbumStats(fullPath));
+      return createAlbumNode(fullPath, entry, await runTask(() => getAlbumStats(fullPath)));
     } else if (nodeType === NODE_TYPES.FOLDER) {
-      return createFolderNode(fullPath, entry, await getFolderStats(fullPath));
+      return createFolderNode(fullPath, entry, await runTask(() => getFolderStats(fullPath, options)));
     }
     
     return null;
@@ -329,7 +405,10 @@ async function getAlbumStats(dirPath) {
 /**
  * 获取文件夹统计信息（采样估算）
  */
-async function getFolderStats(dirPath) {
+async function getFolderStats(dirPath, options = {}) {
+  const limiter = options.limiter;
+  const runTask = (task) => (limiter ? limiter.run(task) : task());
+
   try {
     const dirents = await fs.promises.readdir(dirPath, { withFileTypes: true });
     const allChildDirectories = dirents
@@ -345,14 +424,13 @@ async function getFolderStats(dirPath) {
     let lastModified = new Date(0);
     const nestedScanCandidates = [];
     
-    // 并行处理样本
-    const promises = sampleEntries.map(async (entry) => {
+    // 并行处理样本（受全局并发池约束）
+    const promises = sampleEntries.map((entry) => runTask(async () => {
       const entryPath = path.join(dirPath, entry);
       try {
         const stats = await stat(entryPath);
         
         if (stats.isDirectory()) {
-          // 快速检查子目录是否包含图片
           const quickCheck = await quickScanForImages(entryPath);
           if (quickCheck.hasImages) {
             hasSubAlbums = true;
@@ -368,7 +446,7 @@ async function getFolderStats(dirPath) {
       } catch {
         // 跳过无法访问的目录
       }
-    });
+    }));
     
     await Promise.all(promises);
 
@@ -943,6 +1021,8 @@ module.exports = {
     getAlbumImageCount,
     clearAlbumImageMetadataCache,
     DEFAULT_ALBUM_PAGE_SIZE,
+    mapWithConcurrency,
+    ConcurrencyLimiter,
     scanDirectoryTree,
     createErrorResponse,
     SUPPORTED_FORMATS,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
@@ -447,5 +447,92 @@ describe('HomePage refresh button', () => {
 
     expect(onFolderClick).toHaveBeenCalledWith('/photos/coser');
     expect(onAlbumClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomePage scan progress', () => {
+  let progressListener;
+  let resolveScan;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    progressListener = null;
+    resolveScan = null;
+    reactRouter.useNavigate.mockReturnValue(jest.fn());
+    reactRouter.useLocation.mockReturnValue({
+      pathname: '/browse/%2Fphotos%2Flarge',
+      search: '',
+      state: null
+    });
+    imageCache.get.mockReturnValue(null);
+    useSettings.mockReturnValue({
+      settings: { homeSortGrouping: 'mixed' }
+    });
+    ipcRenderer.on.mockImplementation((channel, listener) => {
+      if (channel === 'scan-navigation-progress') {
+        progressListener = listener;
+      }
+    });
+    ipcRenderer.invoke.mockImplementation((channel, targetPath) => {
+      if (channel !== 'scan-navigation-level') {
+        return Promise.resolve({});
+      }
+
+      return new Promise((resolve) => {
+        resolveScan = () => resolve({
+          success: true,
+          currentPath: targetPath,
+          nodes: [
+            { path: `${targetPath}/album-1`, name: 'album-1', type: 'album', imageCount: 1 }
+          ],
+          directImages: [],
+          breadcrumbs: [],
+          metadata: {
+            folderCount: 0,
+            albumCount: 1,
+            totalNodes: 1,
+            directImageCount: 0
+          }
+        });
+      });
+    });
+  });
+
+  test('shows progress bar with scanned counts during navigation scan', async () => {
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <HomePage
+          colorMode={{ mode: 'light' }}
+          currentPath="/photos/large"
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith('scan-navigation-level', '/photos/large');
+      expect(progressListener).toBeTruthy();
+    });
+
+    act(() => {
+      progressListener({}, {
+        targetPath: '/photos/large',
+        processed: 2,
+        total: 5,
+        done: false
+      });
+    });
+
+    expect(screen.getByText('正在扫描 2 / 5 项…')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveScan();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('正在扫描 2 / 5 项…')).not.toBeInTheDocument();
+    });
+    expect(await screen.findByTestId('album-card')).toBeInTheDocument();
   });
 });
