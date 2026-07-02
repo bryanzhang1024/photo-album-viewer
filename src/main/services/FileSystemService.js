@@ -618,10 +618,12 @@ function createFolderNode(path, name, stats) {
     name,
     type: NODE_TYPES.FOLDER,
     contentKind: CONTENT_KINDS.CONTAINER,
+    canViewAsPhotoSet: false,
     canOpenAlbum: false,
     canBrowseChildren: true,
     hasImages: false,
     imageCount: 0,
+    directImageCount: 0,
     childFolders: stats.childFolders || 0,
     samples: stats.previewSamples || [],
     lastModified: stats.lastModified || new Date(),
@@ -639,15 +641,20 @@ function createFolderNode(path, name, stats) {
  * 创建相册节点
  */
 function createAlbumNode(path, name, stats) {
+  const directImageCount = stats.imageCount || 0;
+  const canViewAsPhotoSet = stats.canOpenAlbum !== false && directImageCount > 0;
+
   return {
     path,
     name,
     type: NODE_TYPES.ALBUM,
     contentKind: stats.contentKind || CONTENT_KINDS.PHOTO_SET,
-    canOpenAlbum: stats.canOpenAlbum !== false,
+    canViewAsPhotoSet,
+    canOpenAlbum: canViewAsPhotoSet,
     canBrowseChildren: Boolean(stats.canBrowseChildren),
     hasImages: true,
-    imageCount: stats.imageCount || 0,
+    imageCount: directImageCount,
+    directImageCount,
     childFolders: stats.childFolders || 0,
     samples: stats.previewImages || [],
     lastModified: stats.lastModified || new Date(),
@@ -657,14 +664,6 @@ function createAlbumNode(path, name, stats) {
     lastImageDate: stats.lastImageDate || null,
     totalSize: stats.totalSize || 0
   };
-}
-
-// 保留旧的扫描函数用于兼容性，标记为已废弃
-async function scanDirectories(rootPath) {
-  console.warn('scanDirectories 已废弃，请使用 scanNavigationLevel');
-  const response = await scanNavigationLevel(rootPath);
-  // 转换为旧格式以保持兼容性
-  return response.nodes.filter(node => node.type === NODE_TYPES.ALBUM);
 }
 
 async function getAlbumImages(albumPath) {
@@ -771,9 +770,10 @@ async function scanDirectoryTree(rootPath, depth = 0, maxDepth = 3) {
 
 module.exports = {
     scanNavigationLevel,
-    scanDirectories,
     getAlbumImages,
     scanDirectoryTree,
     createErrorResponse,
-    SUPPORTED_FORMATS
+    SUPPORTED_FORMATS,
+    NODE_TYPES,
+    CONTENT_KINDS
 };

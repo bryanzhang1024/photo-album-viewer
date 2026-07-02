@@ -389,4 +389,63 @@ describe('HomePage refresh button', () => {
 
     expect(screen.getByTestId('image-viewer')).toBeInTheDocument();
   });
+
+  test('routes hybrid nodes to folder view on primary click', async () => {
+    const onFolderClick = jest.fn();
+    const onAlbumClick = jest.fn();
+
+    ipcRenderer.invoke.mockResolvedValue({
+      success: true,
+      currentPath: '/photos',
+      nodes: [
+        {
+          type: 'album',
+          contentKind: 'hybrid',
+          canViewAsPhotoSet: true,
+          canBrowseChildren: true,
+          path: '/photos/coser',
+          name: 'coser',
+          imageCount: 12,
+          childFolders: 1,
+          samples: ['/photos/coser/001.jpg']
+        }
+      ],
+      directImages: [],
+      breadcrumbs: [],
+      metadata: {
+        folderCount: 0,
+        albumCount: 1,
+        totalNodes: 1,
+        directImageCount: 0
+      }
+    });
+
+    const AlbumCardMock = require('../../../src/renderer/components/AlbumCard');
+    AlbumCardMock.mockImplementation(({ node, onClick }) => (
+      <button type="button" data-testid="album-card" onClick={onClick}>{node?.name}</button>
+    ));
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <HomePage
+          colorMode={{ mode: 'light' }}
+          currentPath="/photos"
+          urlMode={true}
+          onFolderClick={onFolderClick}
+          onAlbumClick={onAlbumClick}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('coser')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('coser'));
+
+    expect(onFolderClick).toHaveBeenCalledWith('/photos/coser');
+    expect(onAlbumClick).not.toHaveBeenCalled();
+  });
 });

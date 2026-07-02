@@ -23,6 +23,13 @@ import CHANNELS from '../../common/ipc-channels';
 import { getThumbnailUrl } from '../utils/thumbnailUrl';
 import { getBasename } from '../utils/pathUtils';
 import { LAYOUT_CONFIG } from '../utils/layoutConfig';
+import {
+  canBrowseChildren,
+  canViewAsPhotoSet,
+  getContentKind,
+  getPrimaryKind,
+  getPrimaryView
+} from '../utils/nodeModel';
 
 // 观察器已移除 - 使用isVisible属性替代
 
@@ -46,6 +53,7 @@ function AlbumCard({
   displayPath, 
   onClick, 
   onBrowseChildren,
+  onOpenPhotoSet,
   isCompactMode, 
   isFavoritesPage = false 
 }) {
@@ -66,29 +74,43 @@ function AlbumCard({
   // 数据兼容性处理：优先使用新的node数据，回退到旧的album数据
   const cardData = useMemo(() => {
     if (node) {
+      const primaryKind = getPrimaryKind(node);
       return {
         path: node.path,
         name: node.name,
-        type: node.type,
-        contentKind: node.contentKind,
-        canBrowseChildren: Boolean(node.canBrowseChildren),
+        type: primaryKind === 'folder' ? 'folder' : 'album',
+        contentKind: node.contentKind || getContentKind(node),
+        canBrowseChildren: canBrowseChildren(node),
+        canViewAsPhotoSet: canViewAsPhotoSet(node),
+        primaryView: getPrimaryView(node),
         imageCount: node.imageCount,
         samples: node.samples || node.previewSamples || [],
-        hasImages: node.hasImages,
+        hasImages: canViewAsPhotoSet(node),
         childFolders: node.childFolders
       };
     } else if (album) {
       const kind = album.kind || (album.type === 'folder' ? 'folder' : 'photoSet');
+      const legacyNode = {
+        type: kind === 'folder' ? 'folder' : 'album',
+        contentKind: album.contentKind || (kind === 'folder' ? 'container' : 'photoSet'),
+        canBrowseChildren: Boolean(album.canBrowseChildren),
+        canOpenAlbum: kind !== 'folder',
+        imageCount: album.imageCount,
+        childFolders: album.childFolders || 0
+      };
+      const primaryKind = getPrimaryKind(legacyNode);
       return {
         path: album.path,
         name: album.name,
         kind,
-        type: kind === 'folder' ? 'folder' : 'album',
-        contentKind: album.contentKind || (kind === 'folder' ? 'container' : 'photoSet'),
-        canBrowseChildren: Boolean(album.canBrowseChildren),
+        type: primaryKind === 'folder' ? 'folder' : 'album',
+        contentKind: legacyNode.contentKind,
+        canBrowseChildren: canBrowseChildren(legacyNode),
+        canViewAsPhotoSet: canViewAsPhotoSet(legacyNode),
+        primaryView: getPrimaryView(legacyNode),
         imageCount: album.imageCount,
         samples: album.previewSamples || album.samples || album.previewImages?.map(img => (typeof img === 'string' ? img : img.path)).filter(Boolean) || [],
-        hasImages: kind !== 'folder',
+        hasImages: canViewAsPhotoSet(legacyNode),
         childFolders: album.childFolders || 0
       };
     }
@@ -221,10 +243,22 @@ function AlbumCard({
     onBrowseChildren?.(cardData);
   };
 
+  const handleOpenPhotoSetClick = (e) => {
+    e.stopPropagation();
+    onOpenPhotoSet?.(cardData);
+  };
+
   const showChildFolderEntry = (
-    cardData.type !== 'folder'
-    && (cardData.canBrowseChildren || cardData.contentKind === 'hybrid')
+    cardData.primaryView === 'album'
+    && cardData.canBrowseChildren
     && (cardData.childFolders || 0) > 0
+  );
+
+  const showPhotoSetEntry = (
+    cardData.primaryView === 'folder'
+    && cardData.canViewAsPhotoSet
+    && cardData.canBrowseChildren
+    && (cardData.imageCount || 0) > 0
   );
 
   // 根据节点类型和预览图数量返回不同的预览布局
@@ -304,6 +338,35 @@ function AlbumCard({
           >
             {cardData.imageCount || 0}
           </Box>
+        )}
+        {showPhotoSetEntry && (
+          <IconButton
+            size="small"
+            onClick={handleOpenPhotoSetClick}
+            aria-label={`以套图方式打开 ${cardData.name}`}
+            title="查看直接图片"
+            sx={{
+              position: 'absolute',
+              bottom: 8,
+              right: 8,
+              bgcolor: 'rgba(0,0,0,0.58)',
+              color: 'white',
+              borderRadius: '12px',
+              minWidth: '28px',
+              height: '24px',
+              px: 0.6,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.3,
+              fontSize: '0.72rem',
+              '&:hover': {
+                bgcolor: 'rgba(0,0,0,0.74)'
+              }
+            }}
+          >
+            <ImageIcon sx={{ fontSize: '0.9rem' }} />
+            {cardData.imageCount || 0}
+          </IconButton>
         )}
         {showChildFolderEntry && (
           <IconButton

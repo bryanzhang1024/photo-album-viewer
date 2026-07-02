@@ -49,6 +49,11 @@ import useSorting from '../hooks/useSorting';
 import PageLayout from '../components/PageLayout';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import { navigateToBrowsePath } from '../utils/navigation';
+import {
+  canViewAsPhotoSet,
+  getPrimaryKind,
+  getPrimaryView
+} from '../utils/nodeModel';
 
 // 安全地获取electron对象
 const ipcRenderer = window.electronAPI || null;
@@ -108,7 +113,7 @@ function HomePage({
     legacyKeys: homeLegacySortKeys
   });
   const albumNodes = useMemo(
-    () => navigationNodes.filter(node => node.canOpenAlbum || node.type === 'album'),
+    () => navigationNodes.filter(node => canViewAsPhotoSet(node)),
     [navigationNodes]
   );
   const updateNavigationState = useCallback((data, fallbackPath = '') => {
@@ -349,24 +354,37 @@ function HomePage({
 
   // 处理节点点击 - 支持文件夹和相册 - 使用 useCallback 缓存
   const handleNodeClick = useCallback(async (node) => {
-    if (node.type === 'folder') {
-      // 文件夹类型：统一复用导航逻辑，确保滚动位置被保存
+    const primaryView = getPrimaryView(node);
+
+    if (primaryView === 'folder') {
       if (urlMode && onFolderClick) {
         saveScrollPosition();
         onFolderClick(node.path);
         return;
       }
       await handleNavigate(node.path);
-    } else if (node.type === 'album') {
-      // 相册类型：打开相册页面
-      saveScrollPosition();
-      if (urlMode && onAlbumClick) {
-        onAlbumClick(node.path, node.name);
-      } else {
-        navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
-      }
+      return;
+    }
+
+    saveScrollPosition();
+    if (urlMode && onAlbumClick) {
+      onAlbumClick(node.path, node.name);
+    } else {
+      navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
     }
   }, [urlMode, onFolderClick, onAlbumClick, handleNavigate, navigate, saveScrollPosition]);
+
+  const handleNodeOpenPhotoSet = useCallback(async (node) => {
+    if (!node?.path) return;
+
+    saveScrollPosition();
+    if (urlMode && onAlbumClick) {
+      onAlbumClick(node.path, node.name);
+      return;
+    }
+
+    navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
+  }, [urlMode, onAlbumClick, navigate, saveScrollPosition]);
 
   const handleNodeBrowseChildren = useCallback(async (node) => {
     if (!node?.path) return;
@@ -418,8 +436,8 @@ function HomePage({
       name: node.name || '',
       path: node.path || '',
       lastModified: node.lastModified || 0,
-      count: node.type === 'folder' ? (node.childFolders || 0) : (node.imageCount || 0),
-      groupRank: node.type === 'folder' ? 0 : 1,
+      count: getPrimaryKind(node) === 'folder' ? (node.childFolders || 0) : (node.imageCount || 0),
+      groupRank: getPrimaryKind(node) === 'folder' ? 0 : 1,
       node
     }));
     const imageItems = filteredDirectImages.map((image) => ({
@@ -1042,6 +1060,7 @@ function HomePage({
                           displayPath={getNodeDisplayPath(item.node)}
                           onClick={() => handleNodeClick(item.node)}
                           onBrowseChildren={() => handleNodeBrowseChildren(item.node)}
+                          onOpenPhotoSet={() => handleNodeOpenPhotoSet(item.node)}
                           isCompactMode={userDensity === 'compact'}
                         />
                       </Box>

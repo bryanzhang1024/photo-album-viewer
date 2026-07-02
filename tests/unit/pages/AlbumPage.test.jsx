@@ -91,7 +91,9 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
 const reactRouter = require('react-router-dom');
 const { ScrollPositionContext } = require('../../../src/renderer/App');
 const useAlbumImages = require('../../../src/renderer/hooks/useAlbumImages');
+const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage').default;
+const ipcRenderer = global.electronMock.ipcRenderer;
 
 describe('AlbumPage refresh button', () => {
   beforeEach(() => {
@@ -145,5 +147,44 @@ describe('AlbumPage refresh button', () => {
 
     fireEvent.click(refreshButton);
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows browse entry when photo set view has child folders', async () => {
+    const onNavigate = jest.fn();
+    imageCache.get.mockReturnValue(null);
+    ipcRenderer.invoke.mockImplementation((channel, path) => {
+      if (channel === 'scan-navigation-level' && path === '/albums/trip') {
+        return Promise.resolve({
+          success: true,
+          currentPath: '/albums/trip',
+          nodes: [
+            { path: '/albums/trip/selfie', name: 'selfie', type: 'album' }
+          ],
+          directImages: [],
+          breadcrumbs: [],
+          metadata: { totalNodes: 1 }
+        });
+      }
+      return Promise.resolve({ success: true, nodes: [], directImages: [], breadcrumbs: [], metadata: {} });
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          urlMode={true}
+          onNavigate={onNavigate}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    expect(await screen.findByText('该目录还有 1 个子文件夹')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '进入浏览' }));
+
+    expect(onNavigate).toHaveBeenCalledWith('/albums/trip', 'folder', null, false);
   });
 });

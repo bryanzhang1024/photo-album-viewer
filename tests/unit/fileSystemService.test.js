@@ -114,16 +114,20 @@ describe('FileSystemService', () => {
       hasImages: false,
       type: 'folder',
       contentKind: 'container',
+      canViewAsPhotoSet: false,
       canOpenAlbum: false,
-      canBrowseChildren: true
+      canBrowseChildren: true,
+      directImageCount: 0
     });
     expect(hybridNode).toMatchObject({
       name: 'family',
       hasImages: true,
       type: 'album',
       contentKind: 'hybrid',
+      canViewAsPhotoSet: true,
       canOpenAlbum: true,
       canBrowseChildren: true,
+      directImageCount: 1,
       childFolders: 1,
       imageCount: 1
     });
@@ -132,8 +136,10 @@ describe('FileSystemService', () => {
       hasImages: true,
       type: 'album',
       contentKind: 'photoSet',
+      canViewAsPhotoSet: true,
       canOpenAlbum: true,
-      canBrowseChildren: false
+      canBrowseChildren: false,
+      directImageCount: 1
     });
     expect(result.directImages).toEqual([
       expect.objectContaining({
@@ -171,8 +177,10 @@ describe('FileSystemService', () => {
     expect(hybridNode).toMatchObject({
       type: 'album',
       contentKind: 'hybrid',
+      canViewAsPhotoSet: true,
       canOpenAlbum: true,
       canBrowseChildren: true,
+      directImageCount: 1,
       childFolders: 1,
       imageCount: 1,
       previewImages: ['/photos/coser/001.jpg']
@@ -282,10 +290,12 @@ describe('FileSystemService', () => {
     expect(folderNode).toMatchObject({
       type: 'folder',
       contentKind: 'container',
+      canViewAsPhotoSet: false,
       canOpenAlbum: false,
       canBrowseChildren: true,
       hasImages: false,
       imageCount: 0,
+      directImageCount: 0,
       childFolders: 2,
       hasSubAlbums: true
     });

@@ -124,9 +124,9 @@ describe('card radius styling', () => {
     expect(favoriteMocks.toggleAlbumFavorite).not.toHaveBeenCalled();
   });
 
-  test('AlbumCard exposes child folder entry for hybrid albums without triggering the main click', () => {
+  test('AlbumCard exposes photo set entry for hybrid nodes without triggering the main click', () => {
     const onClick = jest.fn();
-    const onBrowseChildren = jest.fn();
+    const onOpenPhotoSet = jest.fn();
     const { container, getByLabelText } = renderWithTheme(
       <AlbumCard
         node={{
@@ -134,22 +134,23 @@ describe('card radius styling', () => {
           name: 'trip',
           type: 'album',
           contentKind: 'hybrid',
+          canViewAsPhotoSet: true,
           canBrowseChildren: true,
           imageCount: 24,
           samples: ['/a.jpg'],
           childFolders: 1
         }}
         onClick={onClick}
-        onBrowseChildren={onBrowseChildren}
+        onOpenPhotoSet={onOpenPhotoSet}
       />
     );
 
     fireEvent.click(container.firstChild);
     expect(onClick).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(getByLabelText('进入 trip 的子文件夹'));
+    fireEvent.click(getByLabelText('以套图方式打开 trip'));
 
-    expect(onBrowseChildren).toHaveBeenCalledWith(
+    expect(onOpenPhotoSet).toHaveBeenCalledWith(
       expect.objectContaining({
         path: '/albums/trip',
         contentKind: 'hybrid',
