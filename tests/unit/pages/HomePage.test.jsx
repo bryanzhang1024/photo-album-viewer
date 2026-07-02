@@ -10,15 +10,24 @@ jest.mock('react-router-dom', () => {
   };
 });
 
-jest.mock('react-virtuoso', () => ({
-  Virtuoso: ({ data = [], itemContent }) => (
-    <div data-testid="virtuoso">
-      {data.map((item, index) => (
-        <div key={index}>{itemContent(index, item)}</div>
-      ))}
-    </div>
-  )
-}));
+jest.mock('react-virtuoso', () => {
+  const React = require('react');
+  return {
+    Virtuoso: ({ data = [], itemContent, rangeChanged }) => {
+      React.useEffect(() => {
+        rangeChanged?.({ startIndex: 0, endIndex: Math.max(0, data.length - 1) });
+      }, [data, rangeChanged]);
+
+      return (
+        <div data-testid="virtuoso">
+          {data.map((item, index) => (
+            <div key={index}>{itemContent(index, item)}</div>
+          ))}
+        </div>
+      );
+    }
+  };
+});
 
 jest.mock('../../../src/renderer/components/AlbumCard', () =>
   jest.fn(({ node }) => <div data-testid="album-card">{node?.name || 'node'}</div>)

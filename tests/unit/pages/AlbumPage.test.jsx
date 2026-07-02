@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
@@ -14,10 +14,11 @@ jest.mock('react-router-dom', () => {
 jest.mock('react-virtuoso', () => {
   const React = require('react');
   return {
-    Virtuoso: ({ data = [], itemContent, endReached }) => {
+    Virtuoso: ({ data = [], itemContent, endReached, rangeChanged }) => {
       React.useEffect(() => {
         endReached?.();
-      }, [endReached]);
+        rangeChanged?.({ startIndex: 0, endIndex: Math.max(0, data.length - 1) });
+      }, [data, endReached, rangeChanged]);
 
       return (
         <div data-testid="virtuoso">
@@ -242,5 +243,58 @@ describe('AlbumPage refresh button', () => {
 
     expect(screen.getByText('共 500 张照片')).toBeInTheDocument();
     expect(loadMore).toHaveBeenCalled();
+  });
+
+  test('triggers batch thumbnail prefetch for visible album rows', async () => {
+    useAlbumImages.mockReturnValue({
+      images: [
+        { path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 },
+        { path: '/albums/trip/2.jpg', name: '2.jpg', size: 1, lastModified: 1 }
+      ],
+      totalCount: 2,
+      hasMore: false,
+      loading: false,
+      loadingMore: false,
+      error: '',
+      queryKey: '{}',
+      loadImages: jest.fn(() => Promise.resolve([])),
+      loadMore: jest.fn(),
+      ensureImageLoaded: jest.fn(() => Promise.resolve({ images: [], globalIndex: -1, offset: 0 })),
+      refresh: jest.fn(),
+      removeImage: jest.fn()
+    });
+
+    ipcRenderer.invoke.mockImplementation((channel, ...args) => {
+      if (channel === 'get-batch-thumbnails') {
+        return Promise.resolve({
+          '/albums/trip/1.jpg': '1.webp',
+          '/albums/trip/2.jpg': '2.webp'
+        });
+      }
+      if (channel === 'scan-navigation-level') {
+        return Promise.resolve({ success: true, nodes: [], directImages: [], metadata: { totalNodes: 0 } });
+      }
+      return Promise.resolve({});
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        'get-batch-thumbnails',
+        expect.arrayContaining(['/albums/trip/1.jpg', '/albums/trip/2.jpg']),
+        expect.any(Number)
+      );
+    });
   });
 });

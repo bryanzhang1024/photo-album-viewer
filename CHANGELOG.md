@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.5.3] - 2026-07-02
+
+- 抽取 `useGridThumbnailPrefetch` hook，统一 Virtuoso 网格的缩略图批量预取逻辑。
+- AlbumPage、HomePage、FavoritesPage（相簿/图片双 tab）接入 `rangeChanged` 预取，与相簿页行为对齐。
+
 ## [2.5.2] - 2026-07-02
 
 - 子目录扫描改为并发池限流（默认 5，可随性能设置调整），避免 200+ 同级目录时磁盘 I/O 风暴。
