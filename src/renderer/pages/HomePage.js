@@ -15,6 +15,7 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
+  LinearProgress,
   Alert,
   Snackbar,
   Paper,
@@ -84,6 +85,7 @@ function HomePage({
     metadata: null
   }));
   const [loading, setLoading] = useState(false);
+  const [scanProgress, setScanProgress] = useState(null);
   const [error, setError] = useState('');
   const [userDensity, setUserDensity] = useState(() => {
     const savedDensity = localStorage.getItem('userDensity');
@@ -93,6 +95,7 @@ function HomePage({
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
+  const activeScanPathRef = useRef('');
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
@@ -282,6 +285,34 @@ function HomePage({
   }, [scrollContext, scrollPositionKey]);
 
   
+  useEffect(() => {
+    if (!ipcRenderer?.on) {
+      return undefined;
+    }
+
+    const handleScanProgress = (_event, payload) => {
+      if (!payload || payload.targetPath !== activeScanPathRef.current) {
+        return;
+      }
+
+      if (payload.done) {
+        setScanProgress(null);
+        return;
+      }
+
+      setScanProgress({
+        processed: payload.processed || 0,
+        total: payload.total || 0,
+        targetPath: payload.targetPath
+      });
+    };
+
+    ipcRenderer.on(CHANNELS.SCAN_NAVIGATION_PROGRESS, handleScanProgress);
+    return () => {
+      ipcRenderer.removeListener(CHANNELS.SCAN_NAVIGATION_PROGRESS, handleScanProgress);
+    };
+  }, []);
+
   // 智能导航扫描 - 新架构（使用统一缓存）
   const scanNavigationLevel = useCallback(async (targetPath) => {
     try {
@@ -295,10 +326,13 @@ function HomePage({
         console.log(`使用缓存数据: ${targetPath}`);
         updateNavigationState(cachedData, targetPath);
         console.log(`从缓存加载: ${cachedData.metadata.totalNodes} 个节点`);
+        setScanProgress(null);
         return;
       }
 
+      activeScanPathRef.current = targetPath;
       setLoading(true);
+      setScanProgress(null);
       setError('');
 
       console.log(`开始扫描导航层级: ${targetPath}`);
@@ -315,6 +349,10 @@ function HomePage({
       console.error('扫描错误:', err);
       setError('扫描文件夹时出错: ' + err.message);
     } finally {
+      if (activeScanPathRef.current === targetPath) {
+        activeScanPathRef.current = '';
+      }
+      setScanProgress(null);
       setLoading(false);
     }
   }, [updateNavigationState]);
@@ -968,9 +1006,30 @@ function HomePage({
       </>
     );
   
+  const renderScanProgress = () => {
+    if (!scanProgress || !scanProgress.total) {
+      return null;
+    }
+
+    const progressValue = Math.min(
+      100,
+      Math.round((scanProgress.processed / scanProgress.total) * 100)
+    );
+
+    return (
+      <Box sx={{ mb: 2 }}>
+        <LinearProgress variant="determinate" value={progressValue} />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+          正在扫描 {scanProgress.processed} / {scanProgress.total} 项…
+        </Typography>
+      </Box>
+    );
+  };
+
   const renderContent = () => {
-    // 显示加载状态
-    if (loading) {
+    const hasContent = navigationNodes.length > 0 || directImages.length > 0;
+
+    if (loading && !hasContent && !scanProgress) {
       return (
         <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
           <CircularProgress />
@@ -981,9 +1040,7 @@ function HomePage({
       );
     }
 
-    const hasContent = navigationNodes.length > 0 || directImages.length > 0;
-
-    if (!hasContent) {
+    if (!hasContent && !loading && !scanProgress) {
       return (
         <Paper elevation={2} sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>没有找到相簿</Typography>
@@ -1017,6 +1074,7 @@ function HomePage({
 
     return (
       <Box>
+        {renderScanProgress()}
         {metadata && (
           <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 2 }}>
             <Typography variant="caption" color="text.secondary">

@@ -9,6 +9,7 @@ const {
   getAlbumImagesPage,
   getAlbumImageCount,
   clearAlbumImageMetadataCache,
+  mapWithConcurrency,
   SUPPORTED_FORMATS
 } = require('../../src/main/services/FileSystemService');
 const { createFsMock } = require('../helpers/fsMock');
@@ -429,5 +430,47 @@ describe('FileSystemService', () => {
 
     const result = await getAlbumImageCount('/albums/count');
     expect(result).toEqual({ success: true, count: 1 });
+  });
+
+  test('mapWithConcurrency limits parallel execution', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const items = Array.from({ length: 12 }, (_, index) => index);
+
+    await mapWithConcurrency(items, 5, async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+      return true;
+    });
+
+    expect(maxInFlight).toBeLessThanOrEqual(5);
+  });
+
+  test('scanNavigationLevel reports progress while scanning child directories', async () => {
+    const childDirectories = Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [`album-${index + 1}`, {
+        [`photo-${index + 1}.jpg`]: Buffer.from(`image-${index + 1}`)
+      }])
+    );
+
+    mockFs = createFsMock({
+      '/photos/many': childDirectories
+    });
+
+    const progressEvents = [];
+    const result = await scanNavigationLevel('/photos/many', {
+      concurrencyLimit: 3,
+      onProgress: (progress) => progressEvents.push({ ...progress })
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.nodes).toHaveLength(8);
+    expect(progressEvents.length).toBeGreaterThan(0);
+    expect(progressEvents[progressEvents.length - 1]).toMatchObject({
+      processed: 8,
+      total: 8
+    });
   });
 });

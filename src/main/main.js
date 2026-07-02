@@ -418,8 +418,44 @@ ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
       return FileSystemService.createErrorResponse('访问路径不在已授权照片目录范围内', targetPath);
     }
 
+    const scanId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const sender = event.sender;
+    const concurrencyLimit = Math.max(
+      1,
+      Math.min(8, Number(performanceSettings.concurrentTasks) || 5)
+    );
+
+    const sendProgress = (payload) => {
+      if (sender.isDestroyed()) {
+        return;
+      }
+      sender.send(CHANNELS.SCAN_NAVIGATION_PROGRESS, {
+        scanId,
+        targetPath,
+        ...payload
+      });
+    };
+
     console.log(`开始智能扫描: ${targetPath}`);
-    const response = await FileSystemService.scanNavigationLevel(targetPath);
+    const response = await FileSystemService.scanNavigationLevel(targetPath, {
+      concurrencyLimit,
+      onProgress: (progress) => {
+        sendProgress({
+          done: false,
+          processed: progress.processed,
+          total: progress.total,
+          phase: progress.phase
+        });
+      }
+    });
+
+    sendProgress({
+      done: true,
+      processed: response.metadata?.totalNodes || 0,
+      total: response.metadata?.totalNodes || 0,
+      phase: 'done'
+    });
+
     console.log(`扫描完成: ${response.metadata ? `${response.metadata.totalNodes} 个节点，耗时 ${response.metadata.scanTime}ms` : '扫描失败'}`);
     return response;
   } catch (error) {

@@ -19,5 +19,6 @@ module.exports = {
     CREATE_NEW_INSTANCE: 'create-new-instance',
     GET_WINDOWS_INFO: 'get-windows-info',
     SCAN_DIRECTORY_TREE: 'scan-directory-tree',
+    SCAN_NAVIGATION_PROGRESS: 'scan-navigation-progress',
     FAVORITES_UPDATED: 'favorites-updated'
 };
