@@ -428,26 +428,6 @@ ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
   }
 });
 
-// 处理扫描文件夹请求（兼容性保留）
-ipcMain.handle(CHANNELS.SCAN_DIRECTORY, async (event, rootPath) => {
-  try {
-    const isAllowed = await assertApprovedPath(rootPath, { bootstrapWhenEmpty: true });
-    if (!isAllowed) {
-      return [];
-    }
-
-    console.log(`开始扫描文件夹: ${rootPath}（兼容模式）`);
-    const startTime = Date.now();
-    const albums = await FileSystemService.scanDirectories(rootPath);
-    const endTime = Date.now();
-    console.log(`扫描完成，找到 ${albums.length} 个相簿，耗时 ${endTime - startTime}ms`);
-    return albums;
-  } catch (error) {
-    console.error('Error scanning directory:', error);
-    return [];
-  }
-});
-
 ipcMain.handle(CHANNELS.RESOLVE_DROPPED_FOLDERS, async (event, droppedPaths) => {
   const folders = [];
   const rejected = [];

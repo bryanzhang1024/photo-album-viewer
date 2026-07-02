@@ -83,15 +83,15 @@ describe('useNeighboringAlbums', () => {
     expect(result.current.neighboringAlbums.next.name).toBe('Album2');
   });
 
-  test('includes hybrid album nodes marked by canOpenAlbum in sibling navigation', async () => {
+  test('includes hybrid album nodes marked by canViewAsPhotoSet in sibling navigation', async () => {
     imageCache.get.mockReturnValue({
       success: true,
       nodes: [
         { type: 'album', name: 'Album1', path: '/photos/Album1', imageCount: 5, lastModified: '2024-01-01' },
         {
-          type: 'folder',
+          type: 'album',
           contentKind: 'hybrid',
-          canOpenAlbum: true,
+          canViewAsPhotoSet: true,
           canBrowseChildren: true,
           name: 'Album2',
           path: '/photos/Album2',

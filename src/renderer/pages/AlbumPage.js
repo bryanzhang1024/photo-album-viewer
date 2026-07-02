@@ -53,6 +53,10 @@ import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
 import PageLayout from '../components/PageLayout';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import { navigateToBrowsePath } from '../utils/navigation';
+import {
+  buildNodeFromScanResponse,
+  getPrimaryView
+} from '../utils/nodeModel';
 
 // 安全地获取electron对象
 const ipcRenderer = window.electronAPI || null;
@@ -97,6 +101,7 @@ function AlbumPage({
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
   const thumbnailPrefetchInFlight = useRef(new Set());
   const [searchHasFocus, setSearchHasFocus] = useState(false);
+  const [childFolderCount, setChildFolderCount] = useState(0);
 
 
   // 获取滚动位置上下文
@@ -185,60 +190,26 @@ function AlbumPage({
   }, [images, normalizedSearchQuery]);
 
   // 检测路径类型（文件夹 vs 相簿）
-  const detectPathType = useCallback(async (path) => {
-    if (!path || !ipcRenderer) return 'unknown';
-
-    try {
-      // 扫描路径获取基本信息
-      const scanResult = await ipcRenderer.invoke(CHANNELS.SCAN_DIRECTORY, path);
-
-      if (!scanResult || !scanResult.nodes) {
-        return 'unknown';
-      }
-
-      // 检查是否是纯相簿（只有图片，没有子文件夹）
-      const hasImages = scanResult.nodes.some(node => node.type === 'album');
-      const hasFolders = scanResult.nodes.some(node => node.type === 'folder');
-
-      if (hasImages && !hasFolders) {
-        return 'album';
-      } else if (hasFolders || (!hasImages && !hasFolders)) {
-        return 'folder';
-      } else {
-        return 'mixed';
-      }
-    } catch (error) {
-      console.error('路径类型检测失败:', error);
-
-      // Fallback: 使用启发式规则判断
-      // 如果路径包含常见的关键图片扩展名，可能是相簿
-      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'];
-      const hasImageKeywords = imageExtensions.some(ext => path.toLowerCase().includes(ext));
-
-      // 如果路径名包含"相簿"、"album"、"photos"等关键词，可能是相簿
-      const albumKeywords = ['相簿', 'album', 'photos', 'pictures', 'images'];
-      const hasAlbumKeywords = albumKeywords.some(keyword =>
-        path.toLowerCase().includes(keyword)
-      );
-
-      if (hasImageKeywords && hasAlbumKeywords) {
-        return 'album';
-      } else {
-        return 'folder'; // 默认当作文件夹处理，更安全
-      }
+  const loadChildFolderCount = useCallback(async (path) => {
+    if (!path || !ipcRenderer) {
+      setChildFolderCount(0);
+      return 0;
     }
-  }, [ipcRenderer]);
-
-  // 获取路径的实际图片数量
-  const getPathImageCount = useCallback(async (path) => {
-    if (!path || !ipcRenderer) return 0;
 
     try {
-      // 获取该路径下的实际图片列表
-      const images = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, path);
-      return images ? images.length : 0;
+      const cachedResponse = imageCache.get('navigation', path);
+      const response = cachedResponse || await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, path);
+
+      if (!cachedResponse && response?.success) {
+        imageCache.set('navigation', path, response);
+      }
+
+      const childCount = response?.success ? (response.nodes?.length || 0) : 0;
+      setChildFolderCount(childCount);
+      return childCount;
     } catch (error) {
-      console.error('获取路径图片数量失败:', error);
+      console.error('加载子目录信息失败:', error);
+      setChildFolderCount(0);
       return 0;
     }
   }, [ipcRenderer]);
@@ -281,6 +252,9 @@ function AlbumPage({
       await loadRootPath();
 
       if (cancelled) return;
+      await loadChildFolderCount(decodedAlbumPath);
+
+      if (cancelled) return;
       await preloadParentDirectory();
 
       // 如果有初始图片路径，找到对应的索引并打开查看器
@@ -302,7 +276,7 @@ function AlbumPage({
     return () => {
       cancelled = true;
     };
-  }, [decodedAlbumPath, loadImages, loadNeighboringAlbums, loadBreadcrumbs]);
+  }, [decodedAlbumPath, loadImages, loadNeighboringAlbums, loadBreadcrumbs, loadChildFolderCount]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -734,6 +708,29 @@ function AlbumPage({
     }
   };
 
+  const handleOpenContainerView = useCallback(() => {
+    navigateToFolderPath(decodedAlbumPath);
+  }, [decodedAlbumPath, navigateToFolderPath]);
+
+  const resolveTargetView = useCallback(async (targetPath) => {
+    if (!targetPath || !ipcRenderer) {
+      return 'folder';
+    }
+
+    const cachedResponse = imageCache.get('navigation', targetPath);
+    const response = cachedResponse || await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, targetPath);
+
+    if (!cachedResponse && response?.success) {
+      imageCache.set('navigation', targetPath, response);
+    }
+
+    if (!response?.success) {
+      throw new Error(response?.error?.message || 'Failed to scan target directory');
+    }
+
+    return getPrimaryView(buildNodeFromScanResponse(response));
+  }, [ipcRenderer]);
+
   // 处理面包屑导航点击
   const handleBreadcrumbNavigate = useCallback(async (targetPath) => {
     if (isNavigating) return;
@@ -761,19 +758,10 @@ function AlbumPage({
         return;
       }
 
-      const pathType = await detectPathType(targetPath);
-      console.log(`面包屑导航: ${targetPath}, 类型: ${pathType}`);
+      const targetView = await resolveTargetView(targetPath);
+      console.log(`面包屑导航: ${targetPath}, 视图: ${targetView}`);
 
-      if (pathType === 'album') {
-        const imageCount = await getPathImageCount(targetPath);
-        console.log(`路径 ${targetPath} 实际图片数量: ${imageCount}`);
-
-        if (imageCount === 0) {
-          console.log(`路径 ${targetPath} 检测为相簿但没有图片，当作文件夹处理`);
-          navigateToFolderPath(targetPath);
-          return;
-        }
-
+      if (targetView === 'album') {
         navigateToAlbumPath(targetPath, getBasename(targetPath));
       } else {
         navigateToFolderPath(targetPath);
@@ -784,7 +772,7 @@ function AlbumPage({
     } finally {
       setTimeout(() => setIsNavigating(false), 100);
     }
-  }, [isNavigating, urlMode, onBreadcrumbNavigate, decodedAlbumPath, rootPath, detectPathType, getPathImageCount, navigateToFolderPath, navigateToAlbumPath]);
+  }, [isNavigating, urlMode, onBreadcrumbNavigate, decodedAlbumPath, rootPath, resolveTargetView, navigateToFolderPath, navigateToAlbumPath]);
 
   // 处理浮动面板导航
   // 处理随机选择相簿
@@ -1014,6 +1002,28 @@ function AlbumPage({
           </Typography>
         )}
       </Box>
+      {childFolderCount > 0 && (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2,
+            px: 2,
+            py: 1.25,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
+            bgcolor: 'action.hover'
+          }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            该目录还有 {childFolderCount} 个子文件夹
+          </Typography>
+          <Button size="small" variant="outlined" onClick={handleOpenContainerView}>
+            进入浏览
+          </Button>
+        </Paper>
+      )}
       {filteredImagesCount > 0 ? (
         <Virtuoso
           data={gridRows}
