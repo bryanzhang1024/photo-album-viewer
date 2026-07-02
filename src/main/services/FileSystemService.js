@@ -666,35 +666,203 @@ function createAlbumNode(path, name, stats) {
   };
 }
 
-async function getAlbumImages(albumPath) {
+const DEFAULT_ALBUM_PAGE_SIZE = 200;
+const albumImageMetadataCache = new Map();
+
+function clearAlbumImageMetadataCache(albumPath) {
+  if (albumPath) {
+    albumImageMetadataCache.delete(albumPath);
+    return;
+  }
+  albumImageMetadataCache.clear();
+}
+
+async function buildAlbumImageMetadata(albumPath) {
+  if (albumImageMetadataCache.has(albumPath)) {
+    return albumImageMetadataCache.get(albumPath);
+  }
+
+  const entries = await readdir(albumPath);
+  const images = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(albumPath, entry);
     try {
-      const entries = await readdir(albumPath);
-      const images = [];
-      
-      for (const entry of entries) {
-        const fullPath = path.join(albumPath, entry);
-        try {
-          const entryStats = await stat(fullPath);
-          
-          if (entryStats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
-            images.push({
-              path: fullPath,
-              name: entry,
-              size: entryStats.size,
-              lastModified: entryStats.mtime
-            });
-          }
-        } catch (err) {
-          console.error(`无法访问 ${fullPath}:`, err);
-          continue;
-        }
+      const entryStats = await stat(fullPath);
+
+      if (entryStats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
+        images.push({
+          path: fullPath,
+          name: entry,
+          size: entryStats.size,
+          lastModified: entryStats.mtime
+        });
       }
-      
-      return images;
-    } catch (error) {
-      console.error('Error getting album images:', error);
-      return [];
+    } catch (err) {
+      console.error(`无法访问 ${fullPath}:`, err);
     }
+  }
+
+  albumImageMetadataCache.set(albumPath, images);
+  return images;
+}
+
+function filterAlbumImagesBySearch(images, searchQuery) {
+  const normalizedQuery = typeof searchQuery === 'string' ? searchQuery.trim().toLowerCase() : '';
+  if (!normalizedQuery) {
+    return images;
+  }
+
+  return images.filter((image) => (image.name || '').toLowerCase().includes(normalizedQuery));
+}
+
+function sortAlbumImages(images, sortBy = 'name', sortDirection = 'asc') {
+  const sorted = [...images];
+  const directionMultiplier = sortDirection === 'desc' ? -1 : 1;
+
+  sorted.sort((left, right) => {
+    let comparison = 0;
+
+    if (sortBy === 'size') {
+      comparison = (left.size || 0) - (right.size || 0);
+    } else if (sortBy === 'lastModified') {
+      comparison = new Date(left.lastModified).getTime() - new Date(right.lastModified).getTime();
+    } else {
+      comparison = compareImageNameNaturalAsc(left, right);
+    }
+
+    return comparison * directionMultiplier;
+  });
+
+  return sorted;
+}
+
+function normalizeAlbumPageOptions(options = {}) {
+  const offset = Math.max(0, Number(options.offset) || 0);
+  const limit = Math.max(1, Math.min(1000, Number(options.limit) || DEFAULT_ALBUM_PAGE_SIZE));
+  const sortBy = options.sortBy === 'size' || options.sortBy === 'lastModified' ? options.sortBy : 'name';
+  const sortDirection = options.sortDirection === 'desc' ? 'desc' : 'asc';
+  const searchQuery = typeof options.searchQuery === 'string' ? options.searchQuery : '';
+  const locatePath = typeof options.locatePath === 'string' ? options.locatePath : null;
+
+  return {
+    offset,
+    limit,
+    sortBy,
+    sortDirection,
+    searchQuery,
+    locatePath
+  };
+}
+
+async function getAlbumImagesPage(albumPath, options = {}) {
+  try {
+    const {
+      offset,
+      limit,
+      sortBy,
+      sortDirection,
+      searchQuery,
+      locatePath
+    } = normalizeAlbumPageOptions(options);
+
+    const metadata = await buildAlbumImageMetadata(albumPath);
+    const filtered = filterAlbumImagesBySearch(metadata, searchQuery);
+    const sorted = sortAlbumImages(filtered, sortBy, sortDirection);
+    const totalCount = sorted.length;
+
+    let pageOffset = offset;
+    if (locatePath) {
+      const globalIndex = sorted.findIndex((image) => image.path === locatePath);
+      if (globalIndex === -1) {
+        return {
+          success: true,
+          albumPath,
+          images: [],
+          totalCount,
+          offset: 0,
+          limit,
+          hasMore: false,
+          globalIndex: -1,
+          sortBy,
+          sortDirection,
+          searchQuery
+        };
+      }
+
+      pageOffset = Math.floor(globalIndex / limit) * limit;
+      const pageImages = sorted.slice(pageOffset, pageOffset + limit);
+
+      return {
+        success: true,
+        albumPath,
+        images: pageImages,
+        totalCount,
+        offset: pageOffset,
+        limit,
+        hasMore: pageOffset + pageImages.length < totalCount,
+        globalIndex,
+        sortBy,
+        sortDirection,
+        searchQuery
+      };
+    }
+
+    const pageImages = sorted.slice(pageOffset, pageOffset + limit);
+
+    return {
+      success: true,
+      albumPath,
+      images: pageImages,
+      totalCount,
+      offset: pageOffset,
+      limit,
+      hasMore: pageOffset + pageImages.length < totalCount,
+      globalIndex: null,
+      sortBy,
+      sortDirection,
+      searchQuery
+    };
+  } catch (error) {
+    console.error('Error getting album images page:', error);
+    return {
+      success: false,
+      albumPath,
+      images: [],
+      totalCount: 0,
+      offset: 0,
+      limit: DEFAULT_ALBUM_PAGE_SIZE,
+      hasMore: false,
+      globalIndex: null,
+      error: error.message
+    };
+  }
+}
+
+async function getAlbumImageCount(albumPath) {
+  try {
+    const metadata = await buildAlbumImageMetadata(albumPath);
+    return {
+      success: true,
+      count: metadata.length
+    };
+  } catch (error) {
+    console.error('Error getting album image count:', error);
+    return {
+      success: false,
+      count: 0,
+      error: error.message
+    };
+  }
+}
+
+async function getAlbumImages(albumPath) {
+  try {
+    return await buildAlbumImageMetadata(albumPath);
+  } catch (error) {
+    console.error('Error getting album images:', error);
+    return [];
+  }
 }
 
 /**
@@ -771,6 +939,10 @@ async function scanDirectoryTree(rootPath, depth = 0, maxDepth = 3) {
 module.exports = {
     scanNavigationLevel,
     getAlbumImages,
+    getAlbumImagesPage,
+    getAlbumImageCount,
+    clearAlbumImageMetadataCache,
+    DEFAULT_ALBUM_PAGE_SIZE,
     scanDirectoryTree,
     createErrorResponse,
     SUPPORTED_FORMATS,

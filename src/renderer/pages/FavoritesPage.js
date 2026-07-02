@@ -165,8 +165,8 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
       }
 
       if (!favoriteItem.kind && ipcRenderer) {
-        const directImages = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, albumPath);
-        onNavigate(albumPath, directImages && directImages.length > 0 ? 'album' : 'folder');
+        const countResult = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGE_COUNT, albumPath);
+        onNavigate(albumPath, countResult?.count > 0 ? 'album' : 'folder');
         return;
       }
 
@@ -180,8 +180,8 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
     }
 
     if (!favoriteItem.kind && ipcRenderer) {
-      const directImages = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, albumPath);
-      navigateToBrowsePath(navigate, albumPath, { viewMode: directImages && directImages.length > 0 ? 'album' : 'folder' });
+      const countResult = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGE_COUNT, albumPath);
+      navigateToBrowsePath(navigate, albumPath, { viewMode: countResult?.count > 0 ? 'album' : 'folder' });
       return;
     }
 

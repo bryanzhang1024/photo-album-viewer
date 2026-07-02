@@ -6,6 +6,9 @@ const {
   scanNavigationLevel,
   scanDirectoryTree,
   createErrorResponse,
+  getAlbumImagesPage,
+  getAlbumImageCount,
+  clearAlbumImageMetadataCache,
   SUPPORTED_FORMATS
 } = require('../../src/main/services/FileSystemService');
 const { createFsMock } = require('../helpers/fsMock');
@@ -342,5 +345,89 @@ describe('FileSystemService', () => {
       hasImages: true
     });
     expect(album2.children).toHaveLength(1);
+  });
+
+  test('getAlbumImagesPage returns paginated sorted images', async () => {
+    mockFs = createFsMock({
+      '/albums/big': {
+        '2.jpg': Buffer.from('image-2'),
+        '10.jpg': Buffer.from('image-10'),
+        '1.jpg': Buffer.from('image-1')
+      }
+    });
+
+    clearAlbumImageMetadataCache('/albums/big');
+
+    const page = await getAlbumImagesPage('/albums/big', {
+      offset: 0,
+      limit: 2,
+      sortBy: 'name',
+      sortDirection: 'asc'
+    });
+
+    expect(page.success).toBe(true);
+    expect(page.totalCount).toBe(3);
+    expect(page.images).toHaveLength(2);
+    expect(page.images.map((image) => image.name)).toEqual(['1.jpg', '2.jpg']);
+    expect(page.hasMore).toBe(true);
+  });
+
+  test('getAlbumImagesPage filters by search query before pagination', async () => {
+    mockFs = createFsMock({
+      '/albums/search': {
+        'cat-a.jpg': Buffer.from('cat-a'),
+        'dog-b.jpg': Buffer.from('dog-b'),
+        'cat-c.jpg': Buffer.from('cat-c')
+      }
+    });
+
+    clearAlbumImageMetadataCache('/albums/search');
+
+    const page = await getAlbumImagesPage('/albums/search', {
+      offset: 0,
+      limit: 1,
+      searchQuery: 'cat'
+    });
+
+    expect(page.totalCount).toBe(2);
+    expect(page.images).toHaveLength(1);
+    expect(page.images[0].name).toBe('cat-a.jpg');
+    expect(page.hasMore).toBe(true);
+  });
+
+  test('getAlbumImagesPage locates page containing target image', async () => {
+    mockFs = createFsMock({
+      '/albums/locate': {
+        '1.jpg': Buffer.from('image-1'),
+        '2.jpg': Buffer.from('image-2'),
+        '3.jpg': Buffer.from('image-3')
+      }
+    });
+
+    clearAlbumImageMetadataCache('/albums/locate');
+
+    const page = await getAlbumImagesPage('/albums/locate', {
+      offset: 0,
+      limit: 2,
+      locatePath: path.join('/albums/locate', '3.jpg')
+    });
+
+    expect(page.globalIndex).toBe(2);
+    expect(page.offset).toBe(2);
+    expect(page.images.map((image) => image.name)).toEqual(['3.jpg']);
+  });
+
+  test('getAlbumImageCount returns image total without full renderer payload', async () => {
+    mockFs = createFsMock({
+      '/albums/count': {
+        '1.jpg': Buffer.from('image-1'),
+        'note.txt': 'ignored'
+      }
+    });
+
+    clearAlbumImageMetadataCache('/albums/count');
+
+    const result = await getAlbumImageCount('/albums/count');
+    expect(result).toEqual({ success: true, count: 1 });
   });
 });

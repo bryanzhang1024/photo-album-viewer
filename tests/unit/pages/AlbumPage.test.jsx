@@ -11,15 +11,24 @@ jest.mock('react-router-dom', () => {
   };
 });
 
-jest.mock('react-virtuoso', () => ({
-  Virtuoso: ({ data = [], itemContent }) => (
-    <div data-testid="virtuoso">
-      {data.map((item, index) => (
-        <div key={index}>{itemContent(index, item)}</div>
-      ))}
-    </div>
-  )
-}));
+jest.mock('react-virtuoso', () => {
+  const React = require('react');
+  return {
+    Virtuoso: ({ data = [], itemContent, endReached }) => {
+      React.useEffect(() => {
+        endReached?.();
+      }, [endReached]);
+
+      return (
+        <div data-testid="virtuoso">
+          {data.map((item, index) => (
+            <div key={index}>{itemContent(index, item)}</div>
+          ))}
+        </div>
+      );
+    }
+  };
+});
 
 jest.mock('../../../src/renderer/components/BreadcrumbNavigation', () =>
   jest.fn(() => <div data-testid="breadcrumbs" />)
@@ -107,10 +116,17 @@ describe('AlbumPage refresh button', () => {
     reactRouter.useParams.mockReturnValue({});
     useAlbumImages.mockReturnValue({
       images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
+      totalCount: 1,
+      hasMore: false,
       loading: false,
+      loadingMore: false,
       error: '',
+      queryKey: '{}',
       loadImages: jest.fn(() => Promise.resolve([])),
-      refresh: jest.fn()
+      loadMore: jest.fn(),
+      ensureImageLoaded: jest.fn(() => Promise.resolve({ images: [], globalIndex: -1, offset: 0 })),
+      refresh: jest.fn(),
+      removeImage: jest.fn()
     });
   });
 
@@ -118,10 +134,17 @@ describe('AlbumPage refresh button', () => {
     const refresh = jest.fn();
     useAlbumImages.mockReturnValue({
       images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
+      totalCount: 1,
+      hasMore: false,
       loading: false,
+      loadingMore: false,
       error: '',
+      queryKey: '{}',
       loadImages: jest.fn(() => Promise.resolve([])),
-      refresh
+      loadMore: jest.fn(),
+      ensureImageLoaded: jest.fn(() => Promise.resolve({ images: [], globalIndex: -1, offset: 0 })),
+      refresh,
+      removeImage: jest.fn()
     });
 
     render(
@@ -186,5 +209,38 @@ describe('AlbumPage refresh button', () => {
     fireEvent.click(screen.getByRole('button', { name: '进入浏览' }));
 
     expect(onNavigate).toHaveBeenCalledWith('/albums/trip', 'folder', null, false);
+  });
+
+  test('calls loadMore when virtuoso reaches end and more pages exist', () => {
+    const loadMore = jest.fn();
+    useAlbumImages.mockReturnValue({
+      images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
+      totalCount: 500,
+      hasMore: true,
+      loading: false,
+      loadingMore: false,
+      error: '',
+      queryKey: '{}',
+      loadImages: jest.fn(() => Promise.resolve([])),
+      loadMore,
+      ensureImageLoaded: jest.fn(() => Promise.resolve({ images: [], globalIndex: -1, offset: 0 })),
+      refresh: jest.fn(),
+      removeImage: jest.fn()
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    expect(screen.getByText('共 500 张照片')).toBeInTheDocument();
+    expect(loadMore).toHaveBeenCalled();
   });
 });

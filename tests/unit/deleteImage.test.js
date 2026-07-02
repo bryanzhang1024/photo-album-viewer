@@ -62,6 +62,7 @@ const setupMainProcess = () => {
     scanNavigationLevel: jest.fn(),
     scanDirectories: jest.fn(),
     getAlbumImages: jest.fn(),
+    clearAlbumImageMetadataCache: jest.fn(),
     SUPPORTED_FORMATS: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
   }));
 
