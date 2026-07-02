@@ -12,11 +12,21 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
 }));
 
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
-const { useAlbumImages } = require('../../../src/renderer/hooks/useAlbumImages');
+const { useAlbumImages, DEFAULT_ALBUM_PAGE_SIZE } = require('../../../src/renderer/hooks/useAlbumImages');
 const ipcRenderer = global.electronMock.ipcRenderer;
 
 const defaultRequireImpl = (moduleName) =>
   moduleName === 'electron' ? global.electronMock : {};
+
+const pageResponse = (images, { totalCount = images.length, offset = 0, hasMore = false, globalIndex = null } = {}) => ({
+  success: true,
+  images,
+  totalCount,
+  offset,
+  limit: DEFAULT_ALBUM_PAGE_SIZE,
+  hasMore,
+  globalIndex
+});
 
 describe('useAlbumImages', () => {
   beforeEach(() => {
@@ -33,78 +43,93 @@ describe('useAlbumImages', () => {
     });
 
     expect(result.current.images).toEqual([]);
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('');
-    expect(imageCache.get).not.toHaveBeenCalled();
+    expect(result.current.totalCount).toBe(0);
+    expect(result.current.hasMore).toBe(false);
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
 
-  test('uses cache when cached data available', async () => {
-    const cachedImages = [{ name: 'foo.jpg' }];
-    imageCache.get.mockReturnValueOnce(cachedImages);
-
-    const { result } = renderHook(() => useAlbumImages('/albums/2024'));
-
-    await act(async () => {
-      const data = await result.current.loadImages();
-      expect(data).toEqual(cachedImages);
-    });
-
-    expect(result.current.images).toEqual(cachedImages);
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('');
-    expect(ipcRenderer.invoke).not.toHaveBeenCalled();
-    expect(imageCache.set).not.toHaveBeenCalled();
-  });
-
-  test('invokes IPC and caches result when cache miss', async () => {
-    const mockImages = [{ name: 'a.jpg' }, { name: 'b.jpg' }];
-    imageCache.get.mockReturnValueOnce(null);
-    ipcRenderer.invoke.mockResolvedValueOnce(mockImages);
+  test('loads first page with pagination envelope', async () => {
+    const mockImages = [{ path: '/albums/holiday/1.jpg', name: '1.jpg' }];
+    ipcRenderer.invoke.mockResolvedValueOnce(pageResponse(mockImages, { totalCount: 250, hasMore: true }));
 
     const { result } = renderHook(() => useAlbumImages('/albums/holiday'));
 
     await act(async () => {
-      const data = await result.current.loadImages();
-      expect(data).toEqual(mockImages);
+      await result.current.loadImages();
     });
 
-    expect(imageCache.get).toHaveBeenCalledWith('album', '/albums/holiday');
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(
       CHANNELS.GET_ALBUM_IMAGES,
-      '/albums/holiday'
+      '/albums/holiday',
+      expect.objectContaining({
+        offset: 0,
+        limit: DEFAULT_ALBUM_PAGE_SIZE,
+        sortBy: 'name',
+        sortDirection: 'asc'
+      })
     );
-    expect(imageCache.set).toHaveBeenCalledWith('album', '/albums/holiday', mockImages);
     expect(result.current.images).toEqual(mockImages);
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('');
+    expect(result.current.totalCount).toBe(250);
+    expect(result.current.hasMore).toBe(true);
   });
 
-  test('exposes error state when IPC call fails', async () => {
-    imageCache.get.mockReturnValueOnce(null);
-    ipcRenderer.invoke.mockRejectedValueOnce(new Error('boom'));
+  test('loadMore appends the next page', async () => {
+    const firstPage = [{ path: '/albums/holiday/1.jpg', name: '1.jpg' }];
+    const secondPage = [{ path: '/albums/holiday/2.jpg', name: '2.jpg' }];
 
-    const { result } = renderHook(() => useAlbumImages('/albums/error'));
+    ipcRenderer.invoke
+      .mockResolvedValueOnce(pageResponse(firstPage, { totalCount: 2, hasMore: true }))
+      .mockResolvedValueOnce(pageResponse(secondPage, { offset: 1, totalCount: 2, hasMore: false }));
+
+    const { result } = renderHook(() => useAlbumImages('/albums/holiday', { pageSize: 1 }));
 
     await act(async () => {
-      const data = await result.current.loadImages();
-      expect(data).toEqual([]);
+      await result.current.loadImages();
     });
 
-    expect(imageCache.set).not.toHaveBeenCalled();
-    expect(result.current.images).toEqual([]);
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('加载相簿图片时出错: boom');
+    await act(async () => {
+      await result.current.loadMore();
+    });
+
+    expect(result.current.images).toEqual([...firstPage, ...secondPage]);
+    expect(result.current.hasMore).toBe(false);
   });
 
-  test('refresh clears the album entry and reloads album', async () => {
-    const firstBatch = [{ name: 'old.jpg' }];
-    const secondBatch = [{ name: 'new.jpg' }];
+  test('ensureImageLoaded requests page containing target image', async () => {
+    const targetPage = [
+      { path: '/albums/holiday/201.jpg', name: '201.jpg' }
+    ];
 
-    imageCache.get.mockReturnValueOnce(null).mockReturnValueOnce(null);
+    ipcRenderer.invoke.mockResolvedValueOnce(pageResponse(targetPage, {
+      totalCount: 250,
+      offset: 200,
+      hasMore: true,
+      globalIndex: 200
+    }));
+
+    const { result } = renderHook(() => useAlbumImages('/albums/holiday'));
+
+    await act(async () => {
+      const located = await result.current.ensureImageLoaded('/albums/holiday/201.jpg');
+      expect(located.globalIndex).toBe(200);
+    });
+
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+      CHANNELS.GET_ALBUM_IMAGES,
+      '/albums/holiday',
+      expect.objectContaining({
+        locatePath: '/albums/holiday/201.jpg'
+      })
+    );
+  });
+
+  test('refresh clears album cache entry and reloads', async () => {
+    const firstBatch = [{ path: '/albums/refresh/1.jpg', name: '1.jpg' }];
+    const secondBatch = [{ path: '/albums/refresh/2.jpg', name: '2.jpg' }];
+
     ipcRenderer.invoke
-      .mockResolvedValueOnce(firstBatch)
-      .mockResolvedValueOnce(secondBatch);
+      .mockResolvedValueOnce(pageResponse(firstBatch))
+      .mockResolvedValueOnce(pageResponse(secondBatch));
 
     const { result } = renderHook(() => useAlbumImages('/albums/refresh'));
 
@@ -117,27 +142,19 @@ describe('useAlbumImages', () => {
     });
 
     expect(imageCache.deleteEntry).toHaveBeenCalledWith('album', '/albums/refresh');
-    expect(imageCache.delete).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(imageCache.set).toHaveBeenLastCalledWith(
-        'album',
-        '/albums/refresh',
-        secondBatch
-      );
       expect(result.current.images).toEqual(secondBatch);
     });
-
-    expect(ipcRenderer.invoke).toHaveBeenCalledTimes(2);
   });
 
-  test('removeImage deletes an image from state and album cache', async () => {
+  test('removeImage updates local state and total count', async () => {
     const mockImages = [
       { path: '/albums/trip/a.jpg', name: 'a.jpg' },
       { path: '/albums/trip/b.jpg', name: 'b.jpg' }
     ];
-    imageCache.get.mockReturnValueOnce(null);
-    ipcRenderer.invoke.mockResolvedValueOnce(mockImages);
+
+    ipcRenderer.invoke.mockResolvedValueOnce(pageResponse(mockImages, { totalCount: 2 }));
 
     const { result } = renderHook(() => useAlbumImages('/albums/trip'));
 
@@ -150,10 +167,6 @@ describe('useAlbumImages', () => {
     });
 
     expect(result.current.images).toEqual([{ path: '/albums/trip/b.jpg', name: 'b.jpg' }]);
-    expect(imageCache.set).toHaveBeenLastCalledWith(
-      'album',
-      '/albums/trip',
-      [{ path: '/albums/trip/b.jpg', name: 'b.jpg' }]
-    );
+    expect(result.current.totalCount).toBe(1);
   });
 });

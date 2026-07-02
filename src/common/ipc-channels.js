@@ -6,6 +6,7 @@ module.exports = {
     GET_THUMBNAIL: 'get-thumbnail',
     GET_BATCH_THUMBNAILS: 'get-batch-thumbnails',
     GET_ALBUM_IMAGES: 'get-album-images',
+    GET_ALBUM_IMAGE_COUNT: 'get-album-image-count',
     UPDATE_PERFORMANCE_SETTINGS: 'update-performance-settings',
     GET_CACHE_STATS: 'get-cache-stats',
     SAVE_FAVORITES: 'save-favorites',

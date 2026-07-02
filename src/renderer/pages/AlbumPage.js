@@ -165,7 +165,29 @@ function AlbumPage({
   });
 
   // 使用自定义 Hooks
-  const { images, loading, error: loadError, loadImages, refresh, removeImage } = useAlbumImages(decodedAlbumPath);
+  const normalizedSearchQuery = useMemo(
+    () => searchQuery.trim().toLowerCase(),
+    [searchQuery]
+  );
+
+  const {
+    images,
+    totalCount,
+    hasMore,
+    loading,
+    loadingMore,
+    error: loadError,
+    loadImages,
+    loadMore,
+    ensureImageLoaded,
+    refresh,
+    removeImage,
+    queryKey
+  } = useAlbumImages(decodedAlbumPath, {
+    sortBy,
+    sortDirection,
+    searchQuery: normalizedSearchQuery
+  });
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
 
@@ -173,21 +195,6 @@ function AlbumPage({
     setSearchQuery('');
     setSearchHasFocus(false);
   }, [decodedAlbumPath]);
-
-  const normalizedSearchQuery = useMemo(
-    () => searchQuery.trim().toLowerCase(),
-    [searchQuery]
-  );
-
-  const filteredImages = useMemo(() => {
-    if (!normalizedSearchQuery) {
-      return images;
-    }
-
-    return images.filter((image) =>
-      (image.name || '').toLowerCase().includes(normalizedSearchQuery)
-    );
-  }, [images, normalizedSearchQuery]);
 
   // 检测路径类型（文件夹 vs 相簿）
   const loadChildFolderCount = useCallback(async (path) => {
@@ -240,7 +247,13 @@ function AlbumPage({
 
     const loadAllData = async () => {
       if (cancelled) return;
-      const result = await loadImages();
+
+      let located = null;
+      if (initialImagePath.current) {
+        located = await ensureImageLoaded(initialImagePath.current);
+      } else {
+        await loadImages();
+      }
 
       if (cancelled) return;
       await loadNeighboringAlbums();
@@ -257,9 +270,8 @@ function AlbumPage({
       if (cancelled) return;
       await preloadParentDirectory();
 
-      // 如果有初始图片路径，找到对应的索引并打开查看器
-      if (initialImagePath.current && result.length > 0) {
-        const imageIndex = result.findIndex(img => img.path === initialImagePath.current);
+      if (initialImagePath.current && located?.globalIndex >= 0) {
+        const imageIndex = located.globalIndex - (located.offset || 0);
         if (imageIndex !== -1) {
           setTimeout(() => {
             setSelectedImageIndex(imageIndex);
@@ -272,11 +284,10 @@ function AlbumPage({
 
     loadAllData();
 
-    // Cleanup: 组件卸载或路径变化时取消旧请求
     return () => {
       cancelled = true;
     };
-  }, [decodedAlbumPath, loadImages, loadNeighboringAlbums, loadBreadcrumbs, loadChildFolderCount]);
+  }, [decodedAlbumPath, queryKey, loadImages, ensureImageLoaded, loadNeighboringAlbums, loadBreadcrumbs, loadChildFolderCount]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -492,60 +503,28 @@ function AlbumPage({
     localStorage.setItem('userDensity', newDensity);
   };
 
-  // 自然排序函数 - 正确处理数字排序
-  const naturalSort = (a, b) => {
-    const ax = [], bx = [];
-    
-    a.replace(/(\d+)|(\D+)/g, (_, $1, $2) => { ax.push([$1 || Infinity, $2 || ""]) });
-    b.replace(/(\d+)|(\D+)/g, (_, $1, $2) => { bx.push([$1 || Infinity, $2 || ""]) });
-    
-    while (ax.length && bx.length) {
-      const an = ax.shift();
-      const bn = bx.shift();
-      const nn = (an[0] - bn[0]) || an[1].localeCompare(bn[1]);
-      if (nn) return nn;
-    }
-    
-    return ax.length - bx.length;
-  };
-
-  // 排序图片
-  const sortedImages = useMemo(() => {
-    if (!filteredImages.length) return [];
-
-    const sorted = [...filteredImages].sort((a, b) => {
-      let comparison = 0;
-
-      if (sortBy === 'name') {
-        comparison = naturalSort(a.name, b.name);
-      } else if (sortBy === 'size') {
-        comparison = a.size - b.size;
-      } else if (sortBy === 'lastModified') {
-        comparison = new Date(a.lastModified) - new Date(b.lastModified);
-      }
-
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-
-    return sorted;
-  }, [filteredImages, sortBy, sortDirection]);
-
   useEffect(() => {
-    if (!sortedImages.length) {
+    if (!images.length) {
       setViewerOpen(false);
       setSelectedImageIndex(0);
       return;
     }
 
-    if (selectedImageIndex >= sortedImages.length) {
+    if (selectedImageIndex >= images.length) {
       setSelectedImageIndex(0);
     }
-  }, [sortedImages.length, selectedImageIndex]);
+  }, [images.length, selectedImageIndex]);
 
   const hasActiveSearch = Boolean(normalizedSearchQuery);
-  const totalImagesCount = images.length;
-  const filteredImagesCount = sortedImages.length;
+  const totalImagesCount = totalCount;
+  const filteredImagesCount = totalCount;
   const canRefreshAlbum = Boolean(decodedAlbumPath);
+
+  const handleLoadMore = useCallback(() => {
+    if (hasMore && !loadingMore && !loading) {
+      loadMore();
+    }
+  }, [hasMore, loadingMore, loading, loadMore]);
 
   const handleViewerImageDeleted = useCallback((deletedPath) => {
     removeImage(deletedPath);
@@ -570,8 +549,8 @@ function AlbumPage({
 
   // 将一维图片数组转换为二维网格行
   const gridRows = useMemo(
-    () => chunkIntoRows(sortedImages, columnsCount),
-    [sortedImages, columnsCount]
+    () => chunkIntoRows(images, columnsCount),
+    [images, columnsCount]
   );
 
   const densityConfig = useMemo(
@@ -692,8 +671,8 @@ function AlbumPage({
     const album = {
       name: getAlbumName(),
       path: decodedAlbumPath,
-      imageCount: images.length,
-      previewImages: images.slice(0, 4) // 取前4张图片作为预览
+      imageCount: totalCount,
+      previewImages: images.slice(0, 4)
     };
     
     await toggleAlbumFavorite(album);
@@ -1035,6 +1014,7 @@ function AlbumPage({
             return firstImage?.path ? `row-${firstImage.path}` : `row-${rowIndex}`;
           }}
           rangeChanged={handleRangeChanged}
+          endReached={handleLoadMore}
           itemContent={(rowIndex, imageRow) => {
             const config = densityConfig;
             const columns = columnsCount;
@@ -1085,11 +1065,13 @@ function AlbumPage({
       )}
       {viewerOpen && (
         <ImageViewer
-          images={sortedImages}
+          images={images}
           currentIndex={selectedImageIndex}
           onClose={handleCloseViewer}
           onIndexChange={setSelectedImageIndex}
           onImageDeleted={handleViewerImageDeleted}
+          hasMore={hasMore}
+          onNearEnd={handleLoadMore}
         />
       )}
       <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>

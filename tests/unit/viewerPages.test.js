@@ -149,4 +149,26 @@ describe('viewerPages', () => {
       dualPageEnabled: false
     })).toEqual([0]);
   });
+
+  test('returns sentinel when more images exist beyond loaded list', () => {
+    expect(getNextPageIndex({
+      images,
+      currentIndex: 3,
+      dimensionsByIndex: new Map([[3, portrait]]),
+      viewport: viewport16By9,
+      dualPageEnabled: false,
+      hasMore: true
+    })).toBe(-1);
+  });
+
+  test('wraps to first image when no more pages remain', () => {
+    expect(getNextPageIndex({
+      images,
+      currentIndex: 3,
+      dimensionsByIndex: new Map([[3, portrait]]),
+      viewport: viewport16By9,
+      dualPageEnabled: false,
+      hasMore: false
+    })).toBe(0);
+  });
 });

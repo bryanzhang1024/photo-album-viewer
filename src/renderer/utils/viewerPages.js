@@ -72,7 +72,8 @@ function getNextPageIndex({
   dimensionsByIndex,
   viewport,
   dualPageEnabled,
-  gap = DEFAULT_DUAL_PAGE_GAP
+  gap = DEFAULT_DUAL_PAGE_GAP,
+  hasMore = false
 }) {
   if (!Array.isArray(images) || images.length === 0) {
     return 0;
@@ -88,7 +89,11 @@ function getNextPageIndex({
   });
   const nextIndex = currentIndex + Math.max(visibleIndices.length, 1);
 
-  return nextIndex >= images.length ? 0 : nextIndex;
+  if (nextIndex >= images.length) {
+    return hasMore ? -1 : 0;
+  }
+
+  return nextIndex;
 }
 
 function getPreviousPageIndex({

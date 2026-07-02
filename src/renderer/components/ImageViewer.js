@@ -88,7 +88,7 @@ function getResolutionText(dimensions) {
   return `${dimensions.width} x ${dimensions.height}`;
 }
 
-function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted }) {
+function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted, hasMore = false, onNearEnd }) {
   // 使用收藏上下文和设置上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const { settings } = useSettings();
@@ -326,6 +326,16 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
 
     preloadImages();
   }, [currentIndex, images, preloadCache, pendingNavigation, getSafeImageUrl]);
+
+  useEffect(() => {
+    if (!hasMore || !onNearEnd || images.length === 0) {
+      return;
+    }
+
+    if (currentIndex >= images.length - 3) {
+      onNearEnd();
+    }
+  }, [currentIndex, hasMore, images.length, onNearEnd]);
 
   // 添加键盘导航支持
   useEffect(() => {
@@ -588,8 +598,14 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
         currentIndex,
         dimensionsByIndex,
         viewport: viewportSize,
-        dualPageEnabled
+        dualPageEnabled,
+        hasMore
       });
+
+    if (newIndex === -1) {
+      onNearEnd?.();
+      return;
+    }
 
     // 切换图片前重置状态
     setZoomLevel(1);

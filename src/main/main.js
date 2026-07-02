@@ -495,12 +495,38 @@ ipcMain.handle(CHANNELS.GET_BATCH_THUMBNAILS, async (event, imagePaths, priority
 
 
 
-ipcMain.handle(CHANNELS.GET_ALBUM_IMAGES, async (event, albumPath) => {
+ipcMain.handle(CHANNELS.GET_ALBUM_IMAGES, async (event, albumPath, options) => {
     const isAllowed = await assertApprovedPath(albumPath, { bootstrapWhenEmpty: true });
     if (!isAllowed) {
+      if (options && typeof options === 'object') {
+        return {
+          success: false,
+          albumPath,
+          images: [],
+          totalCount: 0,
+          offset: 0,
+          limit: FileSystemService.DEFAULT_ALBUM_PAGE_SIZE,
+          hasMore: false,
+          globalIndex: null,
+          error: 'Path not approved'
+        };
+      }
       return [];
     }
+
+    if (options && typeof options === 'object') {
+      return FileSystemService.getAlbumImagesPage(albumPath, options);
+    }
+
     return FileSystemService.getAlbumImages(albumPath);
+});
+
+ipcMain.handle(CHANNELS.GET_ALBUM_IMAGE_COUNT, async (event, albumPath) => {
+    const isAllowed = await assertApprovedPath(albumPath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      return { success: false, count: 0, error: 'Path not approved' };
+    }
+    return FileSystemService.getAlbumImageCount(albumPath);
 });
 
 // 处理性能设置更新
@@ -631,6 +657,7 @@ ipcMain.handle(CHANNELS.TRASH_IMAGE, async (event, filePath) => {
     }
 
     await shell.trashItem(normalizedPath);
+    FileSystemService.clearAlbumImageMetadataCache(path.dirname(normalizedPath));
     return { success: true, filePath: normalizedPath };
   } catch (error) {
     console.error('移动图片到废纸篓失败:', error);
