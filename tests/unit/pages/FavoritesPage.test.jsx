@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
@@ -10,15 +10,24 @@ jest.mock('react-router-dom', () => {
   };
 });
 
-jest.mock('react-virtuoso', () => ({
-  Virtuoso: ({ data = [], itemContent }) => (
-    <div data-testid="virtuoso">
-      {data.map((item, index) => (
-        <div key={index}>{itemContent(index, item)}</div>
-      ))}
-    </div>
-  )
-}));
+jest.mock('react-virtuoso', () => {
+  const React = require('react');
+  return {
+    Virtuoso: ({ data = [], itemContent, rangeChanged }) => {
+      React.useEffect(() => {
+        rangeChanged?.({ startIndex: 0, endIndex: Math.max(0, data.length - 1) });
+      }, [data, rangeChanged]);
+
+      return (
+        <div data-testid="virtuoso">
+          {data.map((item, index) => (
+            <div key={index}>{itemContent(index, item)}</div>
+          ))}
+        </div>
+      );
+    }
+  };
+});
 
 jest.mock('../../../src/renderer/components/AlbumCard', () =>
   jest.fn(({ album, onClick }) => (
@@ -54,7 +63,8 @@ jest.mock('../../../src/renderer/contexts/FavoritesContext', () => ({
           kind: 'photoSet',
           path: '/photos/mixed',
           name: 'mixed photos',
-          imageCount: 2
+          imageCount: 2,
+          previewSamples: ['/photos/mixed/cover.jpg']
         }
       ],
       images: [],
@@ -66,6 +76,7 @@ jest.mock('../../../src/renderer/contexts/FavoritesContext', () => ({
 const reactRouter = require('react-router-dom');
 const { ScrollPositionContext } = require('../../../src/renderer/App');
 const FavoritesPage = require('../../../src/renderer/pages/FavoritesPage').default;
+const ipcRenderer = global.electronMock.ipcRenderer;
 
 describe('FavoritesPage navigation', () => {
   beforeEach(() => {
@@ -94,5 +105,30 @@ describe('FavoritesPage navigation', () => {
 
     expect(onNavigate).toHaveBeenNthCalledWith(1, '/photos/mixed', 'folder');
     expect(onNavigate).toHaveBeenNthCalledWith(2, '/photos/mixed', 'album');
+  });
+
+  test('prefetches thumbnails for favorites album tab rows', async () => {
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === 'get-batch-thumbnails') {
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <FavoritesPage urlMode={true} onNavigate={jest.fn()} />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        'get-batch-thumbnails',
+        expect.arrayContaining(['/photos/mixed/cover.jpg']),
+        expect.any(Number)
+      );
+    });
   });
 });

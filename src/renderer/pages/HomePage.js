@@ -47,6 +47,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
+import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import { navigateToBrowsePath } from '../utils/navigation';
@@ -536,6 +537,11 @@ function HomePage({
     () => chunkIntoRows(sortedDisplayItems, columnsCount),
     [sortedDisplayItems, columnsCount]
   );
+
+  const { handleRangeChanged } = useGridThumbnailPrefetch({
+    gridRows,
+    extractPathsFromRow: extractHomePageRowPaths
+  });
 
   const hasActiveSearch = Boolean(normalizedSearchQuery);
   const totalItemsCount = navigationNodes.length + directImages.length;
@@ -1097,6 +1103,7 @@ function HomePage({
               const firstItem = Array.isArray(row) ? row[0] : null;
               return firstItem?.key ? `row-${firstItem.key}` : `row-${rowIndex}`;
             }}
+            rangeChanged={handleRangeChanged}
             itemContent={(rowIndex, row) => (
               <Box
                 sx={{

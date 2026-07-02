@@ -29,6 +29,10 @@ import ImageCard from '../components/ImageCard';
 import { ScrollPositionContext } from '../App';
 import { Virtuoso } from 'react-virtuoso';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
+import useGridThumbnailPrefetch, {
+  extractAlbumImageRowPaths,
+  extractFavoriteAlbumRowPaths
+} from '../hooks/useGridThumbnailPrefetch';
 import { navigateToBrowsePath } from '../utils/navigation';
 import CHANNELS from '../../common/ipc-channels';
 
@@ -333,6 +337,18 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
     };
   }, [windowHeight]);
 
+  const { handleRangeChanged: handleAlbumRangeChanged } = useGridThumbnailPrefetch({
+    gridRows: albumRows,
+    extractPathsFromRow: extractFavoriteAlbumRowPaths,
+    enabled: tabValue === 0
+  });
+
+  const { handleRangeChanged: handleImageRangeChanged } = useGridThumbnailPrefetch({
+    gridRows: imageRows,
+    extractPathsFromRow: extractAlbumImageRowPaths,
+    enabled: tabValue === 1
+  });
+
   const renderAlbums = () => {
     if (!sortedAlbums.length) {
       return (
@@ -361,6 +377,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
           const firstAlbum = Array.isArray(row) ? row[0] : null;
           return firstAlbum?.path ? `favorites-album-${getFavoriteItemKey(firstAlbum)}` : `favorites-album-${rowIndex}`;
         }}
+        rangeChanged={handleAlbumRangeChanged}
         itemContent={(rowIndex, row) => (
           <Box
             sx={{
@@ -421,6 +438,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
           const firstImage = Array.isArray(row) ? row[0] : null;
           return firstImage?.path ? `favorites-image-${firstImage.path}` : `favorites-image-${rowIndex}`;
         }}
+        rangeChanged={handleImageRangeChanged}
         itemContent={(rowIndex, row) => (
           <Box
             sx={{
