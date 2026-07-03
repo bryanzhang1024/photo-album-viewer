@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.4] - 2026-07-03
+
+- 抽取 `GridPageToolbar` 共用组件，重构 HomePage 与 AlbumPage 网格浏览顶栏。
+- 搜索改为图标触发 Overlay 浮层；密度与随机选相簿收进「视图选项」Tune Popover。
+- 收藏操作合并为单菜单（文件夹/照片集/打开收藏页）；AlbumPage 补齐设置入口；收藏与设置贴右固定。
+
 ## [2.5.3] - 2026-07-02
 
 - 抽取 `useGridThumbnailPrefetch` hook，统一 Virtuoso 网格的缩略图批量预取逻辑。

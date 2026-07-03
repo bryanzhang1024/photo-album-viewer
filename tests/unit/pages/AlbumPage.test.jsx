@@ -131,7 +131,7 @@ describe('AlbumPage refresh button', () => {
     });
   });
 
-  test('places refresh button immediately before random album button', () => {
+  test('places tune button before refresh and random lives in tune popover', () => {
     const refresh = jest.fn();
     useAlbumImages.mockReturnValue({
       images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
@@ -161,13 +161,18 @@ describe('AlbumPage refresh button', () => {
     );
 
     const refreshButton = screen.getByRole('button', { name: '刷新当前相簿' });
-    const randomButton = screen.getByRole('button', { name: '随机选择相簿 (R)' });
-    const actionContainer = refreshButton.closest('.MuiBox-root');
-    const refreshWrapper = refreshButton.closest('span') || refreshButton;
-    const randomWrapper = randomButton.closest('span') || randomButton;
-    const actionChildren = Array.from(actionContainer.children);
+    const tuneButton = screen.getByRole('button', { name: '视图选项' });
+    const leftGroup = refreshButton.closest('.MuiBox-root');
+    const children = Array.from(leftGroup.children);
+    const refreshIndex = children.findIndex((node) => node.contains(refreshButton));
+    const tuneIndex = children.findIndex((node) => node.contains(tuneButton));
 
-    expect(actionChildren.indexOf(randomWrapper)).toBe(actionChildren.indexOf(refreshWrapper) + 1);
+    expect(tuneIndex).toBeGreaterThan(-1);
+    expect(refreshIndex).toBeGreaterThan(tuneIndex);
+    expect(screen.queryByRole('button', { name: '随机选择相簿 (R)' })).not.toBeInTheDocument();
+
+    fireEvent.click(tuneButton);
+    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (R)' }));
 
     fireEvent.click(refreshButton);
     expect(refresh).toHaveBeenCalledTimes(1);
