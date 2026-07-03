@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.5.8] - 2026-07-03
+
+- 修复相邻相簿导航与父文件夹网格排序不一致的问题：抽取共享 `sortPreference` 工具，非根目录不再误读 legacy 全局倒序。
+
 ## [2.5.7] - 2026-07-03
 
 - `npm run build` 默认只生成 `.app`（`electron-builder --dir`），跳过 DMG、ZIP、blockmap。

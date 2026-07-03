@@ -2,41 +2,10 @@ import { useState, useCallback } from 'react';
 import imageCache from '../utils/ImageCacheManager';
 import { getDirname } from '../utils/pathUtils';
 import { canViewAsPhotoSet } from '../utils/nodeModel';
+import { loadFolderSortPreference } from '../utils/sortPreference';
 import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
-const FALLBACK_SORT = { sortBy: 'name', sortDirection: 'asc' };
-
-function readSortPreference(parentPath) {
-  const scopeKey = parentPath || '__root__';
-  const scopedStorageKey = `sorting:folder:${scopeKey}`;
-  const legacySortBy = localStorage.getItem('sortBy');
-  const legacySortDirection = localStorage.getItem('sortDirection');
-
-  try {
-    const raw = localStorage.getItem(scopedStorageKey);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const sortBy = parsed?.sortBy;
-      const sortDirection = parsed?.sortDirection;
-      const isValidSortBy = ['name', 'imageCount', 'lastModified'].includes(sortBy);
-      const isValidDirection = sortDirection === 'asc' || sortDirection === 'desc';
-      if (isValidSortBy && isValidDirection) {
-        return { sortBy, sortDirection };
-      }
-    }
-  } catch (error) {
-    console.warn(`读取排序配置失败(${scopedStorageKey}):`, error);
-  }
-
-  const isValidLegacySortBy = ['name', 'imageCount', 'lastModified'].includes(legacySortBy);
-  const isValidLegacyDirection = legacySortDirection === 'asc' || legacySortDirection === 'desc';
-  if (isValidLegacySortBy && isValidLegacyDirection) {
-    return { sortBy: legacySortBy, sortDirection: legacySortDirection };
-  }
-
-  return FALLBACK_SORT;
-}
 
 /**
  * 相邻相簿导航 Hook
@@ -91,7 +60,7 @@ export const useNeighboringAlbums = (albumPath) => {
       }
 
       // 使用与HomePage相同的排序逻辑
-      const { sortBy, sortDirection } = readSortPreference(parentPath);
+      const { sortBy, sortDirection } = loadFolderSortPreference(parentPath);
       const sortedAlbums = [...albums].sort((a, b) => {
         let comparison = 0;
 
