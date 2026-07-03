@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
@@ -12,7 +11,8 @@ function buildQueryOptions({
   sortBy,
   sortDirection,
   searchQuery,
-  locatePath
+  locatePath,
+  forceRefresh = false
 }) {
   return {
     offset,
@@ -20,7 +20,8 @@ function buildQueryOptions({
     sortBy,
     sortDirection,
     searchQuery: searchQuery || '',
-    ...(locatePath ? { locatePath } : {})
+    ...(locatePath ? { locatePath } : {}),
+    ...(forceRefresh ? { forceRefresh: true } : {})
   };
 }
 
@@ -58,7 +59,7 @@ export const useAlbumImages = (albumPath, options = {}) => {
     [sortBy, sortDirection, searchQuery, pageSize]
   );
 
-  const fetchPage = useCallback(async (offset, locatePath = null) => {
+  const fetchPage = useCallback(async (offset, locatePath = null, { forceRefresh = false } = {}) => {
     const response = await ipcRenderer.invoke(
       CHANNELS.GET_ALBUM_IMAGES,
       albumPath,
@@ -68,7 +69,8 @@ export const useAlbumImages = (albumPath, options = {}) => {
         sortBy,
         sortDirection,
         searchQuery,
-        locatePath
+        locatePath,
+        forceRefresh
       })
     );
 
@@ -88,7 +90,7 @@ export const useAlbumImages = (albumPath, options = {}) => {
     return pageImages;
   }, []);
 
-  const loadImages = useCallback(async () => {
+  const loadImages = useCallback(async ({ forceRefresh = false } = {}) => {
     try {
       if (!ipcRenderer) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
@@ -109,7 +111,7 @@ export const useAlbumImages = (albumPath, options = {}) => {
       setError('');
       nextOffsetRef.current = 0;
 
-      const response = await fetchPage(0);
+      const response = await fetchPage(0, null, { forceRefresh });
       if (generation !== loadGenerationRef.current) {
         return [];
       }
@@ -198,9 +200,8 @@ export const useAlbumImages = (albumPath, options = {}) => {
 
   const refresh = useCallback(() => {
     if (albumPath) {
-      imageCache.deleteEntry('album', albumPath);
       loadGenerationRef.current += 1;
-      return loadImages();
+      return loadImages({ forceRefresh: true });
     }
     return Promise.resolve([]);
   }, [albumPath, loadImages]);

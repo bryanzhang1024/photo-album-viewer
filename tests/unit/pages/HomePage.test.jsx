@@ -399,7 +399,7 @@ describe('HomePage refresh button', () => {
     expect(screen.getByTestId('image-viewer')).toBeInTheDocument();
   });
 
-  test('routes hybrid nodes to folder view on primary click', async () => {
+  test('routes hybrid nodes to album view on primary click', async () => {
     const onFolderClick = jest.fn();
     const onAlbumClick = jest.fn();
 
@@ -454,8 +454,8 @@ describe('HomePage refresh button', () => {
 
     fireEvent.click(screen.getByText('coser'));
 
-    expect(onFolderClick).toHaveBeenCalledWith('/photos/coser');
-    expect(onAlbumClick).not.toHaveBeenCalled();
+    expect(onAlbumClick).toHaveBeenCalledWith('/photos/coser', 'coser');
+    expect(onFolderClick).not.toHaveBeenCalled();
   });
 });
 

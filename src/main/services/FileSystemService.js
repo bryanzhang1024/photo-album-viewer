@@ -822,6 +822,7 @@ function normalizeAlbumPageOptions(options = {}) {
   const sortDirection = options.sortDirection === 'desc' ? 'desc' : 'asc';
   const searchQuery = typeof options.searchQuery === 'string' ? options.searchQuery : '';
   const locatePath = typeof options.locatePath === 'string' ? options.locatePath : null;
+  const forceRefresh = options.forceRefresh === true;
 
   return {
     offset,
@@ -829,7 +830,8 @@ function normalizeAlbumPageOptions(options = {}) {
     sortBy,
     sortDirection,
     searchQuery,
-    locatePath
+    locatePath,
+    forceRefresh
   };
 }
 
@@ -841,8 +843,13 @@ async function getAlbumImagesPage(albumPath, options = {}) {
       sortBy,
       sortDirection,
       searchQuery,
-      locatePath
+      locatePath,
+      forceRefresh
     } = normalizeAlbumPageOptions(options);
+
+    if (forceRefresh) {
+      clearAlbumImageMetadataCache(albumPath);
+    }
 
     const metadata = await buildAlbumImageMetadata(albumPath);
     const filtered = filterAlbumImagesBySearch(metadata, searchQuery);

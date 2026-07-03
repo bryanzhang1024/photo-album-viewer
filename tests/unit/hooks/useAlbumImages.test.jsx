@@ -6,12 +6,10 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
   default: {
     get: jest.fn(),
     set: jest.fn(),
-    delete: jest.fn(),
-    deleteEntry: jest.fn()
+    delete: jest.fn()
   }
 }));
 
-const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
 const { useAlbumImages, DEFAULT_ALBUM_PAGE_SIZE } = require('../../../src/renderer/hooks/useAlbumImages');
 const ipcRenderer = global.electronMock.ipcRenderer;
 
@@ -123,7 +121,7 @@ describe('useAlbumImages', () => {
     );
   });
 
-  test('refresh clears album cache entry and reloads', async () => {
+  test('refresh bypasses main-process album metadata cache and reloads', async () => {
     const firstBatch = [{ path: '/albums/refresh/1.jpg', name: '1.jpg' }];
     const secondBatch = [{ path: '/albums/refresh/2.jpg', name: '2.jpg' }];
 
@@ -141,7 +139,13 @@ describe('useAlbumImages', () => {
       await result.current.refresh();
     });
 
-    expect(imageCache.deleteEntry).toHaveBeenCalledWith('album', '/albums/refresh');
+    expect(ipcRenderer.invoke).toHaveBeenLastCalledWith(
+      CHANNELS.GET_ALBUM_IMAGES,
+      '/albums/refresh',
+      expect.objectContaining({
+        forceRefresh: true
+      })
+    );
 
     await waitFor(() => {
       expect(result.current.images).toEqual(secondBatch);

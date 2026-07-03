@@ -36,7 +36,7 @@ describe('nodeModel', () => {
     expect(getPrimaryView(node)).toBe('folder');
   });
 
-  test('classifies hybrid nodes as folder-first browsing', () => {
+  test('classifies hybrid nodes as album-first when direct images exist', () => {
     const node = {
       directImageCount: 55,
       childFolders: 73,
@@ -46,8 +46,8 @@ describe('nodeModel', () => {
     };
 
     expect(getContentKind(node)).toBe('hybrid');
-    expect(getPrimaryKind(node)).toBe('folder');
-    expect(getPrimaryView(node)).toBe('folder');
+    expect(getPrimaryKind(node)).toBe('album');
+    expect(getPrimaryView(node)).toBe('album');
     expect(canViewAsPhotoSet(node)).toBe(true);
     expect(canBrowseChildren(node)).toBe(true);
   });
@@ -87,6 +87,6 @@ describe('nodeModel', () => {
       canViewAsPhotoSet: true,
       canBrowseChildren: true
     });
-    expect(getPrimaryView(node)).toBe('folder');
+    expect(getPrimaryView(node)).toBe('album');
   });
 });

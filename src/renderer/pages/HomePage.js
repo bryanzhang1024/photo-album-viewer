@@ -78,6 +78,7 @@ function HomePage({
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const activeScanPathRef = useRef('');
+  const scanGenerationRef = useRef(0);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const [urlPathProcessed, setUrlPathProcessed] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
@@ -301,6 +302,8 @@ function HomePage({
 
   // 智能导航扫描 - 新架构（使用统一缓存）
   const scanNavigationLevel = useCallback(async (targetPath) => {
+    let generation = 0;
+
     try {
       if (!ipcRenderer) {
         setError('无法访问ipcRenderer, Electron可能没有正确加载');
@@ -316,6 +319,8 @@ function HomePage({
         return;
       }
 
+      generation = scanGenerationRef.current + 1;
+      scanGenerationRef.current = generation;
       activeScanPathRef.current = targetPath;
       setLoading(true);
       setScanProgress(null);
@@ -323,6 +328,10 @@ function HomePage({
 
       console.log(`开始扫描导航层级: ${targetPath}`);
       const response = await ipcRenderer.invoke(CHANNELS.SCAN_NAVIGATION_LEVEL, targetPath);
+
+      if (generation !== scanGenerationRef.current) {
+        return;
+      }
 
       if (response.success) {
         imageCache.set('navigation', targetPath, response);
@@ -332,14 +341,18 @@ function HomePage({
         setError(response.error?.message || '扫描失败');
       }
     } catch (err) {
-      console.error('扫描错误:', err);
-      setError('扫描文件夹时出错: ' + err.message);
-    } finally {
-      if (activeScanPathRef.current === targetPath) {
-        activeScanPathRef.current = '';
+      if (generation !== 0 && scanGenerationRef.current === generation) {
+        console.error('扫描错误:', err);
+        setError('扫描文件夹时出错: ' + err.message);
       }
-      setScanProgress(null);
-      setLoading(false);
+    } finally {
+      if (generation !== 0 && generation === scanGenerationRef.current) {
+        if (activeScanPathRef.current === targetPath) {
+          activeScanPathRef.current = '';
+        }
+        setScanProgress(null);
+        setLoading(false);
+      }
     }
   }, [updateNavigationState]);
 

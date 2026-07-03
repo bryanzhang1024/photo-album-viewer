@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.13] - 2026-07-03
+
+- 修复相簿刷新未清除主进程 `albumImageMetadataCache` 的问题：刷新时传 `forceRefresh`，确保重新读取磁盘上的图片列表。
+- HomePage 文件夹扫描增加 generation 计数，避免并发扫描时旧结果覆盖新刷新。
+
+## [2.5.12] - 2026-07-03
+
+- hybrid 套图（根目录有图且含子文件夹，如「自拍」）改为主点击与相邻导航默认进入套图视图，恢复 ←/→ 连续浏览。
+- 相邻相簿列表找不到当前路径时清空 prev/next，避免沿用上一个套图的导航状态。
+
 ## [2.5.11] - 2026-07-03
 
 - 抽取 `compareByFolderSort`，HomePage 网格与相邻相簿导航共用同一套比较逻辑（含 path tie-breaker）。
