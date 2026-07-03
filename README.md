@@ -98,7 +98,8 @@ npm start
 
 ### 构建
 ```bash
-npm run build
+npm run build          # 默认：仅生成 .app（本地验证）
+npm run build:release  # 完整打包（含 DMG、ZIP、blockmap 等分发产物）
 ```
 
 ## 常用命令
@@ -107,7 +108,9 @@ npm run build
 npm start              # 开发模式（Webpack dev server + Electron）
 npm test               # 运行单元测试
 npm run test:watch     # 监听模式测试
-npm run build          # 生产构建与打包
+npm run build          # 生产构建，仅输出 .app（默认）
+npm run build:release  # 生产构建与完整分发打包
+npm run build:app      # 同 build（别名）
 ```
 
 ## 快捷键（高频）

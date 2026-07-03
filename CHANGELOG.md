@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.7] - 2026-07-03
+
+- `npm run build` 默认只生成 `.app`（`electron-builder --dir`），跳过 DMG、ZIP、blockmap。
+- 新增 `build:release` / `build:electron:release` 用于完整分发打包；`build:app` 保留为 `build` 别名。
+- `AGENTS.md` 构建验证规则同步：`build` 为默认，`build:release` 仅在用户明确要求分发产物时使用。
+
 ## [2.5.6] - 2026-07-03
 
 - 随机浏览改为口袋式洗牌：进入目录/相簿/查看器时生成打乱队列，逐个消耗，耗尽后自动重洗可循环。
