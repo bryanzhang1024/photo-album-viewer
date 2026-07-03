@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import imageCache from '../utils/ImageCacheManager';
 import { getDirname } from '../utils/pathUtils';
 import { canViewAsPhotoSet } from '../utils/nodeModel';
-import { loadFolderSortPreference } from '../utils/sortPreference';
+import { loadFolderSortPreference, compareByFolderSort } from '../utils/sortPreference';
 import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
@@ -61,19 +61,7 @@ export const useNeighboringAlbums = (albumPath) => {
 
       // 使用与HomePage相同的排序逻辑
       const { sortBy, sortDirection } = loadFolderSortPreference(parentPath);
-      const sortedAlbums = [...albums].sort((a, b) => {
-        let comparison = 0;
-
-        if (sortBy === 'name') {
-          comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
-        } else if (sortBy === 'imageCount') {
-          comparison = a.imageCount - b.imageCount;
-        } else if (sortBy === 'lastModified') {
-          comparison = new Date(a.lastModified) - new Date(b.lastModified);
-        }
-
-        return sortDirection === 'asc' ? comparison : -comparison;
-      });
+      const sortedAlbums = [...albums].sort((a, b) => compareByFolderSort(a, b, sortBy, sortDirection));
 
       const currentIndex = sortedAlbums.findIndex(album => album.path === albumPath);
 

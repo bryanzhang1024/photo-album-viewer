@@ -8,6 +8,26 @@ export function getFolderSortScopeKey(folderPath, rootPath = '') {
   return folderPath || rootPath || '__root__';
 }
 
+export function compareByFolderSort(left, right, sortBy, sortDirection) {
+  let comparison = 0;
+
+  if (sortBy === 'name') {
+    comparison = String(left.name || '').localeCompare(String(right.name || ''), undefined, { numeric: true });
+  } else if (sortBy === 'imageCount') {
+    const leftCount = left.imageCount ?? left.count ?? 0;
+    const rightCount = right.imageCount ?? right.count ?? 0;
+    comparison = leftCount - rightCount;
+  } else if (sortBy === 'lastModified') {
+    comparison = new Date(left.lastModified || 0) - new Date(right.lastModified || 0);
+  }
+
+  if (comparison === 0) {
+    comparison = String(left.path || '').localeCompare(String(right.path || ''), undefined, { numeric: true });
+  }
+
+  return sortDirection === 'asc' ? comparison : -comparison;
+}
+
 export function loadScopedSorting(
   storageKey,
   initialSortBy,

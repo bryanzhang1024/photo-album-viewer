@@ -2,6 +2,7 @@ import {
   loadFolderSortPreference,
   loadScopedSorting,
   getFolderSortScopeKey,
+  compareByFolderSort,
   LEGACY_FOLDER_SORT_KEYS,
   FOLDER_SORT_FIELDS
 } from '../../../src/renderer/utils/sortPreference';
@@ -15,6 +16,25 @@ describe('sortPreference', () => {
     expect(getFolderSortScopeKey('', '/photos/root')).toBe('/photos/root');
     expect(getFolderSortScopeKey('/photos/set', '/photos/root')).toBe('/photos/set');
     expect(getFolderSortScopeKey('', '')).toBe('__root__');
+  });
+
+  test('compareByFolderSort uses path as tie-breaker for same name', () => {
+    const left = { name: 'Album', path: '/photos/a', imageCount: 1, lastModified: 0 };
+    const right = { name: 'Album', path: '/photos/b', imageCount: 1, lastModified: 0 };
+
+    expect(compareByFolderSort(left, right, 'name', 'asc')).toBeLessThan(0);
+    expect(compareByFolderSort(right, left, 'name', 'asc')).toBeGreaterThan(0);
+  });
+
+  test('compareByFolderSort supports count fallback for display items', () => {
+    expect(
+      compareByFolderSort(
+        { name: 'A', path: '/a', count: 2 },
+        { name: 'B', path: '/b', count: 5 },
+        'imageCount',
+        'asc'
+      )
+    ).toBeLessThan(0);
   });
 
   test('loadFolderSortPreference uses default asc for non-root scope without scoped config', () => {
