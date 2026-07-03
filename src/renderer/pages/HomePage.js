@@ -26,7 +26,7 @@ import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
 import useShuffleBag from '../hooks/useShuffleBag';
-import { getFolderSortScopeKey } from '../utils/sortPreference';
+import { getFolderSortScopeKey, compareByFolderSort } from '../utils/sortPreference';
 import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
 import GridPageToolbar from '../components/GridPageToolbar';
@@ -488,21 +488,7 @@ function HomePage({
         return a.groupRank - b.groupRank;
       }
 
-      let comparison = 0;
-
-      if (sortBy === 'name') {
-        comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
-      } else if (sortBy === 'imageCount') {
-        comparison = a.count - b.count;
-      } else if (sortBy === 'lastModified') {
-        comparison = new Date(a.lastModified || 0) - new Date(b.lastModified || 0);
-      }
-
-      if (comparison === 0) {
-        comparison = a.path.localeCompare(b.path, undefined, { numeric: true });
-      }
-
-      return sortDirection === 'asc' ? comparison : -comparison;
+      return compareByFolderSort(a, b, sortBy, sortDirection);
     });
   }, [filteredNodes, filteredDirectImages, sortBy, sortDirection, homeSortGrouping]);
 

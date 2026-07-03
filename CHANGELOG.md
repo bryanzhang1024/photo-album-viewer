@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.5.11] - 2026-07-03
+
+- 抽取 `compareByFolderSort`，HomePage 网格与相邻相簿导航共用同一套比较逻辑（含 path tie-breaker）。
+
 ## [2.5.10] - 2026-07-03
 
 - 统一文件夹排序 scopeKey：HomePage 在 `currentPath` 为空时回退到 `rootPath`，与相邻相簿导航和随机相簿使用同一套键。
