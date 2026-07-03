@@ -74,6 +74,8 @@ export const useNeighboringAlbums = (albumPath) => {
           currentIndex,
           total: sortedAlbums.length
         });
+      } else {
+        setNeighboringAlbums({ prev: null, next: null, currentIndex: -1, total: sortedAlbums.length });
       }
     } catch (err) {
       console.error('加载相邻相簿信息失败:', err);

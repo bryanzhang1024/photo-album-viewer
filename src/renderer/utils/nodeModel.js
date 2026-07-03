@@ -34,14 +34,11 @@ export function getContentKind(node) {
 }
 
 export function getPrimaryKind(node) {
-  return getContentKind(node) === 'photoSet' ? 'album' : 'folder';
+  return canViewAsPhotoSet(node) ? 'album' : 'folder';
 }
 
 export function getPrimaryView(node) {
-  if (canViewAsPhotoSet(node) && !canBrowseChildren(node)) {
-    return 'album';
-  }
-  return 'folder';
+  return canViewAsPhotoSet(node) ? 'album' : 'folder';
 }
 
 export function buildNodeFromScanResponse(response) {

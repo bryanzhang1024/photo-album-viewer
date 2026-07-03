@@ -150,6 +150,28 @@ describe('useNeighboringAlbums', () => {
     ]);
   });
 
+  test('clears neighboring navigation when current album is missing from sibling list', async () => {
+    imageCache.get.mockReturnValue(createResponse());
+
+    const { result } = renderHook(() => useNeighboringAlbums('/photos/MissingAlbum'));
+
+    await act(async () => {
+      await result.current.loadNeighboringAlbums();
+    });
+
+    expect(result.current.neighboringAlbums).toEqual({
+      prev: null,
+      next: null,
+      currentIndex: -1,
+      total: 3
+    });
+    expect(result.current.siblingAlbums.map((a) => a.name)).toEqual([
+      'Album1',
+      'Album2',
+      'Album3'
+    ]);
+  });
+
   test('handles errors by resetting state', async () => {
     imageCache.get.mockReturnValue(null);
     ipcRenderer.invoke.mockRejectedValue(new Error('boom'));

@@ -97,15 +97,16 @@ describe('card radius styling', () => {
     expect(container).toHaveTextContent('3');
   });
 
-  test('AlbumCard keeps folder favorite semantics after visual unification', () => {
+  test('AlbumCard keeps folder favorite semantics for container nodes', () => {
     const { getByLabelText } = renderWithTheme(
       <AlbumCard
         node={{
           path: '/albums/trip',
           name: 'trip',
           type: 'folder',
-          imageCount: 24,
-          samples: ['/a.jpg'],
+          canViewAsPhotoSet: false,
+          canBrowseChildren: true,
+          imageCount: 0,
           childFolders: 3
         }}
         onClick={jest.fn()}
@@ -124,9 +125,9 @@ describe('card radius styling', () => {
     expect(favoriteMocks.toggleAlbumFavorite).not.toHaveBeenCalled();
   });
 
-  test('AlbumCard exposes photo set entry for hybrid nodes without triggering the main click', () => {
+  test('AlbumCard exposes child folder entry for hybrid nodes without triggering the main click', () => {
     const onClick = jest.fn();
-    const onOpenPhotoSet = jest.fn();
+    const onBrowseChildren = jest.fn();
     const { container, getByLabelText } = renderWithTheme(
       <AlbumCard
         node={{
@@ -141,16 +142,16 @@ describe('card radius styling', () => {
           childFolders: 1
         }}
         onClick={onClick}
-        onOpenPhotoSet={onOpenPhotoSet}
+        onBrowseChildren={onBrowseChildren}
       />
     );
 
     fireEvent.click(container.firstChild);
     expect(onClick).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(getByLabelText('以套图方式打开 trip'));
+    fireEvent.click(getByLabelText('进入 trip 的子文件夹'));
 
-    expect(onOpenPhotoSet).toHaveBeenCalledWith(
+    expect(onBrowseChildren).toHaveBeenCalledWith(
       expect.objectContaining({
         path: '/albums/trip',
         contentKind: 'hybrid',
