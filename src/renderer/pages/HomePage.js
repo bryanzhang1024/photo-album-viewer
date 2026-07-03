@@ -5,37 +5,15 @@ import {
   Box, 
   Typography, 
   Button, 
-  AppBar, 
-  Toolbar, 
-  IconButton, 
-  MenuItem,
-  FormControl,
-  Select,
-  InputLabel,
-  TextField,
-  InputAdornment,
   CircularProgress,
   LinearProgress,
   Alert,
   Snackbar,
   Paper,
   useMediaQuery,
-  useTheme,
-  Tooltip,
-  Badge
+  useTheme
 } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import HomeIcon from '@mui/icons-material/Home';
-import SortIcon from '@mui/icons-material/Sort';
-import SearchIcon from '@mui/icons-material/Search';
-import ClearIcon from '@mui/icons-material/Clear';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import CasinoIcon from '@mui/icons-material/Casino';
 import SettingsIcon from '@mui/icons-material/Settings';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AlbumCard from '../components/AlbumCard';
 import ImageCard from '../components/ImageCard';
 import ImageViewer from '../components/ImageViewer';
@@ -47,8 +25,10 @@ import { useSettings } from '../contexts/SettingsContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
+import useShuffleBag from '../hooks/useShuffleBag';
 import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
+import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import { navigateToBrowsePath } from '../utils/navigation';
 import {
@@ -457,14 +437,22 @@ function HomePage({
     }
   }, [urlMode, onAlbumClick, navigate, saveScrollPosition]);
   
+  const randomScopeKey = currentPath || rootPath || '__root__';
+  const { drawNext: drawRandomAlbum, resetBag: resetRandomBag } = useShuffleBag(
+    albumNodes,
+    randomScopeKey,
+    { getKey: (node) => node.path }
+  );
+
   // 重新扫描
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     const refreshTargetPath = currentPath || rootPath;
     if (refreshTargetPath) {
+      resetRandomBag();
       imageCache.clearType('navigation');
       scanNavigationLevel(refreshTargetPath);
     }
-  };
+  }, [currentPath, rootPath, resetRandomBag, scanNavigationLevel]);
   
 
   
@@ -633,26 +621,22 @@ function HomePage({
   }, [currentPath, directImages, toggleAlbumFavorite]);
   
   
-  // 处理随机选择相簿
+  // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
   const handleRandomAlbum = useCallback(() => {
-    if (albumNodes.length > 0) {
-      // 随机选择一个相簿
-      const randomIndex = Math.floor(Math.random() * albumNodes.length);
-      const randomAlbum = albumNodes[randomIndex];
-      
-      // 保存当前滚动位置
-      saveScrollPosition();
-      
-      // 导航到随机选择的相簿
-      if (urlMode && onAlbumClick) {
-        onAlbumClick(randomAlbum.path, randomAlbum.name);
-      } else {
-        navigateToBrowsePath(navigate, randomAlbum.path, { viewMode: 'album' });
-      }
-    } else {
+    const randomAlbum = drawRandomAlbum();
+    if (!randomAlbum) {
       setError('没有可用的相簿进行随机选择');
+      return;
     }
-  }, [urlMode, onAlbumClick, albumNodes, navigate, saveScrollPosition]);
+
+    saveScrollPosition();
+
+    if (urlMode && onAlbumClick) {
+      onAlbumClick(randomAlbum.path, randomAlbum.name);
+    } else {
+      navigateToBrowsePath(navigate, randomAlbum.path, { viewMode: 'album' });
+    }
+  }, [urlMode, onAlbumClick, drawRandomAlbum, navigate, saveScrollPosition]);
 
   // 处理导航面板的文件夹导航 - 真正的层级浏览
   const handleNavigationPanelNavigate = (folderPath) => {
@@ -797,9 +781,18 @@ function HomePage({
         return; // 在输入框中时，禁用部分快捷键
       }
 
+      if (event.ctrlKey || event.altKey || event.metaKey) {
+        return;
+      }
+
       switch (event.key) {
-        case 'r':
+        case 'e':
+        case 'E':
           handleRandomAlbum();
+          break;
+        case 'r':
+        case 'R':
+          handleRefresh();
           break;
         case 'Backspace':
           handleGoUp();
@@ -813,7 +806,7 @@ function HomePage({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleGoUp, handleRandomAlbum, searchHasFocus]);
+  }, [handleGoUp, handleRandomAlbum, handleRefresh, searchHasFocus]);
 
   const canRefreshCurrentFolder = Boolean(currentPath || rootPath);
   
@@ -827,188 +820,52 @@ function HomePage({
           compact={isSmallScreen}
           sx={{ flexGrow: 1, minWidth: 0 }}
         />
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            flexShrink: 0,
-            ml: 2,
-            gap: 1,
-            flexWrap: { xs: 'wrap', sm: 'nowrap' },
-            justifyContent: { xs: 'flex-start', sm: 'flex-end' }
+        <GridPageToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="搜索当前文件夹"
+          onSearchFocusChange={setSearchHasFocus}
+          sortOptions={[
+            { value: 'name', label: '名称' },
+            { value: 'imageCount', label: '照片数量' },
+            { value: 'lastModified', label: '修改时间' }
+          ]}
+          sortBy={sortBy}
+          sortDirection={sortDirection}
+          onSortChange={handleSortChange}
+          onSortDirectionChange={handleDirectionChange}
+          userDensity={userDensity}
+          onDensityChange={(value) => {
+            setUserDensity(value);
+            localStorage.setItem('userDensity', value);
           }}
-        >
-          <TextField
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="搜索当前文件夹"
-            size="small"
-            variant="outlined"
-            sx={{
-              minWidth: { xs: '100%', sm: 200 },
-              maxWidth: { xs: '100%', sm: 260 },
-              mr: { xs: 0, sm: 1 },
-              mb: { xs: 1, sm: 0 },
-              '& .MuiInputBase-root': {
-                bgcolor: 'rgba(0,0,0,0.04)'
-              }
-            }}
-            onFocus={() => setSearchHasFocus(true)}
-            onBlur={() => setSearchHasFocus(false)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-              endAdornment: searchQuery ? (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    aria-label="清除搜索"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => setSearchQuery('')}
-                  >
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ) : null
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                setSearchQuery('');
-                event.currentTarget.blur();
-              }
-            }}
-          />
-
-          <FormControl variant="outlined" size="small" sx={{
-            minWidth: { xs: 80, sm: 120 },
-            mr: 1,
-            bgcolor: 'rgba(0,0,0,0.05)',
-            borderRadius: 1
-          }}>
-            <InputLabel id="sort-select-label" sx={{ fontSize: '0.8rem' }}>排序</InputLabel>
-            <Select
-              labelId="sort-select-label"
-              value={sortBy}
-              onChange={handleSortChange}
-              label="排序"
-              sx={{ fontSize: '0.8rem' }}
-            >
-              <MenuItem value="name">名称</MenuItem>
-              <MenuItem value="imageCount">照片数量</MenuItem>
-              <MenuItem value="lastModified">修改时间</MenuItem>
-            </Select>
-          </FormControl>
-          <IconButton color="inherit" onClick={handleDirectionChange} size="small">
-            <SortIcon sx={{
-              transform: sortDirection === 'desc' ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.3s'
-            }} />
-          </IconButton>
-          <FormControl variant="outlined" size="small" sx={{
-            minWidth: { xs: 80, sm: 100 },
-            ml: 0.5,
-            mr: 1,
-            bgcolor: 'rgba(0,0,0,0.05)',
-            borderRadius: 1
-          }}>
-            <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
-            <Select
-              labelId="density-select-label"
-              value={userDensity}
-              onChange={(e) => {
-                setUserDensity(e.target.value);
-                localStorage.setItem('userDensity', e.target.value);
-              }}
-              label="密度"
-              sx={{ fontSize: '0.8rem' }}
-            >
-              <MenuItem value="compact">紧凑</MenuItem>
-              <MenuItem value="standard">标准</MenuItem>
-              <MenuItem value="comfortable">宽松</MenuItem>
-            </Select>
-          </FormControl>
-          <Tooltip title="刷新当前文件夹">
-            <span>
-              <IconButton
-                color="inherit"
-                onClick={handleRefresh}
-                size="small"
-                sx={{ mx: 0.5 }}
-                aria-label="刷新当前文件夹"
-                disabled={!canRefreshCurrentFolder}
-              >
-                <RefreshIcon />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="随机选择相簿 (R)">
-            <span>
-              <IconButton
-                color="inherit"
-                onClick={handleRandomAlbum}
-                size="small"
-                sx={{ mx: 0.5 }}
-                disabled={albumNodes.length === 0}
-              >
-                <CasinoIcon />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title={isFolderFavorited(currentPath) ? "取消收藏当前文件夹" : "收藏当前文件夹"}>
-            <span>
-              <IconButton
-                color="inherit"
-                onClick={handleToggleCurrentFolderFavorite}
-                size="small"
-                sx={{ mx: 0.5 }}
-                disabled={!currentPath}
-                aria-label="收藏当前文件夹"
-              >
-                {isFolderFavorited(currentPath)
-                  ? <FavoriteIcon sx={{ color: '#ff5252' }} />
-                  : <FavoriteBorderIcon />}
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title={isAlbumFavorited(currentPath) ? "取消收藏当前照片集合" : "收藏当前照片集合"}>
-            <span>
-              <IconButton
-                color="inherit"
-                onClick={handleToggleCurrentPhotoSetFavorite}
-                size="small"
-                sx={{ mx: 0.5 }}
-                disabled={!currentPath || directImages.length === 0}
-                aria-label="收藏当前照片集合"
-              >
-                {isAlbumFavorited(currentPath)
-                  ? <FavoriteIcon sx={{ color: '#ff5252' }} />
-                  : <FavoriteBorderIcon />}
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="我的收藏">
-            <IconButton
-              color="inherit"
-              onClick={handleNavigateToFavorites}
-              size="small"
-              sx={{ mx: 0.5 }}
-            >
-              <FavoriteIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="设置">
-            <IconButton
-              color="inherit"
-              onClick={() => navigate('/settings')}
-              size="small"
-            >
-              <SettingsIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
+          onRandomAlbum={handleRandomAlbum}
+          randomDisabled={albumNodes.length === 0}
+          onRefresh={handleRefresh}
+          refreshDisabled={!canRefreshCurrentFolder}
+          refreshAriaLabel="刷新当前文件夹"
+          favoriteMenuItems={[
+            {
+              id: 'folder',
+              label: isFolderFavorited(currentPath) ? '取消收藏当前文件夹' : '收藏当前文件夹',
+              checked: isFolderFavorited(currentPath),
+              disabled: !currentPath,
+              onClick: handleToggleCurrentFolderFavorite
+            },
+            {
+              id: 'photoSet',
+              label: isAlbumFavorited(currentPath) ? '取消收藏当前照片集合' : '收藏当前照片集合',
+              checked: isAlbumFavorited(currentPath),
+              disabled: !currentPath || (!isAlbumFavorited(currentPath) && directImages.length === 0),
+              onClick: handleToggleCurrentPhotoSetFavorite
+            }
+          ]}
+          openFavoritesItem={{
+            label: '打开我的收藏',
+            onClick: handleNavigateToFavorites
+          }}
+          onOpenSettings={() => navigate('/settings')}
+        />
       </>
     );
   

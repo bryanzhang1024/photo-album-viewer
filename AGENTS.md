@@ -12,12 +12,14 @@
 ## 构建验证
 
 - 日常开发交付前，必须运行与改动范围匹配的测试；涉及前端打包链路、模块导入、webpack 配置或发布前检查时，至少运行 `npm run build:webpack`。
-- 需要生成可安装应用、验证 Electron 打包、修改 `package.json` 的 `build` 配置、调整主进程/预加载打包相关代码，或用户明确要求“打包”“构建安装包”“npm run build”时，必须运行 `npm run build`。
-- 已合并到 `main`、且用户需要通过本地安装包才能实际使用的可视功能或修复，交付前必须运行 `npm run build`，不能只运行 `npm run build:webpack`。
-- `npm run build` 生成的 `dist/` 产物默认视为本地构建输出，不纳入提交，除非用户明确要求保存或发布这些产物。
-- 如果 `npm run build` 因签名证书缺失只跳过 macOS 代码签名但产物成功生成，应记录为分发风险，不视为构建失败。
+- **默认**运行 `npm run build`（等价于 `build:app`：webpack 生产构建 + `electron-builder --dir`，只生成 `.app`）。
+- 仅当用户明确要求完整分发产物（DMG、ZIP、blockmap、安装包、发布打包等）时，才运行 `npm run build:release`。
+- 涉及 Electron 打包、修改 `package.json` 的 `build` 配置、调整主进程/预加载打包相关代码时，默认用 `npm run build` 验证；不要默认跑 `build:release`。
+- 已合并到 `main`、且用户需要通过 DMG/ZIP 等安装包才能实际使用的可视功能或修复，交付前必须运行 `npm run build:release`，不能只运行 `npm run build` 或 `npm run build:webpack`。
+- `npm run build` / `npm run build:release` 生成的 `dist/` 产物默认视为本地构建输出，不纳入提交，除非用户明确要求保存或发布这些产物。
+- 如果构建因签名证书缺失只跳过 macOS 代码签名但产物成功生成，应记录为分发风险，不视为构建失败。
 - Agent 执行用户提供的实现计划时，计划中的 Test Plan 只作为最低验证要求；不得覆盖或弱化本项目 `AGENTS.md` 的构建验证规则。
-- 本项目涉及用户可见的 Electron/前端行为修复，且已进入交付或准备提交状态时，默认必须运行 `npm run build`；除非用户明确说“不打安装包”或“只做 webpack 验证”。
+- 本项目涉及用户可见的 Electron/前端行为修复，且已进入交付或准备提交状态时，默认运行 `npm run build`；除非用户明确要求完整分发包，或明确说“只做 webpack 验证”。
 
 ## 分支管理
 

@@ -153,14 +153,19 @@ export const FavoritesProvider = ({ children }) => {
 
   // 切换相簿收藏状态
   const toggleAlbumFavorite = useCallback(async (album) => {
-    const isCurrentlyFavorited = isAlbumFavorited(album.path);
+    const targetKind = album.kind || 'photoSet';
+    const isCurrentlyFavorited = favorites.albums.some(
+      (item) => item.path === album.path && (item.kind || 'photoSet') === targetKind
+    );
     let newFavorites;
 
     if (isCurrentlyFavorited) {
       // 取消收藏
       newFavorites = {
         ...favorites,
-        albums: favorites.albums.filter(item => item.path !== album.path)
+        albums: favorites.albums.filter(
+          (item) => !(item.path === album.path && (item.kind || 'photoSet') === targetKind)
+        )
       };
     } else {
       // 添加收藏

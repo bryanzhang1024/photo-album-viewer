@@ -2,41 +2,15 @@ import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
-  AppBar,
-  Toolbar,
   Typography,
-  IconButton,
   Button,
-  Grid,
-  Container,
   CircularProgress,
   Snackbar,
   Alert,
   Paper,
-  Tooltip,
-  FormControl,
-  Select,
-  MenuItem,
-  InputLabel,
-  TextField,
-  InputAdornment,
   useMediaQuery,
-  useTheme,
-  Badge
+  useTheme
 } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import HomeIcon from '@mui/icons-material/Home';
-import SortIcon from '@mui/icons-material/Sort';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import CasinoIcon from '@mui/icons-material/Casino';
-import TuneIcon from '@mui/icons-material/Tune';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import SearchIcon from '@mui/icons-material/Search';
-import ClearIcon from '@mui/icons-material/Clear';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import ImageViewer from '../components/ImageViewer';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import ImageCard from '../components/ImageCard';
@@ -51,7 +25,9 @@ import useAlbumImages from '../hooks/useAlbumImages';
 import useGridThumbnailPrefetch, { extractAlbumImageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import useBreadcrumbs from '../hooks/useBreadcrumbs';
 import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
+import useShuffleBag from '../hooks/useShuffleBag';
 import PageLayout from '../components/PageLayout';
+import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import { navigateToBrowsePath } from '../utils/navigation';
 import {
@@ -187,6 +163,16 @@ function AlbumPage({
   });
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
+  const { drawNext: drawRandomSiblingAlbum, resetBag: resetRandomBag } = useShuffleBag(
+    siblingAlbums,
+    decodedAlbumPath || '__album__',
+    { getKey: (album) => album.path, excludeKey: decodedAlbumPath }
+  );
+
+  const handleRefreshAlbum = useCallback(() => {
+    resetRandomBag();
+    refresh();
+  }, [resetRandomBag, refresh]);
 
   useEffect(() => {
     setSearchQuery('');
@@ -323,76 +309,6 @@ function AlbumPage({
       setUserDensity(savedDensity);
     }
   }, []);
-
-  // 添加键盘事件监听
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (searchHasFocus) {
-        return;
-      }
-
-      // 如果按下ESC或Backspace键且没有打开查看器
-      if ((event.key === 'Escape' || event.key === 'Backspace') && !viewerOpen) {
-        handleBack();
-      }
-
-      // 按下 r 键触发随机选择相簿
-      if (event.key === 'r' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // 确保不在输入框中，且没有打开查看器
-        if (document.activeElement.tagName !== 'INPUT' &&
-            document.activeElement.tagName !== 'TEXTAREA' &&
-            !document.activeElement.isContentEditable &&
-            !viewerOpen) {
-          handleRandomAlbum();
-        }
-      }
-
-      // 按下 h 键返回首页
-      if (event.key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // 确保不在输入框中，且没有打开查看器
-        if (document.activeElement.tagName !== 'INPUT' &&
-            document.activeElement.tagName !== 'TEXTAREA' &&
-            !document.activeElement.isContentEditable &&
-            !viewerOpen) {
-          handleHome();
-        }
-      }
-
-      // 左箭头键 - 上一个相簿
-      if (event.key === 'ArrowLeft' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.prev) {
-          handleNavigateToAdjacentAlbum('prev');
-        }
-      }
-
-      // 右箭头键 - 下一个相簿
-      if (event.key === 'ArrowRight' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.next) {
-          handleNavigateToAdjacentAlbum('next');
-        }
-      }
-
-      // Ctrl+左箭头键 - 跳转到第一个相簿
-      if (event.key === 'ArrowLeft' && event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.currentIndex > 0) {
-          handleNavigateToAdjacentAlbum('prev');
-        }
-      }
-
-      // Ctrl+右箭头键 - 跳转到最后一个相簿
-      if (event.key === 'ArrowRight' && event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.currentIndex < neighboringAlbums.total - 1) {
-          handleNavigateToAdjacentAlbum('next');
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [viewerOpen, neighboringAlbums, searchHasFocus]);
-
 
   // 加载根路径信息
   const loadRootPath = async () => {
@@ -687,28 +603,102 @@ function AlbumPage({
     }
   }, [isNavigating, urlMode, onBreadcrumbNavigate, decodedAlbumPath, rootPath, resolveTargetView, navigateToFolderPath, navigateToAlbumPath]);
 
-  // 处理浮动面板导航
-  // 处理随机选择相簿
-  const handleRandomAlbum = () => {
-    if (siblingAlbums.length <= 1) {
-      // 如果没有其他相簿可选，则不执行任何操作
+  // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
+  const handleRandomAlbum = useCallback(() => {
+    const randomAlbum = drawRandomSiblingAlbum();
+    if (!randomAlbum) {
       setError('没有其他相簿可供随机选择');
       return;
     }
 
-    let randomAlbum;
-    let attempts = 0;
-    const maxAttempts = 10; // 防止无限循环
-
-    // 随机选择一个相簿，但避免选到当前相簿
-    do {
-      const randomIndex = Math.floor(Math.random() * siblingAlbums.length);
-      randomAlbum = siblingAlbums[randomIndex];
-      attempts++;
-    } while (randomAlbum.path === decodedAlbumPath && siblingAlbums.length > 1 && attempts < maxAttempts);
-
     navigateToAlbumPath(randomAlbum.path, randomAlbum.name);
-  };
+  }, [drawRandomSiblingAlbum, navigateToAlbumPath]);
+
+  // 添加键盘事件监听
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (searchHasFocus) {
+        return;
+      }
+
+      // 如果按下ESC或Backspace键且没有打开查看器
+      if ((event.key === 'Escape' || event.key === 'Backspace') && !viewerOpen) {
+        handleBack();
+      }
+
+      // 按下 e 键触发随机选择相簿
+      if ((event.key === 'e' || event.key === 'E') && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA' &&
+            !document.activeElement.isContentEditable &&
+            !viewerOpen) {
+          handleRandomAlbum();
+        }
+      }
+
+      // 按下 r 键刷新当前相簿
+      if ((event.key === 'r' || event.key === 'R') && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA' &&
+            !document.activeElement.isContentEditable &&
+            !viewerOpen) {
+          handleRefreshAlbum();
+        }
+      }
+
+      // 按下 h 键返回首页
+      if (event.key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA' &&
+            !document.activeElement.isContentEditable &&
+            !viewerOpen) {
+          handleHome();
+        }
+      }
+
+      // 左箭头键 - 上一个相簿
+      if (event.key === 'ArrowLeft' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.prev) {
+          handleNavigateToAdjacentAlbum('prev');
+        }
+      }
+
+      // 右箭头键 - 下一个相簿
+      if (event.key === 'ArrowRight' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.next) {
+          handleNavigateToAdjacentAlbum('next');
+        }
+      }
+
+      // Ctrl+左箭头键 - 跳转到第一个相簿
+      if (event.key === 'ArrowLeft' && event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.currentIndex > 0) {
+          handleNavigateToAdjacentAlbum('prev');
+        }
+      }
+
+      // Ctrl+右箭头键 - 跳转到最后一个相簿
+      if (event.key === 'ArrowRight' && event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.currentIndex < neighboringAlbums.total - 1) {
+          handleNavigateToAdjacentAlbum('next');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    viewerOpen,
+    neighboringAlbums,
+    searchHasFocus,
+    handleRandomAlbum,
+    handleRefreshAlbum,
+    handleBack,
+    handleHome,
+    handleNavigateToAdjacentAlbum
+  ]);
 
   const renderHeader = () => (
     <>
@@ -720,186 +710,53 @@ function AlbumPage({
         compact={isSmallScreen}
         sx={{ flexGrow: 1, minWidth: 0 }}
       />
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          flexShrink: 0,
-          ml: 2,
-          gap: 1,
-          flexWrap: { xs: 'wrap', sm: 'nowrap' },
-          justifyContent: { xs: 'flex-start', sm: 'flex-end' }
+      <GridPageToolbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="搜索当前相簿"
+        onSearchFocusChange={setSearchHasFocus}
+        sortOptions={[
+          { value: 'name', label: '名称' },
+          { value: 'size', label: '大小' },
+          { value: 'lastModified', label: '修改时间' }
+        ]}
+        sortBy={sortBy}
+        sortDirection={sortDirection}
+        onSortChange={handleSortChange}
+        onSortDirectionChange={handleDirectionChange}
+        userDensity={userDensity}
+        onDensityChange={(value) => {
+          setUserDensity(value);
+          localStorage.setItem('userDensity', value);
         }}
-      >
-        <TextField
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="搜索当前相簿"
-          size="small"
-          variant="outlined"
-          sx={{
-            minWidth: { xs: '100%', sm: 200 },
-            maxWidth: { xs: '100%', sm: 260 },
-            mr: { xs: 0, sm: 1 },
-            mb: { xs: 1, sm: 0 },
-            '& .MuiInputBase-root': {
-              bgcolor: 'rgba(0,0,0,0.04)'
-            }
-          }}
-          onFocus={() => setSearchHasFocus(true)}
-          onBlur={() => setSearchHasFocus(false)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-            endAdornment: searchQuery ? (
-              <InputAdornment position="end">
-                <IconButton
-                  size="small"
-                  aria-label="清除搜索"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => setSearchQuery('')}
-                >
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ) : null
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              setSearchQuery('');
-              event.currentTarget.blur();
-            }
-          }}
-        />
-        <FormControl variant="outlined" size="small" sx={{
-          minWidth: { xs: 80, sm: 120 },
-          mr: 1,
-          bgcolor: 'rgba(0,0,0,0.05)',
-          borderRadius: 1
-        }}>
-          <InputLabel id="sort-select-label" sx={{ fontSize: '0.8rem' }}>排序</InputLabel>
-          <Select
-            labelId="sort-select-label"
-            value={sortBy}
-            onChange={handleSortChange}
-            label="排序"
-            sx={{ fontSize: '0.8rem' }}
-          >
-            <MenuItem value="name">名称</MenuItem>
-            <MenuItem value="size">大小</MenuItem>
-            <MenuItem value="lastModified">修改时间</MenuItem>
-          </Select>
-        </FormControl>
-        <IconButton color="inherit" onClick={handleDirectionChange} size="small">
-          <SortIcon sx={{
-            transform: sortDirection === 'desc' ? 'rotate(180deg)' : 'none',
-            transition: 'transform 0.3s'
-          }} />
-        </IconButton>
-        <FormControl variant="outlined" size="small" sx={{
-          minWidth: { xs: 80, sm: 100 },
-          mr: 1,
-          bgcolor: 'rgba(0,0,0,0.05)',
-          borderRadius: 1
-        }}>
-          <InputLabel id="density-select-label" sx={{ fontSize: '0.8rem' }}>密度</InputLabel>
-          <Select
-            labelId="density-select-label"
-            value={userDensity}
-            onChange={(e) => {
-              setUserDensity(e.target.value);
-              localStorage.setItem('userDensity', e.target.value);
-            }}
-            label="密度"
-            sx={{ fontSize: '0.8rem' }}
-          >
-            <MenuItem value="compact">紧凑</MenuItem>
-            <MenuItem value="standard">标准</MenuItem>
-            <MenuItem value="comfortable">宽松</MenuItem>
-          </Select>
-        </FormControl>
-        <Tooltip title="刷新当前相簿">
-          <span>
-            <IconButton
-              color="inherit"
-              onClick={refresh}
-              size="small"
-              sx={{ mx: 0.5 }}
-              aria-label="刷新当前相簿"
-              disabled={!canRefreshAlbum}
-            >
-              <RefreshIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title="随机选择相簿 (R)">
-          <IconButton
-            color="inherit"
-            onClick={handleRandomAlbum}
-            size="small"
-            sx={{ mx: 0.5 }}
-          >
-            <CasinoIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={neighboringAlbums.prev ? `上一个相簿: ${neighboringAlbums.prev.name}` : "已是第一个相簿"}>
-          <span>
-            <IconButton
-              color="inherit"
-              onClick={() => handleNavigateToAdjacentAlbum('prev')}
-              disabled={!neighboringAlbums.prev}
-              size="small"
-              sx={{ mx: 0.5 }}
-            >
-              <ChevronLeftIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-        {neighboringAlbums.total > 0 && (
-          <Typography variant="caption" sx={{ mx: 0.5, fontSize: '0.75rem' }}>
-            {neighboringAlbums.currentIndex + 1}/{neighboringAlbums.total}
-          </Typography>
-        )}
-        <Tooltip title={neighboringAlbums.next ? `下一个相簿: ${neighboringAlbums.next.name}` : "已是最后一个相簿"}>
-          <span>
-            <IconButton
-              color="inherit"
-              onClick={() => handleNavigateToAdjacentAlbum('next')}
-              disabled={!neighboringAlbums.next}
-              size="small"
-              sx={{ mx: 0.5 }}
-            >
-              <ChevronRightIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title={isAlbumFavorited(decodedAlbumPath) ? "取消收藏相簿" : "收藏相簿"}>
-          <IconButton
-            color="inherit"
-            onClick={handleToggleAlbumFavorite}
-            size="small"
-            sx={{ mx: 0.5 }}
-          >
-            {isAlbumFavorited(decodedAlbumPath) ? 
-              <FavoriteIcon sx={{ color: '#ff5252' }} /> : 
-              <FavoriteBorderIcon />
-            }
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="我的收藏">
-          <IconButton
-            color="inherit"
-            onClick={handleNavigateToFavorites}
-            size="small"
-            sx={{ mx: 0.5 }}
-          >
-            <FavoriteIcon />
-          </IconButton>
-        </Tooltip>
-      </Box>
+        onRandomAlbum={handleRandomAlbum}
+        randomDisabled={false}
+        onRefresh={handleRefreshAlbum}
+        refreshDisabled={!canRefreshAlbum}
+        refreshAriaLabel="刷新当前相簿"
+        navigation={{
+          prev: neighboringAlbums.prev,
+          next: neighboringAlbums.next,
+          currentIndex: neighboringAlbums.currentIndex,
+          total: neighboringAlbums.total,
+          onPrev: () => handleNavigateToAdjacentAlbum('prev'),
+          onNext: () => handleNavigateToAdjacentAlbum('next')
+        }}
+        favoriteMenuItems={[
+          {
+            id: 'album',
+            label: isAlbumFavorited(decodedAlbumPath) ? '取消收藏相簿' : '收藏相簿',
+            checked: isAlbumFavorited(decodedAlbumPath),
+            disabled: false,
+            onClick: handleToggleAlbumFavorite
+          }
+        ]}
+        openFavoritesItem={{
+          label: '打开我的收藏',
+          onClick: handleNavigateToFavorites
+        }}
+        onOpenSettings={() => navigate('/settings')}
+      />
     </>
   );
 

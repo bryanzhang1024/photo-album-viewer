@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.5.7] - 2026-07-03
+
+- `npm run build` 默认只生成 `.app`（`electron-builder --dir`），跳过 DMG、ZIP、blockmap。
+- 新增 `build:release` / `build:electron:release` 用于完整分发打包；`build:app` 保留为 `build` 别名。
+- `AGENTS.md` 构建验证规则同步：`build` 为默认，`build:release` 仅在用户明确要求分发产物时使用。
+
+## [2.5.6] - 2026-07-03
+
+- 随机浏览改为口袋式洗牌：进入目录/相簿/查看器时生成打乱队列，逐个消耗，耗尽后自动重洗可循环。
+- 网格页快捷键：E 随机、R 刷新；ImageViewer 随机仍用 R，E 保持向右旋转。
+
+## [2.5.5] - 2026-07-03
+
+- 修复 HomePage「取消收藏当前照片集合」在已收藏但当前无直接图片时无法点击的问题。
+- `toggleAlbumFavorite` 取消收藏时按 `kind` 精确匹配，避免与同名路径文件夹收藏互相影响。
+- GridPageToolbar 改为单一右对齐工具组，刷新按钮移至最左（工具组内首位）。
+
+## [2.5.4] - 2026-07-03
+
+- 抽取 `GridPageToolbar` 共用组件，重构 HomePage 与 AlbumPage 网格浏览顶栏。
+- 搜索改为图标触发 Overlay 浮层；密度与随机选相簿收进「视图选项」Tune Popover。
+- 收藏操作合并为单菜单（文件夹/照片集/打开收藏页）；AlbumPage 补齐设置入口；收藏与设置贴右固定。
+
 ## [2.5.3] - 2026-07-02
 
 - 抽取 `useGridThumbnailPrefetch` hook，统一 Virtuoso 网格的缩略图批量预取逻辑。

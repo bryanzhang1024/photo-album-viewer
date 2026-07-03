@@ -5,12 +5,18 @@ import { FavoritesProvider, useFavorites } from '../../../src/renderer/contexts/
 const ipcRenderer = global.electronMock.ipcRenderer;
 
 function FavoriteProbe() {
-  const { isFolderFavorited, isAlbumFavorited } = useFavorites();
+  const { isFolderFavorited, isAlbumFavorited, toggleAlbumFavorite } = useFavorites();
 
   return (
     <div>
       <div data-testid="folder-status">{String(isFolderFavorited('/photos'))}</div>
       <div data-testid="photo-set-status">{String(isAlbumFavorited('/photos'))}</div>
+      <button
+        type="button"
+        onClick={() => toggleAlbumFavorite({ kind: 'photoSet', path: '/photos', name: 'photos' })}
+      >
+        toggle photo set
+      </button>
     </div>
   );
 }
@@ -65,6 +71,27 @@ describe('FavoritesContext item identity', () => {
     await waitFor(() => {
       expect(screen.getByTestId('folder-status')).toHaveTextContent('true');
       expect(screen.getByTestId('photo-set-status')).toHaveTextContent('true');
+    });
+  });
+
+  test('toggleAlbumFavorite removes only the photo-set entry when paths match', async () => {
+    render(
+      <FavoritesProvider>
+        <FavoriteProbe />
+      </FavoritesProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('photo-set-status')).toHaveTextContent('true');
+    });
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'toggle photo set' }).click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('photo-set-status')).toHaveTextContent('false');
+      expect(screen.getByTestId('folder-status')).toHaveTextContent('true');
     });
   });
 });
