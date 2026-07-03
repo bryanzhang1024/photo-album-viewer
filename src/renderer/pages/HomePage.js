@@ -26,6 +26,7 @@ import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
 import useShuffleBag from '../hooks/useShuffleBag';
+import { getFolderSortScopeKey } from '../utils/sortPreference';
 import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
 import GridPageToolbar from '../components/GridPageToolbar';
@@ -90,8 +91,12 @@ function HomePage({
     () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
     []
   );
+  const folderSortScopeKey = useMemo(
+    () => getFolderSortScopeKey(currentPath, rootPath),
+    [currentPath, rootPath]
+  );
   const { sortBy, sortDirection, handleSortChange, handleDirectionChange } = useSorting('name', 'asc', {
-    scopeKey: currentPath || '__root__',
+    scopeKey: folderSortScopeKey,
     storageNamespace: 'sorting:folder',
     allowedSortBy: homeSortFields,
     legacyKeys: homeLegacySortKeys
@@ -437,7 +442,7 @@ function HomePage({
     }
   }, [urlMode, onAlbumClick, navigate, saveScrollPosition]);
   
-  const randomScopeKey = currentPath || rootPath || '__root__';
+  const randomScopeKey = folderSortScopeKey;
   const { drawNext: drawRandomAlbum, resetBag: resetRandomBag } = useShuffleBag(
     albumNodes,
     randomScopeKey,
