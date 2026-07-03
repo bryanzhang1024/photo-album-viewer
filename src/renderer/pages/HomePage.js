@@ -842,7 +842,7 @@ function HomePage({
               id: 'photoSet',
               label: isAlbumFavorited(currentPath) ? '取消收藏当前照片集合' : '收藏当前照片集合',
               checked: isAlbumFavorited(currentPath),
-              disabled: !currentPath || directImages.length === 0,
+              disabled: !currentPath || (!isAlbumFavorited(currentPath) && directImages.length === 0),
               onClick: handleToggleCurrentPhotoSetFavorite
             }
           ]}

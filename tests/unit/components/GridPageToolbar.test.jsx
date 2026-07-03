@@ -101,30 +101,30 @@ describe('GridPageToolbar', () => {
     expect(screen.getByRole('button', { name: '下一个相簿' })).toBeEnabled();
   });
 
-  test('pins favorites and settings on the right side', () => {
+  test('aligns all toolbar controls to the right in one group', () => {
     render(<GridPageToolbar {...defaultProps} />);
 
+    const toolbar = screen.getByTestId('grid-page-toolbar');
     const settingsButton = screen.getByRole('button', { name: '设置' });
-    const favoritesButton = screen.getByRole('button', { name: '收藏菜单' });
-    const pinnedGroup = settingsButton.parentElement;
+    const refreshButton = screen.getByRole('button', { name: '刷新当前文件夹' });
 
-    expect(pinnedGroup).toContainElement(favoritesButton);
-    expect(pinnedGroup).toHaveStyle({ marginLeft: 'auto' });
+    expect(toolbar).toContainElement(settingsButton);
+    expect(toolbar).toContainElement(refreshButton);
+    expect(toolbar).toHaveStyle({ justifyContent: 'flex-end' });
   });
 
-  test('places tune button before refresh button', () => {
+  test('places refresh button first in the toolbar', () => {
     render(<GridPageToolbar {...defaultProps} />);
 
+    const toolbar = screen.getByTestId('grid-page-toolbar');
     const refreshButton = screen.getByRole('button', { name: '刷新当前文件夹' });
-    const tuneButton = screen.getByRole('button', { name: '视图选项' });
-    const leftGroup = refreshButton.closest('.MuiBox-root');
-    const children = Array.from(leftGroup.children);
+    const searchButton = screen.getByRole('button', { name: '搜索' });
+    const children = Array.from(toolbar.children);
     const refreshIndex = children.findIndex((node) => node.contains(refreshButton));
-    const tuneIndex = children.findIndex((node) => node.contains(tuneButton));
+    const searchIndex = children.findIndex((node) => node.contains(searchButton));
 
-    expect(refreshIndex).toBeGreaterThan(-1);
-    expect(tuneIndex).toBeGreaterThan(-1);
-    expect(refreshIndex).toBeGreaterThan(tuneIndex);
+    expect(refreshIndex).toBe(0);
+    expect(searchIndex).toBeGreaterThan(refreshIndex);
   });
 
   test('calls onOpenSettings when settings button is clicked', () => {

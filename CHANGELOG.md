@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.5] - 2026-07-03
+
+- 修复 HomePage「取消收藏当前照片集合」在已收藏但当前无直接图片时无法点击的问题。
+- `toggleAlbumFavorite` 取消收藏时按 `kind` 精确匹配，避免与同名路径文件夹收藏互相影响。
+- GridPageToolbar 改为单一右对齐工具组，刷新按钮移至最左（工具组内首位）。
+
 ## [2.5.4] - 2026-07-03
 
 - 抽取 `GridPageToolbar` 共用组件，重构 HomePage 与 AlbumPage 网格浏览顶栏。

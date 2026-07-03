@@ -401,6 +401,7 @@ function GridPageToolbar({
 
   return (
     <Box
+      data-testid="grid-page-toolbar"
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -409,79 +410,61 @@ function GridPageToolbar({
         gap: 1,
         flex: 1,
         minWidth: 0,
-        justifyContent: 'flex-end'
+        justifyContent: 'flex-end',
+        flexWrap: { xs: 'wrap', sm: 'nowrap' }
       }}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          flexWrap: { xs: 'wrap', sm: 'nowrap' }
-        }}
-      >
-        <SearchOverlay
-          searchQuery={searchQuery}
-          onSearchChange={onSearchChange}
-          searchPlaceholder={searchPlaceholder}
-          onSearchFocusChange={onSearchFocusChange}
-        />
-        <SortControls
-          sortBy={sortBy}
-          sortDirection={sortDirection}
-          sortOptions={sortOptions}
-          onSortChange={onSortChange}
-          onSortDirectionChange={onSortDirectionChange}
-          sortSelectId={sortSelectId}
-        />
-        <TunePopover
-          userDensity={userDensity}
-          onDensityChange={onDensityChange}
-          onRandomAlbum={onRandomAlbum}
-          randomDisabled={randomDisabled}
-          randomTooltip={randomTooltip}
-        />
-        <Tooltip title={refreshAriaLabel}>
-          <span>
-            <IconButton
-              color="inherit"
-              onClick={onRefresh}
-              size="small"
-              sx={{ mx: 0.5 }}
-              aria-label={refreshAriaLabel}
-              disabled={refreshDisabled}
-            >
-              <RefreshIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <AlbumNavigation navigation={navigation} />
-      </Box>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          flexShrink: 0,
-          ml: 'auto'
-        }}
-      >
-        <FavoritesMenu
-          favoriteMenuItems={favoriteMenuItems}
-          openFavoritesItem={openFavoritesItem}
-        />
-        <Tooltip title="设置">
+      <Tooltip title={refreshAriaLabel}>
+        <span>
           <IconButton
             color="inherit"
-            onClick={onOpenSettings}
+            onClick={onRefresh}
             size="small"
             sx={{ mx: 0.5 }}
-            aria-label="设置"
+            aria-label={refreshAriaLabel}
+            disabled={refreshDisabled}
           >
-            <SettingsIcon />
+            <RefreshIcon />
           </IconButton>
-        </Tooltip>
-      </Box>
+        </span>
+      </Tooltip>
+      <SearchOverlay
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
+        searchPlaceholder={searchPlaceholder}
+        onSearchFocusChange={onSearchFocusChange}
+      />
+      <SortControls
+        sortBy={sortBy}
+        sortDirection={sortDirection}
+        sortOptions={sortOptions}
+        onSortChange={onSortChange}
+        onSortDirectionChange={onSortDirectionChange}
+        sortSelectId={sortSelectId}
+      />
+      <TunePopover
+        userDensity={userDensity}
+        onDensityChange={onDensityChange}
+        onRandomAlbum={onRandomAlbum}
+        randomDisabled={randomDisabled}
+        randomTooltip={randomTooltip}
+      />
+      <AlbumNavigation navigation={navigation} />
+      <FavoritesMenu
+        favoriteMenuItems={favoriteMenuItems}
+        openFavoritesItem={openFavoritesItem}
+      />
+      <Tooltip title="设置">
+        <IconButton
+          color="inherit"
+          onClick={onOpenSettings}
+          size="small"
+          sx={{ mx: 0.5 }}
+          aria-label="设置"
+        >
+          <SettingsIcon />
+        </IconButton>
+      </Tooltip>
     </Box>
   );
 }
