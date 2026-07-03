@@ -1,6 +1,7 @@
 import {
   loadFolderSortPreference,
   loadScopedSorting,
+  getFolderSortScopeKey,
   LEGACY_FOLDER_SORT_KEYS,
   FOLDER_SORT_FIELDS
 } from '../../../src/renderer/utils/sortPreference';
@@ -8,6 +9,12 @@ import {
 describe('sortPreference', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  test('getFolderSortScopeKey falls back to rootPath before __root__', () => {
+    expect(getFolderSortScopeKey('', '/photos/root')).toBe('/photos/root');
+    expect(getFolderSortScopeKey('/photos/set', '/photos/root')).toBe('/photos/set');
+    expect(getFolderSortScopeKey('', '')).toBe('__root__');
   });
 
   test('loadFolderSortPreference uses default asc for non-root scope without scoped config', () => {

@@ -4,6 +4,10 @@ export const LEGACY_FOLDER_SORT_KEYS = {
   sortDirectionKey: 'sortDirection'
 };
 
+export function getFolderSortScopeKey(folderPath, rootPath = '') {
+  return folderPath || rootPath || '__root__';
+}
+
 export function loadScopedSorting(
   storageKey,
   initialSortBy,
@@ -54,8 +58,8 @@ export function loadScopedSorting(
   };
 }
 
-export function loadFolderSortPreference(parentPath) {
-  const scopeKey = parentPath || '__root__';
+export function loadFolderSortPreference(parentPath, rootPath = '') {
+  const scopeKey = getFolderSortScopeKey(parentPath, rootPath);
   const storageKey = `sorting:folder:${scopeKey}`;
 
   return loadScopedSorting(
