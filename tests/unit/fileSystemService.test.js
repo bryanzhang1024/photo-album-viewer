@@ -373,6 +373,34 @@ describe('FileSystemService', () => {
     expect(page.hasMore).toBe(true);
   });
 
+  test('getAlbumImagesPage forceRefresh rebuilds metadata cache', async () => {
+    mockFs = createFsMock({
+      '/albums/refresh-cache': {
+        '1.jpg': Buffer.from('image-1')
+      }
+    });
+
+    clearAlbumImageMetadataCache('/albums/refresh-cache');
+
+    const firstPage = await getAlbumImagesPage('/albums/refresh-cache');
+    expect(firstPage.totalCount).toBe(1);
+
+    mockFs.restore();
+    mockFs = createFsMock({
+      '/albums/refresh-cache': {
+        '1.jpg': Buffer.from('image-1'),
+        '2.jpg': Buffer.from('image-2')
+      }
+    });
+
+    const stalePage = await getAlbumImagesPage('/albums/refresh-cache');
+    expect(stalePage.totalCount).toBe(1);
+
+    const freshPage = await getAlbumImagesPage('/albums/refresh-cache', { forceRefresh: true });
+    expect(freshPage.totalCount).toBe(2);
+    expect(freshPage.images.map((image) => image.name)).toEqual(['1.jpg', '2.jpg']);
+  });
+
   test('getAlbumImagesPage filters by search query before pagination', async () => {
     mockFs = createFsMock({
       '/albums/search': {
