@@ -530,12 +530,23 @@ function AlbumPage({
 
 
   // 处理导航到相邻相簿
-  const handleNavigateToAdjacentAlbum = (direction) => {
-    const targetAlbum = direction === 'prev' ? neighboringAlbums.prev : neighboringAlbums.next;
+  const handleNavigateToAdjacentAlbum = useCallback((direction) => {
+    let targetAlbum = null;
+
+    if (direction === 'prev') {
+      targetAlbum = neighboringAlbums.prev;
+    } else if (direction === 'next') {
+      targetAlbum = neighboringAlbums.next;
+    } else if (direction === 'first' && siblingAlbums.length > 0) {
+      targetAlbum = siblingAlbums[0];
+    } else if (direction === 'last' && siblingAlbums.length > 0) {
+      targetAlbum = siblingAlbums[siblingAlbums.length - 1];
+    }
+
     if (targetAlbum) {
       navigateToAlbumPath(targetAlbum.path, targetAlbum.name);
     }
-  };
+  }, [neighboringAlbums, siblingAlbums, navigateToAlbumPath]);
 
   const handleOpenContainerView = useCallback(() => {
     navigateToFolderPath(decodedAlbumPath);
@@ -673,14 +684,14 @@ function AlbumPage({
       // Ctrl+左箭头键 - 跳转到第一个相簿
       if (event.key === 'ArrowLeft' && event.ctrlKey && !event.altKey && !event.metaKey) {
         if (!viewerOpen && neighboringAlbums.currentIndex > 0) {
-          handleNavigateToAdjacentAlbum('prev');
+          handleNavigateToAdjacentAlbum('first');
         }
       }
 
       // Ctrl+右箭头键 - 跳转到最后一个相簿
       if (event.key === 'ArrowRight' && event.ctrlKey && !event.altKey && !event.metaKey) {
         if (!viewerOpen && neighboringAlbums.currentIndex < neighboringAlbums.total - 1) {
-          handleNavigateToAdjacentAlbum('next');
+          handleNavigateToAdjacentAlbum('last');
         }
       }
     };
