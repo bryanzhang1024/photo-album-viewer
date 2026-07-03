@@ -101,6 +101,7 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
 const reactRouter = require('react-router-dom');
 const { ScrollPositionContext } = require('../../../src/renderer/App');
 const useAlbumImages = require('../../../src/renderer/hooks/useAlbumImages');
+const useNeighboringAlbums = require('../../../src/renderer/hooks/useNeighboringAlbums');
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage').default;
 const ipcRenderer = global.electronMock.ipcRenderer;
@@ -301,5 +302,90 @@ describe('AlbumPage refresh button', () => {
         expect.any(Number)
       );
     });
+  });
+});
+
+describe('AlbumPage sibling album keyboard navigation', () => {
+  const siblingAlbums = [
+    { path: '/photos/A1', name: 'A1' },
+    { path: '/photos/A2', name: 'A2' },
+    { path: '/photos/A3', name: 'A3' }
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    reactRouter.useNavigate.mockReturnValue(jest.fn());
+    reactRouter.useLocation.mockReturnValue({
+      pathname: '/browse/%2Fphotos%2FA2',
+      search: '',
+      state: null
+    });
+    reactRouter.useParams.mockReturnValue({});
+    useAlbumImages.mockReturnValue({
+      images: [{ path: '/photos/A2/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
+      totalCount: 1,
+      hasMore: false,
+      loading: false,
+      loadingMore: false,
+      error: '',
+      queryKey: '{}',
+      loadImages: jest.fn(() => Promise.resolve([])),
+      loadMore: jest.fn(),
+      ensureImageLoaded: jest.fn(() => Promise.resolve({ images: [], globalIndex: -1, offset: 0 })),
+      refresh: jest.fn(),
+      removeImage: jest.fn()
+    });
+    useNeighboringAlbums.mockReturnValue({
+      neighboringAlbums: {
+        prev: siblingAlbums[0],
+        next: siblingAlbums[2],
+        currentIndex: 1,
+        total: 3
+      },
+      siblingAlbums,
+      loadNeighboringAlbums: jest.fn(() => Promise.resolve())
+    });
+  });
+
+  test('Ctrl+ArrowRight jumps to last sibling album', () => {
+    const onAlbumClick = jest.fn();
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/photos/A2"
+          urlMode={true}
+          onAlbumClick={onAlbumClick}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    fireEvent.keyDown(window, { key: 'ArrowRight', ctrlKey: true });
+
+    expect(onAlbumClick).toHaveBeenCalledWith('/photos/A3', 'A3', null);
+  });
+
+  test('Ctrl+ArrowLeft jumps to first sibling album', () => {
+    const onAlbumClick = jest.fn();
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/photos/A2"
+          urlMode={true}
+          onAlbumClick={onAlbumClick}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft', ctrlKey: true });
+
+    expect(onAlbumClick).toHaveBeenCalledWith('/photos/A1', 'A1', null);
   });
 });
