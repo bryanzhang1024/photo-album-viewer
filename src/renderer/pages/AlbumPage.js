@@ -25,6 +25,7 @@ import useAlbumImages from '../hooks/useAlbumImages';
 import useGridThumbnailPrefetch, { extractAlbumImageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import useBreadcrumbs from '../hooks/useBreadcrumbs';
 import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
+import useShuffleBag from '../hooks/useShuffleBag';
 import PageLayout from '../components/PageLayout';
 import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
@@ -162,6 +163,16 @@ function AlbumPage({
   });
   const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
+  const { drawNext: drawRandomSiblingAlbum, resetBag: resetRandomBag } = useShuffleBag(
+    siblingAlbums,
+    decodedAlbumPath || '__album__',
+    { getKey: (album) => album.path, excludeKey: decodedAlbumPath }
+  );
+
+  const handleRefreshAlbum = useCallback(() => {
+    resetRandomBag();
+    refresh();
+  }, [resetRandomBag, refresh]);
 
   useEffect(() => {
     setSearchQuery('');
@@ -298,76 +309,6 @@ function AlbumPage({
       setUserDensity(savedDensity);
     }
   }, []);
-
-  // 添加键盘事件监听
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (searchHasFocus) {
-        return;
-      }
-
-      // 如果按下ESC或Backspace键且没有打开查看器
-      if ((event.key === 'Escape' || event.key === 'Backspace') && !viewerOpen) {
-        handleBack();
-      }
-
-      // 按下 r 键触发随机选择相簿
-      if (event.key === 'r' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // 确保不在输入框中，且没有打开查看器
-        if (document.activeElement.tagName !== 'INPUT' &&
-            document.activeElement.tagName !== 'TEXTAREA' &&
-            !document.activeElement.isContentEditable &&
-            !viewerOpen) {
-          handleRandomAlbum();
-        }
-      }
-
-      // 按下 h 键返回首页
-      if (event.key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // 确保不在输入框中，且没有打开查看器
-        if (document.activeElement.tagName !== 'INPUT' &&
-            document.activeElement.tagName !== 'TEXTAREA' &&
-            !document.activeElement.isContentEditable &&
-            !viewerOpen) {
-          handleHome();
-        }
-      }
-
-      // 左箭头键 - 上一个相簿
-      if (event.key === 'ArrowLeft' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.prev) {
-          handleNavigateToAdjacentAlbum('prev');
-        }
-      }
-
-      // 右箭头键 - 下一个相簿
-      if (event.key === 'ArrowRight' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.next) {
-          handleNavigateToAdjacentAlbum('next');
-        }
-      }
-
-      // Ctrl+左箭头键 - 跳转到第一个相簿
-      if (event.key === 'ArrowLeft' && event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.currentIndex > 0) {
-          handleNavigateToAdjacentAlbum('prev');
-        }
-      }
-
-      // Ctrl+右箭头键 - 跳转到最后一个相簿
-      if (event.key === 'ArrowRight' && event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (!viewerOpen && neighboringAlbums.currentIndex < neighboringAlbums.total - 1) {
-          handleNavigateToAdjacentAlbum('next');
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [viewerOpen, neighboringAlbums, searchHasFocus]);
-
 
   // 加载根路径信息
   const loadRootPath = async () => {
@@ -662,28 +603,102 @@ function AlbumPage({
     }
   }, [isNavigating, urlMode, onBreadcrumbNavigate, decodedAlbumPath, rootPath, resolveTargetView, navigateToFolderPath, navigateToAlbumPath]);
 
-  // 处理浮动面板导航
-  // 处理随机选择相簿
-  const handleRandomAlbum = () => {
-    if (siblingAlbums.length <= 1) {
-      // 如果没有其他相簿可选，则不执行任何操作
+  // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
+  const handleRandomAlbum = useCallback(() => {
+    const randomAlbum = drawRandomSiblingAlbum();
+    if (!randomAlbum) {
       setError('没有其他相簿可供随机选择');
       return;
     }
 
-    let randomAlbum;
-    let attempts = 0;
-    const maxAttempts = 10; // 防止无限循环
-
-    // 随机选择一个相簿，但避免选到当前相簿
-    do {
-      const randomIndex = Math.floor(Math.random() * siblingAlbums.length);
-      randomAlbum = siblingAlbums[randomIndex];
-      attempts++;
-    } while (randomAlbum.path === decodedAlbumPath && siblingAlbums.length > 1 && attempts < maxAttempts);
-
     navigateToAlbumPath(randomAlbum.path, randomAlbum.name);
-  };
+  }, [drawRandomSiblingAlbum, navigateToAlbumPath]);
+
+  // 添加键盘事件监听
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (searchHasFocus) {
+        return;
+      }
+
+      // 如果按下ESC或Backspace键且没有打开查看器
+      if ((event.key === 'Escape' || event.key === 'Backspace') && !viewerOpen) {
+        handleBack();
+      }
+
+      // 按下 e 键触发随机选择相簿
+      if ((event.key === 'e' || event.key === 'E') && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA' &&
+            !document.activeElement.isContentEditable &&
+            !viewerOpen) {
+          handleRandomAlbum();
+        }
+      }
+
+      // 按下 r 键刷新当前相簿
+      if ((event.key === 'r' || event.key === 'R') && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA' &&
+            !document.activeElement.isContentEditable &&
+            !viewerOpen) {
+          handleRefreshAlbum();
+        }
+      }
+
+      // 按下 h 键返回首页
+      if (event.key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA' &&
+            !document.activeElement.isContentEditable &&
+            !viewerOpen) {
+          handleHome();
+        }
+      }
+
+      // 左箭头键 - 上一个相簿
+      if (event.key === 'ArrowLeft' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.prev) {
+          handleNavigateToAdjacentAlbum('prev');
+        }
+      }
+
+      // 右箭头键 - 下一个相簿
+      if (event.key === 'ArrowRight' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.next) {
+          handleNavigateToAdjacentAlbum('next');
+        }
+      }
+
+      // Ctrl+左箭头键 - 跳转到第一个相簿
+      if (event.key === 'ArrowLeft' && event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.currentIndex > 0) {
+          handleNavigateToAdjacentAlbum('prev');
+        }
+      }
+
+      // Ctrl+右箭头键 - 跳转到最后一个相簿
+      if (event.key === 'ArrowRight' && event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (!viewerOpen && neighboringAlbums.currentIndex < neighboringAlbums.total - 1) {
+          handleNavigateToAdjacentAlbum('next');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    viewerOpen,
+    neighboringAlbums,
+    searchHasFocus,
+    handleRandomAlbum,
+    handleRefreshAlbum,
+    handleBack,
+    handleHome,
+    handleNavigateToAdjacentAlbum
+  ]);
 
   const renderHeader = () => (
     <>
@@ -716,7 +731,7 @@ function AlbumPage({
         }}
         onRandomAlbum={handleRandomAlbum}
         randomDisabled={false}
-        onRefresh={refresh}
+        onRefresh={handleRefreshAlbum}
         refreshDisabled={!canRefreshAlbum}
         refreshAriaLabel="刷新当前相簿"
         navigation={{

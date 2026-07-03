@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import useShuffleBag from '../hooks/useShuffleBag';
 import {
   Dialog,
   AppBar,
@@ -125,6 +126,16 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const imgRef = useRef(null);
   
   const currentImage = images[currentIndex];
+  const imageIndices = useMemo(() => images.map((_, index) => index), [images]);
+  const imagesScopeKey = useMemo(
+    () => images.map((image) => image.path).join('\0'),
+    [images]
+  );
+  const { drawNext: drawRandomImageIndex } = useShuffleBag(
+    imageIndices,
+    imagesScopeKey,
+    { getKey: (index) => index, excludeKey: currentIndex }
+  );
   const dimensionsByIndex = useMemo(() => {
     const dimensions = new Map();
     preloadCache.forEach((cacheEntry, index) => {
@@ -675,69 +686,69 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     setManualRotation(prev => prev + rotationAmount);
   };
 
-  // 随机选择一张图片 - 双缓冲优化版
-  const handleRandomImage = () => {
-    if (images.length <= 1) return;
+  const navigateToImageIndex = useCallback((targetIndex) => {
+    if (targetIndex == null || targetIndex < 0 || targetIndex >= images.length) {
+      return;
+    }
 
-    let randomIndex;
-    do {
-      randomIndex = Math.floor(Math.random() * images.length);
-    } while (randomIndex === currentIndex);
-
-    // 切换图片前重置状态
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
 
-    // 检查目标图片是否已在预加载缓存中
-    const targetCache = preloadCache.get(randomIndex);
+    const targetCache = preloadCache.get(targetIndex);
     if (targetCache && targetCache.loaded) {
-      // 已预加载完成，立即切换
-      onIndexChange(randomIndex);
-    } else {
-      // 未预加载完成，显示加载状态并等待
-      setIsTransitioning(true);
-      setPendingNavigation(randomIndex);
-
-      // 如果还没开始预加载，立即开始
-      if (!targetCache && images[randomIndex]) {
-        const img = new Image();
-        img.onload = () => {
-          setPreloadCache(prev => {
-            const newCache = new Map(prev);
-            newCache.set(randomIndex, {
-              loaded: true,
-              img,
-              naturalWidth: img.naturalWidth,
-              naturalHeight: img.naturalHeight
-            });
-            return newCache;
-          });
-
-          // 预加载完成后执行导航
-          onIndexChange(randomIndex);
-          setPendingNavigation(null);
-        };
-        img.onerror = () => {
-          setPreloadCache(prev => {
-            const newCache = new Map(prev);
-            newCache.set(randomIndex, { loaded: true, error: true });
-            return newCache;
-          });
-
-          // 即使加载失败也切换，保持原有行为
-          onIndexChange(randomIndex);
-          setPendingNavigation(null);
-        };
-        const imageSrc = getSafeImageUrl(images[randomIndex].path);
-        if (!imageSrc) {
-          onIndexChange(randomIndex);
-          setPendingNavigation(null);
-          return;
-        }
-        img.src = imageSrc;
-      }
+      onIndexChange(targetIndex);
+      return;
     }
-  };
+
+    setIsTransitioning(true);
+    setPendingNavigation(targetIndex);
+
+    if (!targetCache && images[targetIndex]) {
+      const img = new Image();
+      img.onload = () => {
+        setPreloadCache(prev => {
+          const newCache = new Map(prev);
+          newCache.set(targetIndex, {
+            loaded: true,
+            img,
+            naturalWidth: img.naturalWidth,
+            naturalHeight: img.naturalHeight
+          });
+          return newCache;
+        });
+
+        onIndexChange(targetIndex);
+        setPendingNavigation(null);
+      };
+      img.onerror = () => {
+        setPreloadCache(prev => {
+          const newCache = new Map(prev);
+          newCache.set(targetIndex, { loaded: true, error: true });
+          return newCache;
+        });
+
+        onIndexChange(targetIndex);
+        setPendingNavigation(null);
+      };
+      const imageSrc = getSafeImageUrl(images[targetIndex].path);
+      if (!imageSrc) {
+        onIndexChange(targetIndex);
+        setPendingNavigation(null);
+        return;
+      }
+      img.src = imageSrc;
+    }
+  }, [getSafeImageUrl, images, onIndexChange, preloadCache]);
+
+  // 随机选择一张图片（口袋式洗牌，耗尽后自动重洗）
+  const handleRandomImage = useCallback(() => {
+    if (images.length <= 1) return;
+
+    const randomIndex = drawRandomImageIndex();
+    if (randomIndex == null) return;
+
+    navigateToImageIndex(randomIndex);
+  }, [drawRandomImageIndex, images.length, navigateToImageIndex]);
   
   const clickStartRef = useRef(null);
   // 处理鼠标拖动开始

@@ -25,6 +25,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
+import useShuffleBag from '../hooks/useShuffleBag';
 import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
 import GridPageToolbar from '../components/GridPageToolbar';
@@ -436,14 +437,22 @@ function HomePage({
     }
   }, [urlMode, onAlbumClick, navigate, saveScrollPosition]);
   
+  const randomScopeKey = currentPath || rootPath || '__root__';
+  const { drawNext: drawRandomAlbum, resetBag: resetRandomBag } = useShuffleBag(
+    albumNodes,
+    randomScopeKey,
+    { getKey: (node) => node.path }
+  );
+
   // 重新扫描
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     const refreshTargetPath = currentPath || rootPath;
     if (refreshTargetPath) {
+      resetRandomBag();
       imageCache.clearType('navigation');
       scanNavigationLevel(refreshTargetPath);
     }
-  };
+  }, [currentPath, rootPath, resetRandomBag, scanNavigationLevel]);
   
 
   
@@ -612,26 +621,22 @@ function HomePage({
   }, [currentPath, directImages, toggleAlbumFavorite]);
   
   
-  // 处理随机选择相簿
+  // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
   const handleRandomAlbum = useCallback(() => {
-    if (albumNodes.length > 0) {
-      // 随机选择一个相簿
-      const randomIndex = Math.floor(Math.random() * albumNodes.length);
-      const randomAlbum = albumNodes[randomIndex];
-      
-      // 保存当前滚动位置
-      saveScrollPosition();
-      
-      // 导航到随机选择的相簿
-      if (urlMode && onAlbumClick) {
-        onAlbumClick(randomAlbum.path, randomAlbum.name);
-      } else {
-        navigateToBrowsePath(navigate, randomAlbum.path, { viewMode: 'album' });
-      }
-    } else {
+    const randomAlbum = drawRandomAlbum();
+    if (!randomAlbum) {
       setError('没有可用的相簿进行随机选择');
+      return;
     }
-  }, [urlMode, onAlbumClick, albumNodes, navigate, saveScrollPosition]);
+
+    saveScrollPosition();
+
+    if (urlMode && onAlbumClick) {
+      onAlbumClick(randomAlbum.path, randomAlbum.name);
+    } else {
+      navigateToBrowsePath(navigate, randomAlbum.path, { viewMode: 'album' });
+    }
+  }, [urlMode, onAlbumClick, drawRandomAlbum, navigate, saveScrollPosition]);
 
   // 处理导航面板的文件夹导航 - 真正的层级浏览
   const handleNavigationPanelNavigate = (folderPath) => {
@@ -776,9 +781,18 @@ function HomePage({
         return; // 在输入框中时，禁用部分快捷键
       }
 
+      if (event.ctrlKey || event.altKey || event.metaKey) {
+        return;
+      }
+
       switch (event.key) {
-        case 'r':
+        case 'e':
+        case 'E':
           handleRandomAlbum();
+          break;
+        case 'r':
+        case 'R':
+          handleRefresh();
           break;
         case 'Backspace':
           handleGoUp();
@@ -792,7 +806,7 @@ function HomePage({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleGoUp, handleRandomAlbum, searchHasFocus]);
+  }, [handleGoUp, handleRandomAlbum, handleRefresh, searchHasFocus]);
 
   const canRefreshCurrentFolder = Boolean(currentPath || rootPath);
   

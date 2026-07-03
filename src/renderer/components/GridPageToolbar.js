@@ -174,7 +174,7 @@ function TunePopover({
   onDensityChange,
   onRandomAlbum,
   randomDisabled,
-  randomTooltip = '随机选择相簿 (R)'
+  randomTooltip = '随机选择相簿 (E)'
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const densitySelectId = useId();

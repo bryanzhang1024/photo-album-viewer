@@ -169,10 +169,10 @@ describe('AlbumPage refresh button', () => {
 
     expect(refreshIndex).toBe(0);
     expect(tuneIndex).toBeGreaterThan(refreshIndex);
-    expect(screen.queryByRole('button', { name: '随机选择相簿 (R)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '随机选择相簿 (E)' })).not.toBeInTheDocument();
 
     fireEvent.click(tuneButton);
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (R)' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
 
     fireEvent.click(refreshButton);
     expect(refresh).toHaveBeenCalledTimes(1);
