@@ -4,6 +4,10 @@ import useShuffleBag from '../../../src/renderer/hooks/useShuffleBag';
 const getPath = (item) => item.path;
 
 describe('useShuffleBag', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   test('draws each item once before repeating', () => {
     const items = [{ path: '/a' }, { path: '/b' }, { path: '/c' }];
     const { result } = renderHook(() =>
@@ -43,7 +47,7 @@ describe('useShuffleBag', () => {
   });
 
   test('starts a fresh bag after remount with the same scope and candidates', () => {
-    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    jest.spyOn(Math, 'random').mockReturnValue(0);
     const items = [{ path: '/a' }, { path: '/b' }];
     const first = renderHook(() => useShuffleBag(items, '/scope', { getKey: getPath }));
 
@@ -61,11 +65,10 @@ describe('useShuffleBag', () => {
 
     expect(firstDraw).toBe('/b');
     expect(remountedDraw).toBe('/b');
-    randomSpy.mockRestore();
   });
 
   test('resets the bag when excludeKey changes', () => {
-    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    jest.spyOn(Math, 'random').mockReturnValue(0);
     const items = [{ path: '/a' }, { path: '/b' }, { path: '/c' }];
     const { result, rerender } = renderHook(
       ({ excludeKey }) => useShuffleBag(items, '/scope', { getKey: getPath, excludeKey }),
@@ -79,8 +82,6 @@ describe('useShuffleBag', () => {
     act(() => {
       expect(result.current.drawNext()?.path).toBe('/c');
     });
-
-    randomSpy.mockRestore();
   });
 
   test('resetBag clears the pocket', () => {
