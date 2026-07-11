@@ -5,7 +5,11 @@ const createImageStub = () => ({
   toPNG: jest.fn(() => Buffer.from('png-data'))
 });
 
-const setupMainProcess = ({ fileSystemService = {}, configureElectron } = {}) => {
+const setupMainProcess = ({
+  fileSystemService = {},
+  directorySnapshotService = {},
+  configureElectron
+} = {}) => {
   jest.resetModules();
 
   const electron = createElectronMocks();
@@ -50,6 +54,11 @@ const setupMainProcess = ({ fileSystemService = {}, configureElectron } = {}) =>
     SUPPORTED_FORMATS: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'],
     ...fileSystemService
   };
+  const resolvedDirectorySnapshotService = {
+    resolveDirectoryLocatorV1: jest.fn(),
+    scanDirectorySnapshot: jest.fn(),
+    ...directorySnapshotService
+  };
 
   jest.doMock('electron', () => electron);
   jest.doMock('electron-is-dev', () => false);
@@ -74,9 +83,17 @@ const setupMainProcess = ({ fileSystemService = {}, configureElectron } = {}) =>
     stopFavoritesWatcher: jest.fn()
   }));
   jest.doMock('../../src/main/services/FileSystemService', () => resolvedFileSystemService);
+  jest.doMock(
+    '../../src/main/services/DirectorySnapshotService',
+    () => resolvedDirectorySnapshotService
+  );
 
   require('../../src/main/main');
-  return { electron, fileSystemService: resolvedFileSystemService };
+  return {
+    electron,
+    fileSystemService: resolvedFileSystemService,
+    directorySnapshotService: resolvedDirectorySnapshotService
+  };
 };
 
 module.exports = {
