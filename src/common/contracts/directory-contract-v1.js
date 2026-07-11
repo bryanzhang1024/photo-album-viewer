@@ -10,6 +10,8 @@ const COMPLETENESS_STATUSES = Object.freeze(['complete', 'partial']);
 const DESCENDANT_MEDIA_STATUSES = Object.freeze(['yes', 'no', 'unknown']);
 const UNAVAILABLE_DIRECTORY_STATUSES = new Set(['unreadable', 'missing', 'sourceOffline']);
 const MAX_PURE_DATA_DEPTH = 64;
+const MAX_PURE_DATA_NODES = 4096;
+const MAX_COVER_SAMPLES = 4;
 const SOURCE_ID_PATTERN = /^src_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const REQUEST_FIELDS = new Set(['contractVersion', 'runtimeSource', 'ref']);
@@ -152,7 +154,22 @@ function readDenseArray(value, path, issues) {
   return { entries, length };
 }
 
-function validatePureDataAt(value, path, issues, ancestors = new WeakSet(), depth = 0) {
+function createPureDataTraversalState() {
+  return {
+    ancestors: new WeakSet(),
+    completed: new WeakSet(),
+    exhausted: false,
+    uniqueNodeCount: 0
+  };
+}
+
+function validatePureDataAt(
+  value,
+  path,
+  issues,
+  state = createPureDataTraversalState(),
+  depth = 0
+) {
   if (depth > MAX_PURE_DATA_DEPTH) {
     addIssue(issues, path, 'format', `Pure-data depth cannot exceed ${MAX_PURE_DATA_DEPTH}`);
     return;
@@ -168,10 +185,22 @@ function validatePureDataAt(value, path, issues, ancestors = new WeakSet(), dept
     addIssue(issues, path, 'type', 'Expected structured-cloneable pure data');
     return;
   }
-  if (ancestors.has(value)) {
+  if (state.ancestors.has(value)) {
     addIssue(issues, path, 'invariant', 'Pure-data details cannot contain cycles');
     return;
   }
+  if (state.completed.has(value) || state.exhausted) return;
+  if (state.uniqueNodeCount >= MAX_PURE_DATA_NODES) {
+    addIssue(
+      issues,
+      path,
+      'format',
+      `Pure-data object and array nodes cannot exceed ${MAX_PURE_DATA_NODES}`
+    );
+    state.exhausted = true;
+    return;
+  }
+  state.uniqueNodeCount += 1;
 
   let isArray;
   try {
@@ -182,19 +211,27 @@ function validatePureDataAt(value, path, issues, ancestors = new WeakSet(), dept
   }
   const array = isArray ? readDenseArray(value, path, issues) : null;
   const record = isArray ? null : readPlainDataRecord(value, path, issues);
-  if ((isArray && !array) || (!isArray && !record)) return;
+  if ((isArray && !array) || (!isArray && !record)) {
+    state.completed.add(value);
+    return;
+  }
 
-  ancestors.add(value);
+  state.ancestors.add(value);
   if (array) {
     for (const entry of array.entries) {
-      validatePureDataAt(entry.value, `${path}[${entry.index}]`, issues, ancestors, depth + 1);
+      validatePureDataAt(entry.value, `${path}[${entry.index}]`, issues, state, depth + 1);
+      if (state.exhausted) break;
     }
   } else {
     for (const key of Object.keys(record)) {
-      validatePureDataAt(record[key], `${path}.${key}`, issues, ancestors, depth + 1);
+      validatePureDataAt(record[key], `${path}.${key}`, issues, state, depth + 1);
+      if (state.exhausted) break;
     }
   }
-  ancestors.delete(value);
+  state.ancestors.delete(value);
+  if (!state.exhausted) {
+    state.completed.add(value);
+  }
 }
 
 function validateContractVersion(value, path, issues) {
@@ -447,6 +484,14 @@ function validateApproximateAt(value, path, relativePath, issues) {
     coverSamples = readDenseArray(record.coverSamples, `${path}.coverSamples`, issues);
   }
   if (coverSamples) {
+    if (coverSamples.length > MAX_COVER_SAMPLES) {
+      addIssue(
+        issues,
+        `${path}.coverSamples`,
+        'format',
+        `coverSamples cannot contain more than ${MAX_COVER_SAMPLES} entries`
+      );
+    }
     for (const entry of coverSamples.entries) {
       const sample = entry.value;
       const samplePath = `${path}.coverSamples[${entry.index}]`;

@@ -251,6 +251,44 @@ describe('directory-contract-v1', () => {
     expect(deserialize(serialize(envelope))).toEqual(envelope);
   });
 
+  test('validates a shared pure-data DAG within a bounded time', () => {
+    let details = { leaf: true };
+    for (let depth = 0; depth < 21; depth += 1) {
+      details = { left: details, right: details };
+    }
+    const envelope = createDirectoryErrorEnvelopeV1('INVALID_REQUEST', '请求无效', {
+      retryable: false,
+      details
+    });
+
+    const startedAt = Date.now();
+    const result = validateDirectoryEnvelopeV1(envelope);
+
+    expect(result.valid).toBe(true);
+    expect(Date.now() - startedAt).toBeLessThan(250);
+  });
+
+  test('rejects pure-data graphs above the total unique-node budget without throwing', () => {
+    const details = {
+      nodes: Array.from({ length: 5000 }, (_entry, index) => ({ index }))
+    };
+    const envelope = createDirectoryErrorEnvelopeV1('INVALID_REQUEST', '请求无效', {
+      retryable: false,
+      details
+    });
+    let result;
+    const startedAt = Date.now();
+
+    expect(() => {
+      result = validateDirectoryEnvelopeV1(envelope);
+    }).not.toThrow();
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'format' })
+    ]));
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+  });
+
   test.each([
     null,
     true,
@@ -441,6 +479,30 @@ describe('directory-contract-v1', () => {
       invalidCases.forEach((snapshot) => {
         expect(validateDirectorySnapshotV1(snapshot).valid).toBe(false);
       });
+    }
+  );
+
+  test.each(['root', 'child'])(
+    'rejects a fifth cover sample on the %s record',
+    (target) => {
+      const snapshot = createDirectorySnapshotV1();
+      const record = target === 'root' ? snapshot : snapshot.children[0];
+      const prefix = target === 'root' ? '' : 'album/';
+      record.approximate.coverSamples = Array.from(
+        { length: 5 },
+        (_entry, index) => `${prefix}${index + 1}.jpg`
+      );
+
+      const result = validateDirectorySnapshotV1(snapshot);
+
+      expect(result.valid).toBe(false);
+      expect(result.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          path: target === 'root'
+            ? '$.approximate.coverSamples'
+            : '$.children[0].approximate.coverSamples'
+        })
+      ]));
     }
   );
 

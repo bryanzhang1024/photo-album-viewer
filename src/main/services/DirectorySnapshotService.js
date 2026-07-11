@@ -16,9 +16,16 @@ const {
 const ROOT_COMPLETENESS_FIELDS = ['entries', 'directMedia', 'children'];
 const CHILD_COMPLETENESS_FIELDS = ['directMedia', 'children'];
 const MISSING_ERROR_CODES = new Set(['ENOENT', 'ENOTDIR']);
+const DEFAULT_CONCURRENCY_LIMIT = 5;
+
+function normalizeConcurrencyLimit(limit) {
+  const numericLimit = Number(limit);
+  if (!Number.isFinite(numericLimit)) return DEFAULT_CONCURRENCY_LIMIT;
+  return Math.max(1, Math.min(8, Math.trunc(numericLimit)));
+}
 
 function createScheduler(limit) {
-  const max = Math.max(1, Math.min(8, Number(limit) || 5));
+  const max = normalizeConcurrencyLimit(limit);
   let active = 0;
   const queue = [];
   const drain = () => {
@@ -35,6 +42,22 @@ function createScheduler(limit) {
     queue.push({ task, resolve, reject });
     drain();
   });
+}
+
+async function forEachWithConcurrency(items, limit, iteratee) {
+  const itemCount = items.length;
+  const workerCount = Math.min(normalizeConcurrencyLimit(limit), itemCount);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < itemCount) {
+      const index = nextIndex;
+      nextIndex += 1;
+      await iteratee(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 }
 
 function naturalCompare(left, right) {
@@ -142,7 +165,8 @@ function createDirectorySnapshotService({
 
   async function scanDirectorySnapshot(locator, options = {}) {
     const pathApi = locator.pathFlavor === 'win32' ? path.win32 : path.posix;
-    const schedule = createScheduler(options.concurrencyLimit);
+    const concurrencyLimit = normalizeConcurrencyLimit(options.concurrencyLimit);
+    const schedule = createScheduler(concurrencyLimit);
     const readDirectory = (target) => schedule(() => fsApi.readdir(target));
     const readStats = (target) => schedule(() => fsApi.stat(target));
     const observedAt = now();
@@ -205,18 +229,20 @@ function createDirectorySnapshotService({
       }
 
       const completeness = { directMedia: 'complete', children: 'complete' };
-      const inspected = await Promise.all(entryNames.map(
-        (name) => inspectEntry(candidate.absolutePath, candidate.relativePath, name)
-      ));
       const directMedia = [];
       let childDirectoryCount = 0;
-      for (const entry of inspected) {
+      await forEachWithConcurrency(entryNames, concurrencyLimit, async (name) => {
+        const entry = await inspectEntry(
+          candidate.absolutePath,
+          candidate.relativePath,
+          name
+        );
         if (entry.kind === 'media') directMedia.push(entry.media);
         if (entry.kind === 'directory') childDirectoryCount += 1;
         if (entry.kind === 'skipped' || entry.kind === 'unknown') {
           setCompletenessPartial(completeness, CHILD_COMPLETENESS_FIELDS);
         }
-      }
+      });
       directMedia.sort((left, right) => naturalCompare(left.relativePath, right.relativePath));
       const facts = {
         directMediaCount: directMedia.length,
@@ -242,21 +268,22 @@ function createDirectorySnapshotService({
     }
 
     const completeness = { entries: 'complete', directMedia: 'complete', children: 'complete' };
-    const inspected = await Promise.all(entryNames.map(
-      (name) => inspectEntry(locator.absolutePath, locator.ref.relativePath, name)
-    ));
     const directMedia = [];
     const childCandidates = [];
-    for (const entry of inspected) {
+    await forEachWithConcurrency(entryNames, concurrencyLimit, async (name) => {
+      const entry = await inspectEntry(locator.absolutePath, locator.ref.relativePath, name);
       if (entry.kind === 'media') directMedia.push(entry.media);
       if (entry.kind === 'directory') childCandidates.push(entry);
       if (entry.kind === 'skipped' || entry.kind === 'unknown') {
         setCompletenessPartial(completeness, ROOT_COMPLETENESS_FIELDS);
       }
-    }
+    });
 
     directMedia.sort((left, right) => naturalCompare(left.relativePath, right.relativePath));
-    const children = await Promise.all(childCandidates.map(scanChild));
+    const children = [];
+    await forEachWithConcurrency(childCandidates, concurrencyLimit, async (candidate) => {
+      children.push(await scanChild(candidate));
+    });
     children.sort((left, right) => naturalCompare(left.name, right.name));
     const facts = {
       directMediaCount: directMedia.length,

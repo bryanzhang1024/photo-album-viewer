@@ -42,6 +42,25 @@ function createMappedFs({ directories, stats, calls = null }) {
   };
 }
 
+async function waitForCondition(predicate, message) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(message);
+}
+
+function trackArrayIndexReads(values, reads) {
+  return new Proxy([...values], {
+    get(target, property, receiver) {
+      if (typeof property === 'string' && /^(0|[1-9]\d*)$/.test(property)) {
+        reads.push(Number(property));
+      }
+      return Reflect.get(target, property, receiver);
+    }
+  });
+}
+
 describe('DirectorySnapshotService', () => {
   let mockFs;
 
@@ -485,6 +504,118 @@ describe('DirectorySnapshotService', () => {
     );
     expect(parallelIo.getPeak()).toBeGreaterThan(1);
     expect(parallelIo.getPeak()).toBeLessThanOrEqual(2);
+  });
+
+  test('pulls root entry names only as stat capacity becomes available', async () => {
+    const indexReads = [];
+    const rootEntries = trackArrayIndexReads(['album', '2.jpg', '3.jpg'], indexReads);
+    const stats = new Map([
+      ['/photos/album', createStats('directory')],
+      ['/photos/2.jpg', createStats('file')],
+      ['/photos/3.jpg', createStats('file')]
+    ]);
+    let firstStatStarted = false;
+    let releaseFirstStat;
+    const firstStatGate = new Promise((resolve) => {
+      releaseFirstStat = resolve;
+    });
+    const service = loadService({
+      fsApi: {
+        async readdir(target) {
+          if (target === '/photos') return rootEntries;
+          if (target === '/photos/album') return [];
+          throw createIoError('ENOENT');
+        },
+        async stat(target) {
+          if (!firstStatStarted) {
+            firstStatStarted = true;
+            await firstStatGate;
+          }
+          return stats.get(target);
+        }
+      }
+    });
+
+    const scan = service.scanDirectorySnapshot(resolveRoot(service), { concurrencyLimit: 1 });
+    await waitForCondition(() => firstStatStarted, 'first root stat did not start');
+    const readsBeforeRelease = [...indexReads];
+    releaseFirstStat();
+    await scan;
+
+    expect(readsBeforeRelease).toEqual([0]);
+  });
+
+  test('pulls child entry names only as stat capacity becomes available', async () => {
+    const indexReads = [];
+    const childEntries = trackArrayIndexReads(['1.jpg', '2.jpg', '3.jpg'], indexReads);
+    const stats = new Map([
+      ['/photos/album', createStats('directory')],
+      ['/photos/album/1.jpg', createStats('file')],
+      ['/photos/album/2.jpg', createStats('file')],
+      ['/photos/album/3.jpg', createStats('file')]
+    ]);
+    let firstChildStatStarted = false;
+    let releaseFirstChildStat;
+    const firstChildStatGate = new Promise((resolve) => {
+      releaseFirstChildStat = resolve;
+    });
+    const service = loadService({
+      fsApi: {
+        async readdir(target) {
+          if (target === '/photos') return ['album'];
+          if (target === '/photos/album') return childEntries;
+          throw createIoError('ENOENT');
+        },
+        async stat(target) {
+          if (target === '/photos/album/1.jpg') {
+            firstChildStatStarted = true;
+            await firstChildStatGate;
+          }
+          return stats.get(target);
+        }
+      }
+    });
+
+    const scan = service.scanDirectorySnapshot(resolveRoot(service), { concurrencyLimit: 1 });
+    await waitForCondition(() => firstChildStatStarted, 'first child stat did not start');
+    const readsBeforeRelease = [...indexReads];
+    releaseFirstChildStat();
+    await scan;
+
+    expect(readsBeforeRelease).toEqual([0]);
+  });
+
+  test('normalizes fractional concurrency limits to an integer worker count', async () => {
+    let active = 0;
+    let peak = 0;
+    let releaseStats;
+    const statsGate = new Promise((resolve) => {
+      releaseStats = resolve;
+    });
+    const service = loadService({
+      fsApi: {
+        async readdir(target) {
+          if (target === '/photos') return ['1.jpg', '2.jpg', '3.jpg'];
+          throw createIoError('ENOENT');
+        },
+        async stat(target) {
+          active += 1;
+          peak = Math.max(peak, active);
+          await statsGate;
+          active -= 1;
+          return createStats('file', { size: target.length });
+        }
+      }
+    });
+
+    const scan = service.scanDirectorySnapshot(resolveRoot(service), { concurrencyLimit: 1.9 });
+    await waitForCondition(() => active > 0, 'root stat did not start');
+    await new Promise((resolve) => setImmediate(resolve));
+    const peakBeforeRelease = peak;
+    releaseStats();
+    await scan;
+
+    expect(peakBeforeRelease).toBe(1);
   });
 
   test('aggregates root approximate evidence from children', async () => {
