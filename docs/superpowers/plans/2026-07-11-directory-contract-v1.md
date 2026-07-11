@@ -1202,6 +1202,6 @@ git commit -m "chore(release): bump version to 2.6.0"
 
 - Spec coverage: shared contract, runtime source/ref boundary, canonical scan, partial/empty/unreadable/missing, envelope, preload, legacy isolation, versioning, tests and `.app` build each map to an explicit task.
 - Scope: no SourceRoot persistence, renderer migration, cache/epoch, favorites/session/sort migration, random browse, or legacy deletion is included.
-- Type consistency: request uses `runtimeSource + ref`; service resolves to `{ ref, absolutePath, name }`; IPC returns exactly one V1 envelope.
+- Type consistency: request uses `runtimeSource + ref`; service resolves to internal `{ ref, absolutePath, name, pathFlavor }`, emits canonical locator `{ absolutePath }`, and IPC returns exactly one V1 envelope.
 - TDD: every new production module/channel has an explicit RED command before implementation and focused GREEN command after.
 - Placeholder scan: no unresolved implementation markers remain.
