@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.5.14] - 2026-07-11
+
+- 将“目录事实、能力与导航意图分离”的 ADR 和 Phase 0 实施计划纳入版本控制，明确后续渐进迁移边界。
+- 新增目录 legacy DTO、相簿图片双形状 IPC、页面级随机袋生命周期及 v1 session/favorites 数据形状的 characterization tests；本版本不改变运行时行为。
+
 ## [2.5.13] - 2026-07-03
 
 - 修复相簿刷新未清除主进程 `albumImageMetadataCache` 的问题：刷新时传 `forceRefresh`，确保重新读取磁盘上的图片列表。

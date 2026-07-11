@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "id": "folder_legacy",
+      "kind": "folder",
+      "path": "/photos/shared",
+      "name": "shared"
+    }
+  ],
+  "albums": [
+    {
+      "id": "album_legacy",
+      "kind": "photoSet",
+      "path": "/photos/shared",
+      "name": "shared photos",
+      "imageCount": 2
+    }
+  ],
+  "images": [],
+  "collections": [],
+  "version": 7,
+  "lastModified": 1783728000000
+}
