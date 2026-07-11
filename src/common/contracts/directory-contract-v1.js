@@ -9,11 +9,8 @@ const DIRECTORY_STATUSES = Object.freeze(['ready', 'unreadable', 'missing', 'sou
 const COMPLETENESS_STATUSES = Object.freeze(['complete', 'partial']);
 const DESCENDANT_MEDIA_STATUSES = Object.freeze(['yes', 'no', 'unknown']);
 const UNAVAILABLE_DIRECTORY_STATUSES = new Set(['unreadable', 'missing', 'sourceOffline']);
+const MAX_PURE_DATA_DEPTH = 64;
 const SOURCE_ID_PATTERN = /^src_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const LEGACY_FIELDS = Object.freeze([
-  'type', 'kind', 'canOpenAlbum', 'canViewAsPhotoSet', 'hasImages',
-  'imageCount', 'directImageCount', 'childFolders'
-]);
 
 const REQUEST_FIELDS = new Set(['contractVersion', 'runtimeSource', 'ref']);
 const RUNTIME_SOURCE_FIELDS = new Set(['sourceId', 'rootPath']);
@@ -40,10 +37,6 @@ function hasOwn(value, key) {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-function isRecord(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 function addIssue(issues, path, code, message) {
   issues.push({ path, code, message });
 }
@@ -55,21 +48,54 @@ function createValidationResult(value, issues) {
   return { valid: true, issues, value };
 }
 
-function validateObject(value, path, issues) {
-  if (!isRecord(value)) {
-    addIssue(issues, path, 'type', 'Expected an object');
-    return false;
+function readPlainDataRecord(value, path, issues, allowedFields = null) {
+  if (value === null || typeof value !== 'object') {
+    addIssue(issues, path, 'type', 'Expected a plain record');
+    return null;
   }
-  return true;
-}
 
-function validateAllowedFields(value, path, allowedFields, issues) {
-  for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== 'string' || !allowedFields.has(key)) {
-      const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
-      addIssue(issues, fieldPath, 'invariant', 'Unexpected canonical field');
-    }
+  let isArray;
+  let prototype;
+  let keys;
+  try {
+    isArray = Array.isArray(value);
+    prototype = Object.getPrototypeOf(value);
+    keys = Reflect.ownKeys(value);
+  } catch (_error) {
+    addIssue(issues, path, 'type', 'Record metadata could not be inspected safely');
+    return null;
   }
+  if (isArray || (prototype !== Object.prototype && prototype !== null)) {
+    addIssue(issues, path, 'type', 'Expected a plain record');
+    return null;
+  }
+
+  const record = Object.create(null);
+  for (const key of keys) {
+    const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
+    if (typeof key === 'symbol') {
+      addIssue(issues, fieldPath, 'invariant', 'Plain records cannot own symbol fields');
+      continue;
+    }
+
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch (_error) {
+      addIssue(issues, fieldPath, 'invariant', 'Field descriptor could not be inspected safely');
+      continue;
+    }
+    if (!descriptor || !descriptor.enumerable || !hasOwn(descriptor, 'value')) {
+      addIssue(issues, fieldPath, 'invariant', 'Fields must be enumerable own data properties');
+      continue;
+    }
+    if (allowedFields && !allowedFields.has(key)) {
+      addIssue(issues, fieldPath, 'invariant', 'Unexpected canonical field');
+      continue;
+    }
+    record[key] = descriptor.value;
+  }
+  return record;
 }
 
 function isCanonicalArrayIndex(key, length) {
@@ -78,34 +104,59 @@ function isCanonicalArrayIndex(key, length) {
   return Number.isSafeInteger(index) && index >= 0 && index < length;
 }
 
-function validateDenseArray(value, path, issues) {
-  const validIndices = [];
-  for (let index = 0; index < value.length; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-    if (!descriptor) {
-      addIssue(issues, `${path}[${index}]`, 'required', 'Array entries must be dense');
-    } else if (!descriptor.enumerable || !hasOwn(descriptor, 'value')) {
-      addIssue(issues, `${path}[${index}]`, 'invariant', 'Array entries must be enumerable data');
-    } else {
-      validIndices.push(index);
+function readDenseArray(value, path, issues) {
+  let isArray;
+  let keys;
+  let lengthDescriptor;
+  try {
+    isArray = Array.isArray(value);
+    keys = isArray ? Reflect.ownKeys(value) : [];
+    lengthDescriptor = isArray ? Object.getOwnPropertyDescriptor(value, 'length') : null;
+  } catch (_error) {
+    addIssue(issues, path, 'type', 'Array metadata could not be inspected safely');
+    return null;
+  }
+  if (!isArray || !lengthDescriptor || !hasOwn(lengthDescriptor, 'value')) {
+    addIssue(issues, path, 'type', 'Expected an array');
+    return null;
+  }
+
+  const length = lengthDescriptor.value;
+  const entries = [];
+  let indexCount = 0;
+  for (const key of keys) {
+    if (key === 'length') continue;
+    if (!isCanonicalArrayIndex(key, length)) {
+      const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
+      addIssue(issues, fieldPath, 'invariant', 'Arrays cannot own extra fields');
+      continue;
     }
+    indexCount += 1;
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch (_error) {
+      addIssue(issues, `${path}[${key}]`, 'invariant', 'Array entry could not be inspected safely');
+      continue;
+    }
+    if (!descriptor || !descriptor.enumerable || !hasOwn(descriptor, 'value')) {
+      addIssue(issues, `${path}[${key}]`, 'invariant', 'Array entries must be enumerable data');
+      continue;
+    }
+    entries.push({ index: Number(key), value: descriptor.value });
   }
-
-  for (const key of Reflect.ownKeys(value)) {
-    if (key === 'length' || isCanonicalArrayIndex(key, value.length)) continue;
-    const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
-    addIssue(issues, fieldPath, 'invariant', 'Arrays cannot own extra fields');
+  if (indexCount !== length) {
+    addIssue(issues, path, 'required', 'Array entries must be dense');
   }
-  return validIndices;
+  entries.sort((left, right) => left.index - right.index);
+  return { entries, length };
 }
 
-function isPlainRecord(value) {
-  if (!isRecord(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function validatePureDataAt(value, path, issues, ancestors = new WeakSet()) {
+function validatePureDataAt(value, path, issues, ancestors = new WeakSet(), depth = 0) {
+  if (depth > MAX_PURE_DATA_DEPTH) {
+    addIssue(issues, path, 'format', `Pure-data depth cannot exceed ${MAX_PURE_DATA_DEPTH}`);
+    return;
+  }
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
@@ -121,30 +172,26 @@ function validatePureDataAt(value, path, issues, ancestors = new WeakSet()) {
     addIssue(issues, path, 'invariant', 'Pure-data details cannot contain cycles');
     return;
   }
-  if (!Array.isArray(value) && !isPlainRecord(value)) {
-    addIssue(issues, path, 'type', 'Pure-data objects must be plain records');
+
+  let isArray;
+  try {
+    isArray = Array.isArray(value);
+  } catch (_error) {
+    addIssue(issues, path, 'type', 'Pure-data value could not be inspected safely');
     return;
   }
+  const array = isArray ? readDenseArray(value, path, issues) : null;
+  const record = isArray ? null : readPlainDataRecord(value, path, issues);
+  if ((isArray && !array) || (!isArray && !record)) return;
 
   ancestors.add(value);
-  if (Array.isArray(value)) {
-    for (const index of validateDenseArray(value, path, issues)) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      validatePureDataAt(descriptor.value, `${path}[${index}]`, issues, ancestors);
+  if (array) {
+    for (const entry of array.entries) {
+      validatePureDataAt(entry.value, `${path}[${entry.index}]`, issues, ancestors, depth + 1);
     }
   } else {
-    for (const key of Reflect.ownKeys(value)) {
-      const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
-      if (typeof key === 'symbol') {
-        addIssue(issues, fieldPath, 'invariant', 'Pure-data records cannot own symbol fields');
-        continue;
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor.enumerable || !hasOwn(descriptor, 'value')) {
-        addIssue(issues, fieldPath, 'invariant', 'Pure-data fields must be enumerable data');
-        continue;
-      }
-      validatePureDataAt(descriptor.value, fieldPath, issues, ancestors);
+    for (const key of Object.keys(record)) {
+      validatePureDataAt(record[key], `${path}.${key}`, issues, ancestors, depth + 1);
     }
   }
   ancestors.delete(value);
@@ -179,40 +226,42 @@ function validateSourceIdField(value, path, issues) {
 }
 
 function validateRuntimeSourceAt(value, path, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, RUNTIME_SOURCE_FIELDS, issues);
-  validateSourceIdField(value, path, issues);
+  const record = readPlainDataRecord(value, path, issues, RUNTIME_SOURCE_FIELDS);
+  if (!record) return null;
+  validateSourceIdField(record, path, issues);
 
-  if (!hasOwn(value, 'rootPath')) {
+  if (!hasOwn(record, 'rootPath')) {
     addIssue(issues, `${path}.rootPath`, 'required', 'Root path is required');
-  } else if (typeof value.rootPath !== 'string') {
+  } else if (typeof record.rootPath !== 'string') {
     addIssue(issues, `${path}.rootPath`, 'type', 'Root path must be a string');
-  } else if (getRootPathFlavor(value.rootPath) === null) {
+  } else if (getRootPathFlavor(record.rootPath) === null) {
     addIssue(issues, `${path}.rootPath`, 'format', 'Root path must be an absolute POSIX or Windows path');
   }
+  return record;
 }
 
 function validateDirectoryRefAt(value, path, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, DIRECTORY_REF_FIELDS, issues);
-  validateSourceIdField(value, path, issues);
+  const record = readPlainDataRecord(value, path, issues, DIRECTORY_REF_FIELDS);
+  if (!record) return null;
+  validateSourceIdField(record, path, issues);
 
-  if (!hasOwn(value, 'relativePath')) {
+  if (!hasOwn(record, 'relativePath')) {
     addIssue(issues, `${path}.relativePath`, 'required', 'Relative path is required');
-  } else if (typeof value.relativePath !== 'string') {
+  } else if (typeof record.relativePath !== 'string') {
     addIssue(issues, `${path}.relativePath`, 'type', 'Relative path must be a string');
-  } else if (!isPortableRelativePath(value.relativePath)) {
+  } else if (!isPortableRelativePath(record.relativePath)) {
     addIssue(issues, `${path}.relativePath`, 'format', 'Relative path must be portable');
   }
+  return record;
 }
 
 function validateRequiredObjectField(value, key, path, issues, validator) {
   const fieldPath = `${path}.${key}`;
   if (!hasOwn(value, key)) {
     addIssue(issues, fieldPath, 'required', `${key} is required`);
-    return;
+    return null;
   }
-  validator(value[key], fieldPath, issues);
+  return validator(value[key], fieldPath, issues);
 }
 
 function validateRequiredNonEmptyString(value, key, path, issues) {
@@ -269,23 +318,24 @@ function validateRequiredEnum(value, key, path, allowedValues, issues) {
 }
 
 function validateCompletenessAt(value, path, allowedFields, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, allowedFields, issues);
+  const record = readPlainDataRecord(value, path, issues, allowedFields);
+  if (!record) return null;
   for (const field of allowedFields) {
-    validateRequiredEnum(value, field, path, COMPLETENESS_STATUSES, issues);
+    validateRequiredEnum(record, field, path, COMPLETENESS_STATUSES, issues);
   }
+  return record;
 }
 
 function validateFactsAt(value, path, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, FACT_FIELDS, issues);
-  validateRequiredNonNegativeInteger(value, 'directMediaCount', path, issues);
-  validateRequiredNonNegativeInteger(value, 'childDirectoryCount', path, issues);
+  const record = readPlainDataRecord(value, path, issues, FACT_FIELDS);
+  if (!record) return null;
+  validateRequiredNonNegativeInteger(record, 'directMediaCount', path, issues);
+  validateRequiredNonNegativeInteger(record, 'childDirectoryCount', path, issues);
+  return record;
 }
 
 function validateDirectorySemantics(value, path, completenessFields, issues) {
-  if (!isRecord(value.completeness) || !isRecord(value.facts)
-    || !isRecord(value.approximate)) return;
+  if (!value.completeness || !value.facts || !value.approximate) return;
 
   const completenessValues = [...completenessFields].map((field) => value.completeness[field]);
   const hasPartialObservation = completenessValues.includes('partial');
@@ -303,52 +353,57 @@ function validateDirectorySemantics(value, path, completenessFields, issues) {
         );
       }
     }
-    if (value.approximate.hasDescendantMedia !== 'unknown') {
+    if (value.facts.directMediaCount !== 0) {
       addIssue(
         issues,
-        `${path}.approximate.hasDescendantMedia`,
+        `${path}.facts.directMediaCount`,
         'invariant',
-        'Unavailable directories cannot claim descendant media knowledge'
+        'Unavailable directories cannot own observed direct-media facts'
+      );
+    }
+    if (value.facts.childDirectoryCount !== 0) {
+      addIssue(
+        issues,
+        `${path}.facts.childDirectoryCount`,
+        'invariant',
+        'Unavailable directories cannot own observed child facts'
+      );
+    }
+    if (value.coverSampleCount !== 0) {
+      addIssue(
+        issues,
+        `${path}.approximate.coverSamples`,
+        'invariant',
+        'Unavailable directories cannot own cover samples'
       );
     }
   }
 
-  if ((unavailable || hasPartialObservation) && value.approximate.truncated !== true) {
-    addIssue(
-      issues,
-      `${path}.approximate.truncated`,
-      'invariant',
-      'Unavailable or partial observations must be truncated'
-    );
+  const hasPositiveEvidence = value.facts.directMediaCount > 0 || value.coverSampleCount > 0;
+  let expectedDescendantMedia = 'unknown';
+  if (!unavailable && hasPositiveEvidence) {
+    expectedDescendantMedia = 'yes';
+  } else if (!unavailable && allObservationsComplete
+    && value.facts.directMediaCount === 0 && value.facts.childDirectoryCount === 0) {
+    expectedDescendantMedia = 'no';
   }
-
-  const hasPositiveEvidence = value.facts.directMediaCount > 0
-    || (Array.isArray(value.approximate.coverSamples) && value.approximate.coverSamples.length > 0);
-  if (hasPositiveEvidence && value.approximate.hasDescendantMedia === 'no') {
+  if (value.approximate.hasDescendantMedia !== expectedDescendantMedia) {
     addIssue(
       issues,
       `${path}.approximate.hasDescendantMedia`,
       'invariant',
-      'Positive media evidence cannot be reported as no descendant media'
+      `Expected hasDescendantMedia=${expectedDescendantMedia}`
     );
   }
 
-  const completeEmptyLeaf = !unavailable && allObservationsComplete
-    && value.facts.directMediaCount === 0 && value.facts.childDirectoryCount === 0;
-  if (completeEmptyLeaf && value.approximate.hasDescendantMedia !== 'no') {
-    addIssue(
-      issues,
-      `${path}.approximate.hasDescendantMedia`,
-      'invariant',
-      'A complete empty leaf must report no descendant media'
-    );
-  }
-  if (completeEmptyLeaf && value.approximate.truncated !== false) {
+  const expectedTruncated = unavailable || hasPartialObservation
+    || value.facts.childDirectoryCount > 0;
+  if (value.approximate.truncated !== expectedTruncated) {
     addIssue(
       issues,
       `${path}.approximate.truncated`,
       'invariant',
-      'A complete empty leaf cannot be truncated'
+      `Expected truncated=${expectedTruncated}`
     );
   }
 }
@@ -382,17 +437,19 @@ function validatePortableSegment(value, path, issues) {
 }
 
 function validateApproximateAt(value, path, relativePath, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, APPROXIMATE_FIELDS, issues);
+  const record = readPlainDataRecord(value, path, issues, APPROXIMATE_FIELDS);
+  if (!record) return null;
 
-  if (!hasOwn(value, 'coverSamples')) {
+  let coverSamples = null;
+  if (!hasOwn(record, 'coverSamples')) {
     addIssue(issues, `${path}.coverSamples`, 'required', 'coverSamples is required');
-  } else if (!Array.isArray(value.coverSamples)) {
-    addIssue(issues, `${path}.coverSamples`, 'type', 'coverSamples must be an array');
   } else {
-    for (const index of validateDenseArray(value.coverSamples, `${path}.coverSamples`, issues)) {
-      const sample = value.coverSamples[index];
-      const samplePath = `${path}.coverSamples[${index}]`;
+    coverSamples = readDenseArray(record.coverSamples, `${path}.coverSamples`, issues);
+  }
+  if (coverSamples) {
+    for (const entry of coverSamples.entries) {
+      const sample = entry.value;
+      const samplePath = `${path}.coverSamples[${entry.index}]`;
       if (typeof sample !== 'string') {
         addIssue(issues, samplePath, 'type', 'Cover sample must be a string');
       } else if (!isPortableRelativePath(sample)) {
@@ -405,35 +462,39 @@ function validateApproximateAt(value, path, relativePath, issues) {
   }
 
   validateRequiredEnum(
-    value,
+    record,
     'hasDescendantMedia',
     path,
     DESCENDANT_MEDIA_STATUSES,
     issues
   );
-  validateRequiredNonNegativeNumber(value, 'observedAt', path, issues);
+  validateRequiredNonNegativeNumber(record, 'observedAt', path, issues);
 
-  if (!hasOwn(value, 'truncated')) {
+  if (!hasOwn(record, 'truncated')) {
     addIssue(issues, `${path}.truncated`, 'required', 'truncated is required');
-  } else if (typeof value.truncated !== 'boolean') {
+  } else if (typeof record.truncated !== 'boolean') {
     addIssue(issues, `${path}.truncated`, 'type', 'truncated must be a boolean');
   }
+  return {
+    coverSampleCount: coverSamples ? coverSamples.entries.length : 0,
+    record
+  };
 }
 
 function validateMediaAt(value, path, rootRelativePath, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, MEDIA_FIELDS, issues);
+  const record = readPlainDataRecord(value, path, issues, MEDIA_FIELDS);
+  if (!record) return null;
 
   let relativePathValid = false;
-  if (!hasOwn(value, 'relativePath')) {
+  if (!hasOwn(record, 'relativePath')) {
     addIssue(issues, `${path}.relativePath`, 'required', 'relativePath is required');
-  } else if (typeof value.relativePath !== 'string') {
+  } else if (typeof record.relativePath !== 'string') {
     addIssue(issues, `${path}.relativePath`, 'type', 'relativePath must be a string');
-  } else if (!isPortableRelativePath(value.relativePath)) {
+  } else if (!isPortableRelativePath(record.relativePath)) {
     addIssue(issues, `${path}.relativePath`, 'format', 'relativePath must be portable');
   } else {
     relativePathValid = true;
-    if (!isExactlyOneSegmentBelow(rootRelativePath, value.relativePath)) {
+    if (!isExactlyOneSegmentBelow(rootRelativePath, record.relativePath)) {
       addIssue(
         issues,
         `${path}.relativePath`,
@@ -444,35 +505,36 @@ function validateMediaAt(value, path, rootRelativePath, issues) {
   }
 
   let nameValid = false;
-  if (!hasOwn(value, 'name')) {
+  if (!hasOwn(record, 'name')) {
     addIssue(issues, `${path}.name`, 'required', 'name is required');
   } else {
-    nameValid = validatePortableSegment(value.name, `${path}.name`, issues);
+    nameValid = validatePortableSegment(record.name, `${path}.name`, issues);
   }
   if (relativePathValid && nameValid) {
-    const segments = splitPortableRelativePath(value.relativePath);
-    if (segments[segments.length - 1] !== value.name) {
+    const segments = splitPortableRelativePath(record.relativePath);
+    if (segments[segments.length - 1] !== record.name) {
       addIssue(issues, `${path}.name`, 'invariant', 'Media name must match its relative path');
     }
   }
 
-  validateRequiredNonNegativeNumber(value, 'size', path, issues);
-  validateRequiredFiniteNumber(value, 'mtimeMs', path, issues);
+  validateRequiredNonNegativeNumber(record, 'size', path, issues);
+  validateRequiredFiniteNumber(record, 'mtimeMs', path, issues);
+  return record;
 }
 
 function validateChildAt(value, path, rootRef, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, CHILD_FIELDS, issues);
+  const record = readPlainDataRecord(value, path, issues, CHILD_FIELDS);
+  if (!record) return null;
 
-  validateRequiredObjectField(value, 'ref', path, issues, validateDirectoryRefAt);
-  const childRef = isRecord(value.ref) ? value.ref : null;
+  const childRef = validateRequiredObjectField(record, 'ref', path, issues, validateDirectoryRefAt);
   if (childRef && typeof childRef.sourceId === 'string'
-    && typeof rootRef.sourceId === 'string' && childRef.sourceId !== rootRef.sourceId) {
+    && rootRef && typeof rootRef.sourceId === 'string' && childRef.sourceId !== rootRef.sourceId) {
     addIssue(issues, `${path}.ref.sourceId`, 'invariant', 'Child source id must match the snapshot');
   }
   if (childRef && typeof childRef.relativePath === 'string'
     && isPortableRelativePath(childRef.relativePath)
-    && typeof rootRef.relativePath === 'string' && isPortableRelativePath(rootRef.relativePath)
+    && rootRef && typeof rootRef.relativePath === 'string'
+    && isPortableRelativePath(rootRef.relativePath)
     && !isExactlyOneSegmentBelow(rootRef.relativePath, childRef.relativePath)) {
     addIssue(
       issues,
@@ -483,109 +545,133 @@ function validateChildAt(value, path, rootRef, issues) {
   }
 
   let nameValid = false;
-  if (!hasOwn(value, 'name')) {
+  if (!hasOwn(record, 'name')) {
     addIssue(issues, `${path}.name`, 'required', 'name is required');
   } else {
-    nameValid = validatePortableSegment(value.name, `${path}.name`, issues);
+    nameValid = validatePortableSegment(record.name, `${path}.name`, issues);
   }
   if (childRef && typeof childRef.relativePath === 'string'
     && isPortableRelativePath(childRef.relativePath) && nameValid) {
     const segments = splitPortableRelativePath(childRef.relativePath);
-    if (segments[segments.length - 1] !== value.name) {
+    if (segments[segments.length - 1] !== record.name) {
       addIssue(issues, `${path}.name`, 'invariant', 'Child name must match its ref');
     }
   }
 
-  validateRequiredEnum(value, 'status', path, DIRECTORY_STATUSES, issues);
-  validateRequiredObjectField(value, 'completeness', path, issues, (field, fieldPath, fieldIssues) => {
-    validateCompletenessAt(field, fieldPath, CHILD_COMPLETENESS_FIELDS, fieldIssues);
-  });
-  validateRequiredObjectField(value, 'facts', path, issues, validateFactsAt);
-  validateRequiredObjectField(value, 'approximate', path, issues, (field, fieldPath, fieldIssues) => {
-    validateApproximateAt(field, fieldPath, childRef?.relativePath, fieldIssues);
-  });
-  validateDirectorySemantics(value, path, CHILD_COMPLETENESS_FIELDS, issues);
+  validateRequiredEnum(record, 'status', path, DIRECTORY_STATUSES, issues);
+  const completeness = validateRequiredObjectField(
+    record,
+    'completeness',
+    path,
+    issues,
+    (field, fieldPath, fieldIssues) => validateCompletenessAt(
+      field,
+      fieldPath,
+      CHILD_COMPLETENESS_FIELDS,
+      fieldIssues
+    )
+  );
+  const facts = validateRequiredObjectField(record, 'facts', path, issues, validateFactsAt);
+  const approximate = validateRequiredObjectField(
+    record,
+    'approximate',
+    path,
+    issues,
+    (field, fieldPath, fieldIssues) => validateApproximateAt(
+      field,
+      fieldPath,
+      childRef?.relativePath,
+      fieldIssues
+    )
+  );
+  validateDirectorySemantics({
+    approximate: approximate?.record,
+    completeness,
+    coverSampleCount: approximate?.coverSampleCount,
+    facts,
+    status: record.status
+  }, path, CHILD_COMPLETENESS_FIELDS, issues);
+  return record;
 }
 
-function validateNoLegacyFields(value, path, issues, seen = new WeakSet()) {
-  if (value === null || typeof value !== 'object' || seen.has(value)) return;
-  seen.add(value);
-
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (descriptor && hasOwn(descriptor, 'value')) {
-        validateNoLegacyFields(descriptor.value, `${path}[${index}]`, issues, seen);
-      }
-    }
-    return;
-  }
-
-  for (const [key, nestedValue] of Object.entries(value)) {
-    if (LEGACY_FIELDS.includes(key)) {
-      addIssue(issues, `${path}.${key}`, 'invariant', 'Legacy fields are not canonical');
-    }
-    validateNoLegacyFields(nestedValue, `${path}.${key}`, issues, seen);
-  }
+function validateLocatorAt(value, path, issues) {
+  const record = readPlainDataRecord(value, path, issues, LOCATOR_FIELDS);
+  if (!record) return null;
+  validateRequiredNonEmptyString(record, 'absolutePath', path, issues);
+  return record;
 }
 
 function validateDirectorySnapshotAt(value, path, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, SNAPSHOT_FIELDS, issues);
-  validateNoLegacyFields(value, path, issues);
-  validateContractVersion(value, path, issues);
-  validateRequiredObjectField(value, 'ref', path, issues, validateDirectoryRefAt);
+  const record = readPlainDataRecord(value, path, issues, SNAPSHOT_FIELDS);
+  if (!record) return null;
+  validateContractVersion(record, path, issues);
+  const rootRef = validateRequiredObjectField(record, 'ref', path, issues, validateDirectoryRefAt);
+  validateRequiredObjectField(record, 'locator', path, issues, validateLocatorAt);
+  validateRequiredNonEmptyString(record, 'name', path, issues);
+  validateRequiredEnum(record, 'status', path, DIRECTORY_STATUSES, issues);
+  validateRequiredNonNegativeNumber(record, 'observedAt', path, issues);
+  validateRequiredNonEmptyString(record, 'revision', path, issues);
+  const completeness = validateRequiredObjectField(
+    record,
+    'completeness',
+    path,
+    issues,
+    (field, fieldPath, fieldIssues) => validateCompletenessAt(
+      field,
+      fieldPath,
+      ROOT_COMPLETENESS_FIELDS,
+      fieldIssues
+    )
+  );
+  const facts = validateRequiredObjectField(record, 'facts', path, issues, validateFactsAt);
 
-  if (!hasOwn(value, 'locator')) {
-    addIssue(issues, `${path}.locator`, 'required', 'locator is required');
-  } else if (validateObject(value.locator, `${path}.locator`, issues)) {
-    validateAllowedFields(value.locator, `${path}.locator`, LOCATOR_FIELDS, issues);
-    validateRequiredNonEmptyString(value.locator, 'absolutePath', `${path}.locator`, issues);
-  }
-
-  validateRequiredNonEmptyString(value, 'name', path, issues);
-  validateRequiredEnum(value, 'status', path, DIRECTORY_STATUSES, issues);
-  validateRequiredNonNegativeNumber(value, 'observedAt', path, issues);
-  validateRequiredNonEmptyString(value, 'revision', path, issues);
-  validateRequiredObjectField(value, 'completeness', path, issues, (field, fieldPath, fieldIssues) => {
-    validateCompletenessAt(field, fieldPath, ROOT_COMPLETENESS_FIELDS, fieldIssues);
-  });
-  validateRequiredObjectField(value, 'facts', path, issues, validateFactsAt);
-
-  const rootRef = isRecord(value.ref) ? value.ref : {};
-  const rootRelativePath = typeof rootRef.relativePath === 'string' ? rootRef.relativePath : '';
-  if (!hasOwn(value, 'directMedia')) {
+  const rootRelativePath = rootRef && typeof rootRef.relativePath === 'string'
+    ? rootRef.relativePath
+    : '';
+  let directMedia = null;
+  if (!hasOwn(record, 'directMedia')) {
     addIssue(issues, `${path}.directMedia`, 'required', 'directMedia is required');
-  } else if (!Array.isArray(value.directMedia)) {
-    addIssue(issues, `${path}.directMedia`, 'type', 'directMedia must be an array');
   } else {
-    for (const index of validateDenseArray(value.directMedia, `${path}.directMedia`, issues)) {
+    directMedia = readDenseArray(record.directMedia, `${path}.directMedia`, issues);
+  }
+  if (directMedia) {
+    for (const entry of directMedia.entries) {
       validateMediaAt(
-        value.directMedia[index],
-        `${path}.directMedia[${index}]`,
+        entry.value,
+        `${path}.directMedia[${entry.index}]`,
         rootRelativePath,
         issues
       );
     }
   }
 
-  if (!hasOwn(value, 'children')) {
+  let children = null;
+  if (!hasOwn(record, 'children')) {
     addIssue(issues, `${path}.children`, 'required', 'children is required');
-  } else if (!Array.isArray(value.children)) {
-    addIssue(issues, `${path}.children`, 'type', 'children must be an array');
   } else {
-    for (const index of validateDenseArray(value.children, `${path}.children`, issues)) {
-      validateChildAt(value.children[index], `${path}.children[${index}]`, rootRef, issues);
+    children = readDenseArray(record.children, `${path}.children`, issues);
+  }
+  if (children) {
+    for (const entry of children.entries) {
+      validateChildAt(entry.value, `${path}.children[${entry.index}]`, rootRef, issues);
     }
   }
 
-  validateRequiredObjectField(value, 'approximate', path, issues, (field, fieldPath, fieldIssues) => {
-    validateApproximateAt(field, fieldPath, rootRelativePath, fieldIssues);
-  });
+  const approximate = validateRequiredObjectField(
+    record,
+    'approximate',
+    path,
+    issues,
+    (field, fieldPath, fieldIssues) => validateApproximateAt(
+      field,
+      fieldPath,
+      rootRelativePath,
+      fieldIssues
+    )
+  );
 
-  if (isRecord(value.facts) && Array.isArray(value.directMedia)
-    && Number.isInteger(value.facts.directMediaCount)
-    && value.facts.directMediaCount !== value.directMedia.length) {
+  if (facts && directMedia && Number.isInteger(facts.directMediaCount)
+    && facts.directMediaCount !== directMedia.length) {
     addIssue(
       issues,
       `${path}.facts.directMediaCount`,
@@ -593,9 +679,8 @@ function validateDirectorySnapshotAt(value, path, issues) {
       'Direct media count must match the returned entries'
     );
   }
-  if (isRecord(value.facts) && Array.isArray(value.children)
-    && Number.isInteger(value.facts.childDirectoryCount)
-    && value.facts.childDirectoryCount !== value.children.length) {
+  if (facts && children && Number.isInteger(facts.childDirectoryCount)
+    && facts.childDirectoryCount !== children.length) {
     addIssue(
       issues,
       `${path}.facts.childDirectoryCount`,
@@ -603,7 +688,14 @@ function validateDirectorySnapshotAt(value, path, issues) {
       'Child directory count must match the returned entries'
     );
   }
-  validateDirectorySemantics(value, path, ROOT_COMPLETENESS_FIELDS, issues);
+  validateDirectorySemantics({
+    approximate: approximate?.record,
+    completeness,
+    coverSampleCount: approximate?.coverSampleCount,
+    facts,
+    status: record.status
+  }, path, ROOT_COMPLETENESS_FIELDS, issues);
+  return record;
 }
 
 function validateRuntimeSourceV1(value) {
@@ -620,16 +712,20 @@ function validateDirectoryRefV1(value) {
 
 function validateDirectoryLevelRequestV1(value) {
   const issues = [];
-  if (!validateObject(value, '$', issues)) return createValidationResult(value, issues);
-  validateAllowedFields(value, '$', REQUEST_FIELDS, issues);
-  validateContractVersion(value, '$', issues);
-  validateRequiredObjectField(value, 'runtimeSource', '$', issues, validateRuntimeSourceAt);
-  validateRequiredObjectField(value, 'ref', '$', issues, validateDirectoryRefAt);
+  const record = readPlainDataRecord(value, '$', issues, REQUEST_FIELDS);
+  if (!record) return createValidationResult(value, issues);
+  validateContractVersion(record, '$', issues);
+  const runtimeSource = validateRequiredObjectField(
+    record,
+    'runtimeSource',
+    '$',
+    issues,
+    validateRuntimeSourceAt
+  );
+  const ref = validateRequiredObjectField(record, 'ref', '$', issues, validateDirectoryRefAt);
 
-  if (isRecord(value.runtimeSource) && isRecord(value.ref)
-    && typeof value.runtimeSource.sourceId === 'string'
-    && typeof value.ref.sourceId === 'string'
-    && value.runtimeSource.sourceId !== value.ref.sourceId) {
+  if (runtimeSource && ref && typeof runtimeSource.sourceId === 'string'
+    && typeof ref.sourceId === 'string' && runtimeSource.sourceId !== ref.sourceId) {
     addIssue(issues, '$.ref.sourceId', 'invariant', 'Directory ref must match runtime source');
   }
 
@@ -690,37 +786,37 @@ function createDirectoryErrorEnvelopeV1(code, message, options = {}) {
 }
 
 function validateErrorAt(value, path, issues) {
-  if (!validateObject(value, path, issues)) return;
-  validateAllowedFields(value, path, ERROR_FIELDS, issues);
-  validateRequiredNonEmptyString(value, 'code', path, issues);
-  validateRequiredNonEmptyString(value, 'message', path, issues);
-  if (!hasOwn(value, 'retryable')) {
+  const record = readPlainDataRecord(value, path, issues, ERROR_FIELDS);
+  if (!record) return null;
+  validateRequiredNonEmptyString(record, 'code', path, issues);
+  validateRequiredNonEmptyString(record, 'message', path, issues);
+  if (!hasOwn(record, 'retryable')) {
     addIssue(issues, `${path}.retryable`, 'required', 'retryable is required');
-  } else if (typeof value.retryable !== 'boolean') {
+  } else if (typeof record.retryable !== 'boolean') {
     addIssue(issues, `${path}.retryable`, 'type', 'retryable must be a boolean');
   }
-  if (hasOwn(value, 'details')) {
-    validatePureDataAt(value.details, `${path}.details`, issues);
+  if (hasOwn(record, 'details')) {
+    validatePureDataAt(record.details, `${path}.details`, issues);
   }
+  return record;
 }
 
 function validateDirectoryEnvelopeV1(value) {
   const issues = [];
-  if (!validateObject(value, '$', issues)) return createValidationResult(value, issues);
-  validateAllowedFields(value, '$', ENVELOPE_FIELDS, issues);
-  validateContractVersion(value, '$', issues);
+  const record = readPlainDataRecord(value, '$', issues, ENVELOPE_FIELDS);
+  if (!record) return createValidationResult(value, issues);
+  validateContractVersion(record, '$', issues);
 
-  if (!hasOwn(value, 'ok')) {
+  if (!hasOwn(record, 'ok')) {
     addIssue(issues, '$.ok', 'required', 'ok is required');
-  } else if (typeof value.ok !== 'boolean') {
+  } else if (typeof record.ok !== 'boolean') {
     addIssue(issues, '$.ok', 'type', 'ok must be a boolean');
-  } else if (value.ok) {
-    if (!hasOwn(value, 'data')) {
+  } else if (record.ok) {
+    if (!hasOwn(record, 'data')) {
       addIssue(issues, '$.data', 'required', 'Successful envelope requires data');
     } else {
-      validateDirectorySnapshotAt(value.data, '$.data', issues);
-      if (isRecord(value.data) && hasOwn(value.data, 'status')
-        && value.data.status !== 'ready') {
+      const data = validateDirectorySnapshotAt(record.data, '$.data', issues);
+      if (data && hasOwn(data, 'status') && data.status !== 'ready') {
         addIssue(
           issues,
           '$.data.status',
@@ -729,16 +825,16 @@ function validateDirectoryEnvelopeV1(value) {
         );
       }
     }
-    if (hasOwn(value, 'error')) {
+    if (hasOwn(record, 'error')) {
       addIssue(issues, '$.error', 'invariant', 'Successful envelope cannot own error');
     }
   } else {
-    if (!hasOwn(value, 'error')) {
+    if (!hasOwn(record, 'error')) {
       addIssue(issues, '$.error', 'required', 'Failure envelope requires error');
     } else {
-      validateErrorAt(value.error, '$.error', issues);
+      validateErrorAt(record.error, '$.error', issues);
     }
-    if (hasOwn(value, 'data')) {
+    if (hasOwn(record, 'data')) {
       addIssue(issues, '$.data', 'invariant', 'Failure envelope cannot own data');
     }
   }

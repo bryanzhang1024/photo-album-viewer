@@ -1,3 +1,5 @@
+const { spawnSync } = require('child_process');
+const path = require('path');
 const { deserialize, serialize } = require('v8');
 
 const {
@@ -45,6 +47,38 @@ function setChildUnavailable(child, status) {
     observedAt: 1783728000000,
     truncated: true
   };
+}
+
+function createSemanticSnapshot(target, {
+  status = 'ready',
+  completeness = 'complete',
+  directMediaCount = 0,
+  childDirectoryCount = 0,
+  coverSamples = [],
+  hasDescendantMedia,
+  truncated
+}) {
+  const snapshot = createDirectorySnapshotV1();
+  const record = target === 'root' ? snapshot : snapshot.children[0];
+  record.status = status;
+  record.completeness = target === 'root'
+    ? { entries: completeness, directMedia: completeness, children: completeness }
+    : { directMedia: completeness, children: completeness };
+  record.facts = { directMediaCount, childDirectoryCount };
+  record.approximate = {
+    coverSamples,
+    hasDescendantMedia,
+    observedAt: 1783728000000,
+    truncated
+  };
+
+  if (target === 'root') {
+    snapshot.directMedia = directMediaCount === 1
+      ? [{ relativePath: 'cover.jpg', name: 'cover.jpg', size: 1234, mtimeMs: 1783728000000 }]
+      : [];
+    snapshot.children = childDirectoryCount === 1 ? snapshot.children : [];
+  }
+  return snapshot;
 }
 
 describe('directory-contract-v1', () => {
@@ -318,6 +352,265 @@ describe('directory-contract-v1', () => {
     expect(validateDirectorySnapshotV1(emptyLeafIsTruncated).valid).toBe(false);
     expect(validateDirectorySnapshotV1(partialRootNotTruncated).valid).toBe(false);
     expect(validateDirectorySnapshotV1(validEmptyLeaf).valid).toBe(true);
+  });
+
+  test.each(['root', 'child'])(
+    'accepts every valid approximate truth-table row for the %s record',
+    (target) => {
+      const sample = target === 'root' ? 'cover.jpg' : 'album/1.jpg';
+      const validCases = [
+        createSemanticSnapshot(target, {
+          directMediaCount: 1,
+          hasDescendantMedia: 'yes',
+          truncated: false
+        }),
+        createSemanticSnapshot(target, {
+          coverSamples: [sample],
+          hasDescendantMedia: 'yes',
+          truncated: false
+        }),
+        createSemanticSnapshot(target, {
+          childDirectoryCount: 1,
+          hasDescendantMedia: 'unknown',
+          truncated: true
+        }),
+        createSemanticSnapshot(target, {
+          hasDescendantMedia: 'no',
+          truncated: false
+        }),
+        createSemanticSnapshot(target, {
+          completeness: 'partial',
+          hasDescendantMedia: 'unknown',
+          truncated: true
+        }),
+        createSemanticSnapshot(target, {
+          status: 'unreadable',
+          completeness: 'partial',
+          hasDescendantMedia: 'unknown',
+          truncated: true
+        })
+      ];
+      validCases.forEach((snapshot) => {
+        expect(validateDirectorySnapshotV1(snapshot).valid).toBe(true);
+      });
+    }
+  );
+
+  test.each(['root', 'child'])(
+    'rejects contradictory approximate truth-table rows for the %s record',
+    (target) => {
+      const sample = target === 'root' ? 'cover.jpg' : 'album/1.jpg';
+      const invalidCases = [
+        createSemanticSnapshot(target, {
+          directMediaCount: 1,
+          hasDescendantMedia: 'unknown',
+          truncated: false
+        }),
+        createSemanticSnapshot(target, {
+          childDirectoryCount: 1,
+          hasDescendantMedia: 'no',
+          truncated: true
+        }),
+        createSemanticSnapshot(target, {
+          childDirectoryCount: 1,
+          hasDescendantMedia: 'unknown',
+          truncated: false
+        }),
+        createSemanticSnapshot(target, {
+          status: 'missing',
+          completeness: 'partial',
+          directMediaCount: 1,
+          hasDescendantMedia: 'unknown',
+          truncated: true
+        }),
+        createSemanticSnapshot(target, {
+          status: 'sourceOffline',
+          completeness: 'partial',
+          childDirectoryCount: 1,
+          hasDescendantMedia: 'unknown',
+          truncated: true
+        }),
+        createSemanticSnapshot(target, {
+          status: 'unreadable',
+          completeness: 'partial',
+          coverSamples: [sample],
+          hasDescendantMedia: 'unknown',
+          truncated: true
+        })
+      ];
+      invalidCases.forEach((snapshot) => {
+        expect(validateDirectorySnapshotV1(snapshot).valid).toBe(false);
+      });
+    }
+  );
+
+  test('rejects non-enumerable canonical fields across request, snapshot, and envelope', () => {
+    const request = createDirectoryLevelRequestV1();
+    Object.defineProperty(request, 'contractVersion', {
+      value: 1,
+      enumerable: false,
+      configurable: true
+    });
+    const snapshot = createDirectorySnapshotV1();
+    Object.defineProperty(snapshot.facts, 'directMediaCount', {
+      value: 1,
+      enumerable: false,
+      configurable: true
+    });
+    const envelope = createDirectorySuccessEnvelopeV1(createDirectorySnapshotV1());
+    Object.defineProperty(envelope, 'ok', {
+      value: true,
+      enumerable: false,
+      configurable: true
+    });
+
+    expect(validateDirectoryLevelRequestV1(request).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(snapshot).valid).toBe(false);
+    expect(validateDirectoryEnvelopeV1(envelope).valid).toBe(false);
+  });
+
+  test('rejects non-plain canonical records', () => {
+    const request = createDirectoryLevelRequestV1();
+    Object.setPrototypeOf(request, { inherited: true });
+    const snapshot = createDirectorySnapshotV1();
+    Object.setPrototypeOf(snapshot.facts, { inherited: true });
+    const envelope = createDirectorySuccessEnvelopeV1(createDirectorySnapshotV1());
+    Object.setPrototypeOf(envelope, { inherited: true });
+
+    expect(validateDirectoryLevelRequestV1(request).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(snapshot).valid).toBe(false);
+    expect(validateDirectoryEnvelopeV1(envelope).valid).toBe(false);
+  });
+
+  test('rejects canonical accessors without invoking them or throwing', () => {
+    const probes = [
+      () => {
+        const request = createDirectoryLevelRequestV1();
+        let calls = 0;
+        Object.defineProperty(request, 'contractVersion', {
+          enumerable: true,
+          get: () => {
+            calls += 1;
+            throw new Error('request getter executed');
+          }
+        });
+        return { validate: () => validateDirectoryLevelRequestV1(request), calls: () => calls };
+      },
+      () => {
+        const snapshot = createDirectorySnapshotV1();
+        let calls = 0;
+        Object.defineProperty(snapshot.facts, 'directMediaCount', {
+          enumerable: true,
+          get: () => {
+            calls += 1;
+            return calls === 1 ? 1 : () => 'changed';
+          }
+        });
+        return { validate: () => validateDirectorySnapshotV1(snapshot), calls: () => calls };
+      },
+      () => {
+        const snapshot = createDirectorySnapshotV1();
+        let calls = 0;
+        Object.defineProperty(snapshot, 'legacyGetter', {
+          enumerable: true,
+          get: () => {
+            calls += 1;
+            throw new Error('unknown getter executed');
+          }
+        });
+        return { validate: () => validateDirectorySnapshotV1(snapshot), calls: () => calls };
+      },
+      () => {
+        const envelope = createDirectorySuccessEnvelopeV1(createDirectorySnapshotV1());
+        let calls = 0;
+        Object.defineProperty(envelope, 'ok', {
+          enumerable: true,
+          get: () => {
+            calls += 1;
+            throw new Error('envelope getter executed');
+          }
+        });
+        return { validate: () => validateDirectoryEnvelopeV1(envelope), calls: () => calls };
+      }
+    ];
+
+    probes.forEach((createProbe) => {
+      const probe = createProbe();
+      let result;
+      expect(() => {
+        result = probe.validate();
+      }).not.toThrow();
+      expect(result.valid).toBe(false);
+      expect(probe.calls()).toBe(0);
+    });
+  });
+
+  test('rejects 12,000-level details without throwing or deep traversal', () => {
+    let details = 'leaf';
+    for (let depth = 0; depth < 12000; depth += 1) {
+      details = { nested: details };
+    }
+    const envelope = createDirectoryErrorEnvelopeV1('INVALID_REQUEST', '请求无效', {
+      retryable: false,
+      details
+    });
+    let result;
+    const startedAt = Date.now();
+    expect(() => {
+      result = validateDirectoryEnvelopeV1(envelope);
+    }).not.toThrow();
+    expect(result.valid).toBe(false);
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+  });
+
+  test('does not traverse a deeply nested unknown canonical field', () => {
+    let unknown = 'leaf';
+    for (let depth = 0; depth < 12000; depth += 1) {
+      unknown = { nested: unknown };
+    }
+    const snapshot = createDirectorySnapshotV1({ unknown });
+    let result;
+    expect(() => {
+      result = validateDirectorySnapshotV1(snapshot);
+    }).not.toThrow();
+    expect(result.valid).toBe(false);
+  });
+
+  test('rejects maximum-length sparse arrays within a bounded subprocess', () => {
+    const contractPath = path.resolve(
+      __dirname,
+      '../../../src/common/contracts/directory-contract-v1.js'
+    );
+    const fixturesPath = path.resolve(__dirname, '../../helpers/directoryContractFixtures.js');
+    const probeScript = `
+      const {
+        createDirectoryErrorEnvelopeV1,
+        validateDirectoryEnvelopeV1,
+        validateDirectorySnapshotV1
+      } = require(${JSON.stringify(contractPath)});
+      const { createDirectorySnapshotV1 } = require(${JSON.stringify(fixturesPath)});
+      const hugeDetails = [];
+      hugeDetails.length = 0xffffffff;
+      const detailsResult = validateDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1('INVALID_REQUEST', 'invalid', {
+          retryable: false,
+          details: { hugeDetails }
+        })
+      );
+      const snapshot = createDirectorySnapshotV1();
+      snapshot.directMedia = [];
+      snapshot.directMedia.length = 0xffffffff;
+      snapshot.facts.directMediaCount = 0xffffffff;
+      const snapshotResult = validateDirectorySnapshotV1(snapshot);
+      process.exit(detailsResult.valid || snapshotResult.valid ? 2 : 0);
+    `;
+    const probe = spawnSync(process.execPath, ['-e', probeScript], {
+      encoding: 'utf8',
+      timeout: 1000
+    });
+
+    expect(probe.error).toBeUndefined();
+    expect(probe.status).toBe(0);
   });
 
   test.each([

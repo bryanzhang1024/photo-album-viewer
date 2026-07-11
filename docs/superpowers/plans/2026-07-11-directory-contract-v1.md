@@ -688,6 +688,37 @@ describe('GET_DIRECTORY_LEVEL_V1 IPC', () => {
     expect(scanDirectorySnapshot).toHaveBeenCalledWith(locator, { concurrencyLimit: expect.any(Number) });
   });
 
+  test('maps an unavailable root service response to INVALID_RESPONSE', async () => {
+    const request = createDirectoryLevelRequestV1();
+    const snapshot = createDirectorySnapshotV1({
+      status: 'missing',
+      completeness: { entries: 'partial', directMedia: 'partial', children: 'partial' },
+      facts: { directMediaCount: 0, childDirectoryCount: 0 },
+      directMedia: [],
+      children: [],
+      approximate: {
+        coverSamples: [],
+        hasDescendantMedia: 'unknown',
+        observedAt: 1783728000000,
+        truncated: true
+      }
+    });
+    const { electron } = setupMainProcess({
+      directorySnapshotService: {
+        resolveDirectoryLocatorV1: jest.fn(() => ({
+          ref: request.ref, absolutePath: '/photos', name: 'photos'
+        })),
+        scanDirectorySnapshot: jest.fn().mockResolvedValue(snapshot)
+      }
+    });
+    const result = await electron.ipcMain.invoke(CHANNELS.GET_DIRECTORY_LEVEL_V1, request);
+    expect(result).toMatchObject({
+      contractVersion: 1,
+      ok: false,
+      error: { code: 'INVALID_RESPONSE', retryable: false }
+    });
+  });
+
   test('rejects unsupported versions without scanning', async () => {
     const scanDirectorySnapshot = jest.fn();
     const { electron } = setupMainProcess({ directorySnapshotService: { scanDirectorySnapshot } });
@@ -840,7 +871,7 @@ Return `{ electron, fileSystemService: resolvedFileSystemService, directorySnaps
 
 - [ ] **Step 5: Implement the versioned main handler**
 
-Import Task 1 contract helpers and Task 2 service. Add a new handler after the unchanged legacy handler. Validation/error behavior:
+Import Task 1 contract helpers (including `validateDirectoryEnvelopeV1`) and Task 2 service. Add a new handler after the unchanged legacy handler. Validation/error behavior:
 
 ```js
 ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
@@ -874,14 +905,15 @@ ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
     const snapshot = await DirectorySnapshotService.scanDirectorySnapshot(locator, {
       concurrencyLimit
     });
-    const snapshotValidation = validateDirectorySnapshotV1(snapshot);
-    if (!snapshotValidation.valid) {
-      return createDirectoryErrorEnvelopeV1('INVALID_RESPONSE', 'Invalid directory snapshot', {
+    const successEnvelope = createDirectorySuccessEnvelopeV1(snapshot);
+    const responseValidation = validateDirectoryEnvelopeV1(successEnvelope);
+    if (!responseValidation.valid) {
+      return createDirectoryErrorEnvelopeV1('INVALID_RESPONSE', 'Invalid directory response', {
         retryable: false,
-        details: { issues: snapshotValidation.issues }
+        details: { issues: responseValidation.issues }
       });
     }
-    return createDirectorySuccessEnvelopeV1(snapshot);
+    return successEnvelope;
   } catch (error) {
     const sourceCode = error?.code;
     if (sourceCode === 'ENOENT' || sourceCode === 'ENOTDIR') {
