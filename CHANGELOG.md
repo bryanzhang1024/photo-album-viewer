@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.7.0] - 2026-07-12
+
+- 新增持久化 `SourceRoot` 注册表与版本化 IPC，为照片来源分配稳定 `sourceId`；使用既有 `sourceId` 重新关联根路径时，canonical 导航目标身份保持不变。
+- 浏览标签页改用 `sourceId`、portable relative path 与视图模式组成的 canonical location；session/snapshot 仅写入 v2，v1 数据仅作为只读迁移回退且不会被改写。
+- renderer 启动入口改用 `HashRouter`，修复生产打包窗口从文件 URL 启动 canonical 路由时的 bootstrap 问题。
+- Home 与 Album 的面包屑和“返回上级”导航限定在当前 `SourceRoot` 边界内，并沿用 canonical 导航目标。
+- 完善 POSIX、Windows drive 与 UNC 路径的规范化、匹配和 portable relative path 转换，保持跨平台来源与标签页定位一致。
+- 保留现有 `SCAN_NAVIGATION_LEVEL`、`GET_ALBUM_IMAGES` 内容扫描链路与授权行为；Phase 2 renderer 不调用 `GET_DIRECTORY_LEVEL_V1`。
+
 ## [2.6.0] - 2026-07-11
 
 - 新增 `DirectorySnapshot v1` 共享契约、三值目录能力投影和跨平台 `DirectoryRef` 路径校验。

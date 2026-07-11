@@ -1,3 +1,9 @@
+import {
+  toCanonicalViewMode,
+  toLegacyViewMode,
+  validateNavigationTargetV1
+} from '../../common/contracts/navigation-contract-v1';
+
 const LAST_PATH_KEY = 'lastPath';
 
 export const normalizeTargetPath = (rawPath = '') => {
@@ -34,6 +40,74 @@ export const buildBrowseUrl = (targetPath, viewMode = 'folder', initialImage = n
 
   const queryString = params.toString();
   return queryString ? `${basePath}?${queryString}` : basePath;
+};
+
+export const buildNavigationTargetUrl = (target) => {
+  if (!validateNavigationTargetV1(target).valid) {
+    throw new TypeError('Invalid NavigationTarget');
+  }
+
+  const params = new URLSearchParams();
+  params.set('sourceId', target.sourceId);
+  params.set('relativePath', target.relativePath);
+  params.set('view', toLegacyViewMode(target.viewMode) || 'folder');
+
+  if (target.initialMediaRelativePath !== null) {
+    params.set('image', target.initialMediaRelativePath);
+  }
+
+  return `/browse?${params.toString()}`;
+};
+
+const safelyDecodeLegacyValue = (value) => {
+  try {
+    return decodeURIComponent(value);
+  } catch (_error) {
+    return value;
+  }
+};
+
+export const parseBrowseLocation = (pathname, search = '') => {
+  if (pathname === '/') return { kind: 'landing' };
+  if (pathname === '/favorites') return { kind: 'favorites' };
+
+  const params = new URLSearchParams(search);
+  if (pathname === '/browse') {
+    if (params.has('sourceId') && params.has('relativePath')) {
+      const legacyViewMode = params.has('view') ? params.get('view') : 'folder';
+      if (legacyViewMode !== 'folder' && legacyViewMode !== 'album') return null;
+
+      const target = {
+        sourceId: params.get('sourceId'),
+        relativePath: params.get('relativePath'),
+        viewMode: toCanonicalViewMode(legacyViewMode),
+        initialMediaRelativePath: params.has('image') ? params.get('image') : null
+      };
+      if (!validateNavigationTargetV1(target).valid) return null;
+
+      return { kind: 'directory', target };
+    }
+
+    return { kind: 'landing' };
+  }
+
+  if (!pathname.startsWith('/browse/')) return null;
+
+  const encodedAbsolutePath = pathname.slice('/browse/'.length);
+  const legacyAbsolutePath = normalizeTargetPath(
+    safelyDecodeLegacyValue(encodedAbsolutePath)
+  );
+  if (!legacyAbsolutePath) return { kind: 'landing' };
+
+  const encodedInitialImage = params.get('image');
+  return {
+    kind: 'legacyAbsolute',
+    legacyAbsolutePath,
+    viewMode: params.get('view') === 'album' ? 'album' : 'folder',
+    legacyInitialMediaPath: encodedInitialImage
+      ? safelyDecodeLegacyValue(encodedInitialImage)
+      : null
+  };
 };
 
 export const navigateToBrowsePath = (

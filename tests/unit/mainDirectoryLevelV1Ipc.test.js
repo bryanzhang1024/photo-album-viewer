@@ -24,22 +24,46 @@ describe('GET_DIRECTORY_LEVEL_V1 IPC', () => {
   });
 
   test('returns one success envelope for a valid snapshot', async () => {
-    const request = createDirectoryLevelRequestV1();
-    const locator = { ref: request.ref, absolutePath: '/photos', name: 'photos' };
-    const snapshot = createDirectorySnapshotV1();
+    const request = createDirectoryLevelRequestV1({
+      runtimeSource: { rootPath: '/forged/photos' }
+    });
+    const locator = {
+      ref: request.ref,
+      absolutePath: '/registered/photos',
+      name: 'photos'
+    };
+    const snapshot = createDirectorySnapshotV1({
+      locator: { absolutePath: '/registered/photos' }
+    });
     const resolveDirectoryLocatorV1 = jest.fn(() => locator);
     const scanDirectorySnapshot = jest.fn().mockResolvedValue(snapshot);
     const scanNavigationLevel = jest.fn();
     const { electron } = setupMainProcess({
       fileSystemService: { scanNavigationLevel },
-      directorySnapshotService: { resolveDirectoryLocatorV1, scanDirectorySnapshot }
+      directorySnapshotService: { resolveDirectoryLocatorV1, scanDirectorySnapshot },
+      sourceRootService: {
+        getSourceRoot: jest.fn().mockResolvedValue({
+          schemaVersion: 1,
+          sourceId: request.ref.sourceId,
+          label: 'photos',
+          rootPath: '/registered/photos',
+          sourceGeneration: 1
+        })
+      }
     });
     const handler = electron.ipcMain._handlers.get(CHANNELS.GET_DIRECTORY_LEVEL_V1);
     const event = { sender: { isDestroyed: jest.fn(() => false), send: jest.fn() } };
     const result = await handler(event, request);
     expect(result).toEqual({ contractVersion: 1, ok: true, data: snapshot });
     expectValidV1Envelope(result);
-    expect(resolveDirectoryLocatorV1).toHaveBeenCalledWith(request);
+    expect(resolveDirectoryLocatorV1).toHaveBeenCalledWith({
+      contractVersion: 1,
+      runtimeSource: {
+        sourceId: request.ref.sourceId,
+        rootPath: '/registered/photos'
+      },
+      ref: request.ref
+    });
     expect(scanDirectorySnapshot).toHaveBeenCalledWith(locator, {
       concurrencyLimit: expect.any(Number)
     });
@@ -125,6 +149,12 @@ describe('GET_DIRECTORY_LEVEL_V1 IPC', () => {
       },
       'SOURCE_ID_MISMATCH',
       'Directory ref must match runtime source'
+    ],
+    [
+      'missing compatibility runtime source',
+      (request) => { delete request.runtimeSource; },
+      'INVALID_REQUEST',
+      'runtimeSource is required'
     ]
   ])('classifies %s with the selected validation message', async (
     _label,
@@ -154,6 +184,85 @@ describe('GET_DIRECTORY_LEVEL_V1 IPC', () => {
     expectValidV1Envelope(result);
     expect(resolveDirectoryLocatorV1).not.toHaveBeenCalled();
     expect(scanDirectorySnapshot).not.toHaveBeenCalled();
+  });
+
+  test('returns SOURCE_NOT_FOUND before resolving an unregistered DirectoryRef', async () => {
+    const request = createDirectoryLevelRequestV1();
+    const resolveDirectoryLocatorV1 = jest.fn();
+    const scanDirectorySnapshot = jest.fn();
+    const getSourceRoot = jest.fn().mockResolvedValue(null);
+    const { electron } = setupMainProcess({
+      directorySnapshotService: { resolveDirectoryLocatorV1, scanDirectorySnapshot },
+      sourceRootService: { getSourceRoot }
+    });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.GET_DIRECTORY_LEVEL_V1, request);
+
+    expect(result).toEqual({
+      contractVersion: 1,
+      ok: false,
+      error: {
+        code: 'SOURCE_NOT_FOUND',
+        message: 'Source root not found',
+        retryable: false
+      }
+    });
+    expectValidV1Envelope(result);
+    expect(getSourceRoot).toHaveBeenCalledWith(request.ref.sourceId);
+    expect(resolveDirectoryLocatorV1).not.toHaveBeenCalled();
+    expect(scanDirectorySnapshot).not.toHaveBeenCalled();
+  });
+
+  test('preserves request source-id casing while replacing only the runtime root path', async () => {
+    const uppercaseSourceId = 'SRC_11111111-1111-4111-8111-111111111111';
+    const request = createDirectoryLevelRequestV1({
+      runtimeSource: { sourceId: uppercaseSourceId, rootPath: '/forged/photos' },
+      ref: { sourceId: uppercaseSourceId }
+    });
+    const locator = {
+      ref: request.ref,
+      absolutePath: '/registered/photos',
+      name: 'photos'
+    };
+    const snapshot = createDirectorySnapshotV1({
+      ref: request.ref,
+      locator: { absolutePath: '/registered/photos' },
+      facts: { directMediaCount: 1, childDirectoryCount: 0 },
+      children: [],
+      approximate: {
+        coverSamples: ['cover.jpg'],
+        hasDescendantMedia: 'yes',
+        observedAt: 1783728000000,
+        truncated: false
+      }
+    });
+    const resolveDirectoryLocatorV1 = jest.fn(() => locator);
+    const scanDirectorySnapshot = jest.fn().mockResolvedValue(snapshot);
+    const getSourceRoot = jest.fn().mockResolvedValue({
+      schemaVersion: 1,
+      sourceId: uppercaseSourceId.toLowerCase(),
+      label: 'photos',
+      rootPath: '/registered/photos',
+      sourceGeneration: 1
+    });
+    const { electron } = setupMainProcess({
+      directorySnapshotService: { resolveDirectoryLocatorV1, scanDirectorySnapshot },
+      sourceRootService: { getSourceRoot }
+    });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.GET_DIRECTORY_LEVEL_V1, request);
+
+    expect(result).toEqual({ contractVersion: 1, ok: true, data: snapshot });
+    expectValidV1Envelope(result);
+    expect(getSourceRoot).toHaveBeenCalledWith(uppercaseSourceId);
+    expect(resolveDirectoryLocatorV1).toHaveBeenCalledWith({
+      contractVersion: 1,
+      runtimeSource: {
+        sourceId: uppercaseSourceId,
+        rootPath: '/registered/photos'
+      },
+      ref: request.ref
+    });
   });
 
   test.each([

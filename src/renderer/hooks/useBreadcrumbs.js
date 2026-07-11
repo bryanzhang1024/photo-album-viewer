@@ -9,14 +9,20 @@ const ipcRenderer = window.electronAPI || null;
  * 面包屑导航 Hook
  * @param {string} albumPath - 当前相簿路径
  * @param {string} rootPath - 根路径
+ * @param {Array|null} sourceBreadcrumbs - 已由 SourceRoot 边界生成的面包屑
  * @returns {Object} { breadcrumbs, metadata, loadBreadcrumbs }
  */
-export const useBreadcrumbs = (albumPath, rootPath) => {
+export const useBreadcrumbs = (albumPath, rootPath, sourceBreadcrumbs = null) => {
   const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [metadata, setMetadata] = useState(null);
+  const hasSourceBreadcrumbs = Array.isArray(sourceBreadcrumbs);
 
   const loadBreadcrumbs = useCallback(async () => {
     try {
+      if (hasSourceBreadcrumbs) {
+        return;
+      }
+
       if (!albumPath) {
         setBreadcrumbs([]);
         setMetadata(null);
@@ -52,11 +58,11 @@ export const useBreadcrumbs = (albumPath, rootPath) => {
       setBreadcrumbs(getBreadcrumbPaths(albumPath, rootPath));
       setMetadata(null);
     }
-  }, [albumPath, rootPath]);
+  }, [albumPath, rootPath, hasSourceBreadcrumbs]);
 
   return {
-    breadcrumbs,
-    metadata,
+    breadcrumbs: hasSourceBreadcrumbs ? sourceBreadcrumbs : breadcrumbs,
+    metadata: hasSourceBreadcrumbs ? null : metadata,
     loadBreadcrumbs
   };
 };

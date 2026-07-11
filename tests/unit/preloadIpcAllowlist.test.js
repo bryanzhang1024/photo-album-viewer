@@ -46,6 +46,24 @@ describe('preload IPC allowlist', () => {
     );
   });
 
+  test.each([
+    ['LOAD_SOURCE_ROOTS_V1', 'load-source-roots-v1'],
+    ['SAVE_SOURCE_ROOT_V1', 'save-source-root-v1']
+  ])('keeps %s synchronized across common, fallback, and invoke allowlists', async (
+    channelKey,
+    channelName
+  ) => {
+    expect(CHANNELS[channelKey]).toBe(channelName);
+
+    for (const useFallback of [false, true]) {
+      const { api, electron } = loadPreload({ useFallback });
+      const request = { contractVersion: 1 };
+
+      await expect(api.invoke(channelName, request)).resolves.toBe('ok');
+      expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(channelName, request);
+    }
+  });
+
   test('continues blocking unknown invoke channels', () => {
     const { api } = loadPreload();
     expect(() => api.invoke('unknown-channel')).toThrow('Blocked IPC invoke channel');

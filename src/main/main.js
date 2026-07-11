@@ -12,6 +12,7 @@ const FileSystemService = require('./services/FileSystemService');
 const DirectorySnapshotService = require('./services/DirectorySnapshotService');
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
+const { createSourceRootService } = require('./services/SourceRootService');
 const CHANNELS = require(path.join(__dirname, '..', 'common', 'ipc-channels.js'));
 const {
   createDirectoryErrorEnvelopeV1,
@@ -19,8 +20,21 @@ const {
   validateDirectoryEnvelopeV1,
   validateDirectoryLevelRequestV1
 } = require('../common/contracts/directory-contract-v1');
+const {
+  createNavigationErrorEnvelopeV1,
+  createNavigationSuccessEnvelopeV1,
+  validateLoadSourceRootsRequestV1,
+  validateNavigationTargetV1,
+  validateSaveSourceRootRequestV1,
+  validateSourceRootsEnvelopeV1
+} = require('../common/contracts/navigation-contract-v1');
+const { getRootPathFlavor } = require('../common/path-codec');
 
 FavoritesService.registerIpcHandlers();
+
+const sourceRootService = createSourceRootService({
+  registryPath: path.join(app.getPath('userData'), 'library-sources.json')
+});
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
@@ -205,13 +219,38 @@ function createPlistArray(values) {
 // 单实例锁定 - 允许多窗口
 const gotTheLock = app.requestSingleInstanceLock();
 
+function createRootNavigationTarget(source) {
+  return {
+    sourceId: source.sourceId,
+    relativePath: '',
+    viewMode: 'browse',
+    initialMediaRelativePath: null
+  };
+}
+
+async function createFolderLaunchTarget(folderPath) {
+  let launchTarget = folderPath;
+  try {
+    const { source } = await sourceRootService.saveSourceRoot({
+      sourceId: null,
+      rootPath: folderPath,
+      label: null
+    });
+    launchTarget = createRootNavigationTarget(source);
+  } catch (error) {
+    console.warn('[SourceRoot] 创建来源失败，回退到旧路径启动:', error?.message || error);
+  }
+  await registerApprovedRoot(folderPath);
+  return launchTarget;
+}
+
 if (!gotTheLock) {
   // 如果没有获得锁，说明已经有实例在运行
   // 在这种情况下，我们让第二个实例退出，但主实例会处理新窗口创建
   app.quit();
 } else {
   // 主实例获得锁，监听第二个实例启动
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
+  app.on('second-instance', async (event, commandLine, workingDirectory) => {
     console.log('检测到第二个实例启动，命令行:', commandLine);
     
     // 解析命令行参数中的文件夹路径
@@ -227,14 +266,12 @@ if (!gotTheLock) {
     }
     
     console.log('解析到的文件夹路径:', albumPath);
-    if (albumPath) {
-      registerApprovedRoot(albumPath).catch((error) => {
-        console.warn('[Security] second-instance 注册目录失败:', error?.message || error);
-      });
-    }
-    
+    const launchTarget = albumPath
+      ? await createFolderLaunchTarget(albumPath)
+      : null;
+
     // 创建新窗口
-    const newWindow = createWindow(albumPath);
+    const newWindow = createWindow(launchTarget);
     
     // 激活新窗口
     if (newWindow.isMinimized()) newWindow.restore();
@@ -370,11 +407,11 @@ app.whenReady().then(async () => {
   // 处理命令行参数，使用指定的文件夹路径
   const initialPath = handleCommandLine();
   console.log('启动时的初始路径:', initialPath);
-  if (initialPath) {
-    await registerApprovedRoot(initialPath);
-  }
-  
-  createWindow(initialPath);
+  const launchTarget = initialPath
+    ? await createFolderLaunchTarget(initialPath)
+    : null;
+
+  createWindow(launchTarget);
   
   // 启动收藏数据文件监听
   await FavoritesService.startFavoritesWatcher();
@@ -487,6 +524,95 @@ function finalizeDirectoryEnvelopeV1(envelope) {
   );
 }
 
+function finalizeNavigationEnvelopeV1(envelope) {
+  const validation = validateSourceRootsEnvelopeV1(envelope);
+  if (validation.valid) {
+    return envelope;
+  }
+
+  return createNavigationErrorEnvelopeV1(
+    'INVALID_RESPONSE',
+    'Invalid SourceRoot response',
+    { retryable: false }
+  );
+}
+
+function createNavigationRequestErrorEnvelope(validation) {
+  const versionIssue = validation.issues.find(
+    (issue) => issue.path === '$.contractVersion' && issue.code === 'enum'
+  );
+  const selectedIssue = versionIssue || validation.issues[0];
+  return finalizeNavigationEnvelopeV1(createNavigationErrorEnvelopeV1(
+    versionIssue ? 'UNSUPPORTED_CONTRACT_VERSION' : 'INVALID_REQUEST',
+    versionIssue ? 'Unsupported contract version' : (selectedIssue?.message || 'Invalid request'),
+    { retryable: false }
+  ));
+}
+
+const SOURCE_ROOT_SERVICE_ERROR_RETRYABILITY = new Map([
+  ['SOURCE_ROOT_REGISTRY_READ_FAILED', true],
+  ['SOURCE_ROOT_REGISTRY_CORRUPT', false],
+  ['SOURCE_ROOT_PERSIST_FAILED', true],
+  ['INVALID_SOURCE_ROOT_REQUEST', false],
+  ['SOURCE_ROOT_MISSING', false],
+  ['SOURCE_ROOT_UNAVAILABLE', true],
+  ['SOURCE_ROOT_NOT_DIRECTORY', false],
+  ['SOURCE_ROOT_ID_UNAVAILABLE', true],
+  ['SOURCE_ROOT_NOT_FOUND', false],
+  ['SOURCE_ROOT_CONFLICT', false],
+  ['SOURCE_ROOT_GENERATION_EXHAUSTED', false],
+  ['SOURCE_ROOT_SERVICE_NOT_INITIALIZED', true]
+]);
+
+function createSourceRootServiceErrorEnvelope(error) {
+  if (SOURCE_ROOT_SERVICE_ERROR_RETRYABILITY.has(error?.code)
+      && typeof error?.message === 'string' && error.message.length > 0) {
+    return finalizeNavigationEnvelopeV1(createNavigationErrorEnvelopeV1(
+      error.code,
+      error.message,
+      { retryable: SOURCE_ROOT_SERVICE_ERROR_RETRYABILITY.get(error.code) }
+    ));
+  }
+
+  return finalizeNavigationEnvelopeV1(createNavigationErrorEnvelopeV1(
+    'INTERNAL_ERROR',
+    'SourceRoot operation failed',
+    { retryable: false }
+  ));
+}
+
+ipcMain.handle(CHANNELS.LOAD_SOURCE_ROOTS_V1, async (event, request) => {
+  const validation = validateLoadSourceRootsRequestV1(request);
+  if (!validation.valid) {
+    return createNavigationRequestErrorEnvelope(validation);
+  }
+
+  try {
+    const sources = await sourceRootService.listSourceRoots();
+    return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1({ sources }));
+  } catch (error) {
+    return createSourceRootServiceErrorEnvelope(error);
+  }
+});
+
+ipcMain.handle(CHANNELS.SAVE_SOURCE_ROOT_V1, async (event, request) => {
+  const validation = validateSaveSourceRootRequestV1(request);
+  if (!validation.valid) {
+    return createNavigationRequestErrorEnvelope(validation);
+  }
+
+  try {
+    const result = await sourceRootService.saveSourceRoot({
+      sourceId: request.sourceId,
+      rootPath: request.rootPath,
+      label: request.label
+    });
+    return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1(result));
+  } catch (error) {
+    return createSourceRootServiceErrorEnvelope(error);
+  }
+});
+
 ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
   const validation = validateDirectoryLevelRequestV1(request);
   if (!validation.valid) {
@@ -509,7 +635,20 @@ ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
   }
 
   try {
-    const locator = DirectorySnapshotService.resolveDirectoryLocatorV1(validation.value);
+    const source = await sourceRootService.getSourceRoot(request.ref.sourceId);
+    if (!source) {
+      return finalizeDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1('SOURCE_NOT_FOUND', 'Source root not found', {
+          retryable: false
+        })
+      );
+    }
+    const authoritativeRequest = {
+      contractVersion: request.contractVersion,
+      runtimeSource: { sourceId: request.ref.sourceId, rootPath: source.rootPath },
+      ref: request.ref
+    };
+    const locator = DirectorySnapshotService.resolveDirectoryLocatorV1(authoritativeRequest);
     const isAllowed = await assertApprovedPath(locator.absolutePath, { bootstrapWhenEmpty: true });
     if (!isAllowed) {
       return finalizeDirectoryEnvelopeV1(
@@ -883,26 +1022,85 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 
   }
 });
 
-// 创建新窗口查看文件夹
-ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, albumPath) => {
+function invalidWindowLaunchTarget() {
+  return new TypeError('Invalid window launch target');
+}
+
+function parseWindowLaunchPayload(payload, { allowEmpty = false } = {}) {
+  if (payload === null || typeof payload === 'undefined') {
+    if (allowEmpty) return { kind: 'empty', launchTarget: null };
+    throw invalidWindowLaunchTarget();
+  }
+
+  if (typeof payload === 'string') {
+    if (getRootPathFlavor(payload) === null) {
+      throw invalidWindowLaunchTarget();
+    }
+    return { kind: 'legacy', launchTarget: payload, absolutePath: payload };
+  }
+
+  if (typeof payload !== 'object' || Array.isArray(payload)) {
+    throw invalidWindowLaunchTarget();
+  }
+
+  let prototype;
+  let keys;
   try {
-    if (albumPath) {
-      const isAllowed = await assertApprovedPath(albumPath, { bootstrapWhenEmpty: true });
-      if (!isAllowed) {
-        return { success: false, error: '访问路径不在已授权照片目录范围内' };
-      }
+    prototype = Object.getPrototypeOf(payload);
+    keys = Reflect.ownKeys(payload);
+  } catch (_error) {
+    throw invalidWindowLaunchTarget();
+  }
+  if ((prototype !== Object.prototype && prototype !== null)
+      || keys.length !== 2
+      || !keys.includes('contractVersion')
+      || !keys.includes('target')) {
+    throw invalidWindowLaunchTarget();
+  }
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(payload, key);
+    if (!descriptor || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      throw invalidWindowLaunchTarget();
     }
+  }
+  if (payload.contractVersion !== 1 || !validateNavigationTargetV1(payload.target).valid) {
+    throw invalidWindowLaunchTarget();
+  }
+  return { kind: 'canonical', launchTarget: payload.target };
+}
 
-    if (albumPath) {
-      await registerApprovedRoot(albumPath);
+async function resolveWindowLaunchPayload(payload, options) {
+  const parsed = parseWindowLaunchPayload(payload, options);
+  if (parsed.kind === 'empty') {
+    return null;
+  }
+
+  if (parsed.kind === 'canonical') {
+    const resolved = await sourceRootService.resolveNavigationTarget(parsed.launchTarget);
+    const isAllowed = await assertApprovedPath(resolved.absolutePath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      throw new Error('访问路径不在已授权照片目录范围内');
     }
+    return parsed.launchTarget;
+  }
 
-    if (albumPath && !isPathWithinApprovedRoots(albumPath)) {
-      return { success: false, error: '访问路径不在已授权照片目录范围内' };
-    }
+  const isAllowed = await assertApprovedPath(parsed.absolutePath, { bootstrapWhenEmpty: true });
+  if (!isAllowed) {
+    throw new Error('访问路径不在已授权照片目录范围内');
+  }
+  await registerApprovedRoot(parsed.absolutePath);
+  if (!isPathWithinApprovedRoots(parsed.absolutePath)) {
+    throw new Error('访问路径不在已授权照片目录范围内');
+  }
+  return parsed.launchTarget;
+}
 
-    console.log('创建新窗口查看文件夹:', albumPath);
-    const newWindow = createWindow(albumPath);
+// 创建新窗口查看文件夹
+ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, payload) => {
+  try {
+    const launchTarget = await resolveWindowLaunchPayload(payload, { allowEmpty: true });
+    console.log('创建新窗口查看文件夹:', launchTarget);
+    const newWindow = createWindow(launchTarget);
     return { success: true, windowId: newWindow.id };
   } catch (error) {
     console.error('创建新窗口失败:', error);
@@ -911,21 +1109,17 @@ ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, albumPath) => {
 });
 
 // 创建新实例并选择文件夹
-ipcMain.handle(CHANNELS.CREATE_NEW_INSTANCE, async (event, folderPath) => {
+ipcMain.handle(CHANNELS.CREATE_NEW_INSTANCE, async (event, payload) => {
   try {
-    const isAllowed = await assertApprovedPath(folderPath, { bootstrapWhenEmpty: true });
-    if (!isAllowed) {
-      return { success: false, error: '访问路径不在已授权照片目录范围内' };
-    }
-    await registerApprovedRoot(folderPath);
+    const launchTarget = await resolveWindowLaunchPayload(payload);
 
     console.log('=== 创建新实例开始 ===');
-    console.log('文件夹路径:', folderPath);
+    console.log('窗口启动目标:', launchTarget);
     
     // 作为替代方案，直接使用现有的createWindow函数创建新窗口
     // 这会在同一个进程中创建新窗口，而不是新进程
     console.log('使用现有进程创建新窗口作为替代方案');
-    const newWindow = createWindow(folderPath);
+    const newWindow = createWindow(launchTarget);
     
     // 确保窗口在最前
     if (newWindow) {
@@ -956,7 +1150,7 @@ ipcMain.handle(CHANNELS.CREATE_NEW_INSTANCE, async (event, folderPath) => {
     let command, args;
     
     // 正确处理路径中的空格和特殊字符
-    const safePath = folderPath;
+    const safePath = launchTarget;
     
     // 开发模式下的特殊处理
     if (isDevMode) {
