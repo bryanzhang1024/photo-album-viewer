@@ -1,3 +1,5 @@
+const { deserialize, serialize } = require('v8');
+
 const {
   DIRECTORY_CONTRACT_VERSION,
   createDirectoryErrorEnvelopeV1,
@@ -15,6 +17,35 @@ const {
   createDirectorySnapshotV1,
   createRuntimeSourceV1
 } = require('../../helpers/directoryContractFixtures');
+
+function createUnavailableSnapshot(status) {
+  const snapshot = createDirectorySnapshotV1({
+    status,
+    completeness: { entries: 'partial', directMedia: 'partial', children: 'partial' },
+    facts: { directMediaCount: 0, childDirectoryCount: 0 },
+    directMedia: [],
+    children: [],
+    approximate: {
+      coverSamples: [],
+      hasDescendantMedia: 'unknown',
+      observedAt: 1783728000000,
+      truncated: true
+    }
+  });
+  return snapshot;
+}
+
+function setChildUnavailable(child, status) {
+  child.status = status;
+  child.completeness = { directMedia: 'partial', children: 'partial' };
+  child.facts = { directMediaCount: 0, childDirectoryCount: 0 };
+  child.approximate = {
+    coverSamples: [],
+    hasDescendantMedia: 'unknown',
+    observedAt: 1783728000000,
+    truncated: true
+  };
+}
 
 describe('directory-contract-v1', () => {
   test('accepts a canonical runtimeSource plus DirectoryRef request', () => {
@@ -134,6 +165,193 @@ describe('directory-contract-v1', () => {
       expect.objectContaining({ path: '$.facts.directMediaCount', code: 'invariant' }),
       expect.objectContaining({ path: '$.facts.childDirectoryCount', code: 'invariant' })
     ]));
+  });
+
+  test.each([
+    ['function', () => ({ value: () => true })],
+    ['symbol value', () => ({ value: Symbol('not-cloneable') })],
+    ['bigint', () => ({ value: 1n })],
+    ['undefined', () => ({ value: undefined })],
+    ['non-finite number', () => ({ value: Number.POSITIVE_INFINITY })],
+    ['non-plain object', () => ({ value: new Date(0) })],
+    ['accessor', () => {
+      const details = {};
+      Object.defineProperty(details, 'value', { enumerable: true, get: () => 'side effect' });
+      return details;
+    }],
+    ['cycle', () => {
+      const details = {};
+      details.self = details;
+      return details;
+    }],
+    ['sparse array', () => ({ value: new Array(1) })],
+    ['array-owned field', () => {
+      const value = [];
+      value.extra = true;
+      return { value };
+    }],
+    ['symbol-owned field', () => {
+      const details = {};
+      details[Symbol('extra')] = true;
+      return details;
+    }]
+  ])('rejects non-pure error details containing %s', (_label, createDetails) => {
+    const envelope = createDirectoryErrorEnvelopeV1('INVALID_REQUEST', '请求无效', {
+      retryable: false,
+      details: createDetails()
+    });
+    expect(validateDirectoryEnvelopeV1(envelope).valid).toBe(false);
+  });
+
+  test('accepts deterministic nested pure-data error details', () => {
+    const details = {
+      issues: [{ path: '$.ref', code: 'format', message: '引用无效' }],
+      context: [null, true, false, 0, -1.5, 'portable']
+    };
+    const envelope = createDirectoryErrorEnvelopeV1('INVALID_REQUEST', '请求无效', {
+      retryable: false,
+      details
+    });
+
+    expect(validateDirectoryEnvelopeV1(envelope).valid).toBe(true);
+    expect(deserialize(serialize(envelope))).toEqual(envelope);
+  });
+
+  test.each([
+    null,
+    true,
+    'context',
+    0,
+    -1.5,
+    [null, false, 2, 'nested'],
+    { nested: { value: 'plain' } }
+  ])('accepts a pure-data error details root %#', (details) => {
+    const envelope = createDirectoryErrorEnvelopeV1('INVALID_REQUEST', '请求无效', {
+      retryable: false,
+      details
+    });
+    expect(validateDirectoryEnvelopeV1(envelope).valid).toBe(true);
+  });
+
+  test.each(['missing', 'unreadable', 'sourceOffline'])(
+    'rejects a top-level %s success while allowing unavailable child summaries',
+    (status) => {
+      const unavailableRoot = createUnavailableSnapshot(status);
+      expect(validateDirectorySnapshotV1(unavailableRoot).valid).toBe(true);
+      expect(validateDirectoryEnvelopeV1(
+        createDirectorySuccessEnvelopeV1(unavailableRoot)
+      ).valid).toBe(false);
+
+      const snapshotWithUnavailableChild = createDirectorySnapshotV1();
+      setChildUnavailable(snapshotWithUnavailableChild.children[0], status);
+      expect(validateDirectoryEnvelopeV1(
+        createDirectorySuccessEnvelopeV1(snapshotWithUnavailableChild)
+      ).valid).toBe(true);
+      expect(validateDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1('DIRECTORY_UNAVAILABLE', '目录不可用', {
+          retryable: false
+        })
+      ).valid).toBe(true);
+    }
+  );
+
+  test('enforces unavailable status semantics on child summaries', () => {
+    const unavailableComplete = createDirectorySnapshotV1();
+    unavailableComplete.children[0].status = 'unreadable';
+
+    const unavailableNoEvidence = createDirectorySnapshotV1();
+    setChildUnavailable(unavailableNoEvidence.children[0], 'missing');
+    unavailableNoEvidence.children[0].approximate.hasDescendantMedia = 'no';
+
+    const unavailableNotTruncated = createDirectorySnapshotV1();
+    setChildUnavailable(unavailableNotTruncated.children[0], 'sourceOffline');
+    unavailableNotTruncated.children[0].approximate.truncated = false;
+
+    expect(validateDirectorySnapshotV1(unavailableComplete).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(unavailableNoEvidence).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(unavailableNotTruncated).valid).toBe(false);
+  });
+
+  test('enforces evidence, complete-leaf, and partial-observation semantics', () => {
+    const positiveEvidenceSaysNo = createDirectorySnapshotV1();
+    positiveEvidenceSaysNo.children[0].approximate.hasDescendantMedia = 'no';
+
+    const emptyLeafSaysYes = createDirectorySnapshotV1();
+    emptyLeafSaysYes.children[0].facts = { directMediaCount: 0, childDirectoryCount: 0 };
+    emptyLeafSaysYes.children[0].approximate = {
+      coverSamples: [],
+      hasDescendantMedia: 'yes',
+      observedAt: 1783728000000,
+      truncated: false
+    };
+
+    const emptyLeafIsTruncated = createDirectorySnapshotV1();
+    emptyLeafIsTruncated.children[0].facts = { directMediaCount: 0, childDirectoryCount: 0 };
+    emptyLeafIsTruncated.children[0].approximate = {
+      coverSamples: [],
+      hasDescendantMedia: 'no',
+      observedAt: 1783728000000,
+      truncated: true
+    };
+
+    const partialRootNotTruncated = createDirectorySnapshotV1({
+      completeness: { entries: 'partial', directMedia: 'partial', children: 'partial' },
+      approximate: {
+        coverSamples: ['cover.jpg'],
+        hasDescendantMedia: 'yes',
+        observedAt: 1783728000000,
+        truncated: false
+      }
+    });
+
+    const validEmptyLeaf = createDirectorySnapshotV1();
+    validEmptyLeaf.children[0].facts = { directMediaCount: 0, childDirectoryCount: 0 };
+    validEmptyLeaf.children[0].approximate = {
+      coverSamples: [],
+      hasDescendantMedia: 'no',
+      observedAt: 1783728000000,
+      truncated: false
+    };
+
+    expect(validateDirectorySnapshotV1(positiveEvidenceSaysNo).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(emptyLeafSaysYes).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(emptyLeafIsTruncated).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(partialRootNotTruncated).valid).toBe(false);
+    expect(validateDirectorySnapshotV1(validEmptyLeaf).valid).toBe(true);
+  });
+
+  test.each([
+    ['array-owned legacy field', (snapshot) => {
+      snapshot.directMedia.type = 'album';
+    }],
+    ['array-owned enumerable field', (snapshot) => {
+      snapshot.children.extra = true;
+    }],
+    ['array-owned symbol field', (snapshot) => {
+      snapshot.directMedia[Symbol('extra')] = true;
+    }],
+    ['sparse directMedia', (snapshot) => {
+      snapshot.directMedia = new Array(1);
+    }],
+    ['sparse children', (snapshot) => {
+      snapshot.children = new Array(1);
+    }],
+    ['sparse root coverSamples', (snapshot) => {
+      snapshot.approximate.coverSamples = new Array(1);
+    }],
+    ['sparse child coverSamples', (snapshot) => {
+      snapshot.children[0].approximate.coverSamples = new Array(1);
+    }]
+  ])('rejects malformed contract arrays with %s', (_label, mutate) => {
+    const snapshot = createDirectorySnapshotV1();
+    mutate(snapshot);
+    expect(validateDirectorySnapshotV1(snapshot).valid).toBe(false);
+  });
+
+  test('accepts a finite pre-epoch media mtime', () => {
+    const snapshot = createDirectorySnapshotV1();
+    snapshot.directMedia[0].mtimeMs = -1;
+    expect(validateDirectorySnapshotV1(snapshot).valid).toBe(true);
   });
 
   test('validates success and failure envelopes with one shape each', () => {

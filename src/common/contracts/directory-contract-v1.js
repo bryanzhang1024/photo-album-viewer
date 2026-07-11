@@ -8,6 +8,7 @@ const DIRECTORY_CONTRACT_VERSION = 1;
 const DIRECTORY_STATUSES = Object.freeze(['ready', 'unreadable', 'missing', 'sourceOffline']);
 const COMPLETENESS_STATUSES = Object.freeze(['complete', 'partial']);
 const DESCENDANT_MEDIA_STATUSES = Object.freeze(['yes', 'no', 'unknown']);
+const UNAVAILABLE_DIRECTORY_STATUSES = new Set(['unreadable', 'missing', 'sourceOffline']);
 const SOURCE_ID_PATTERN = /^src_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LEGACY_FIELDS = Object.freeze([
   'type', 'kind', 'canOpenAlbum', 'canViewAsPhotoSet', 'hasImages',
@@ -63,11 +64,90 @@ function validateObject(value, path, issues) {
 }
 
 function validateAllowedFields(value, path, allowedFields, issues) {
-  for (const key of Object.keys(value)) {
-    if (!allowedFields.has(key)) {
-      addIssue(issues, `${path}.${key}`, 'invariant', 'Unexpected canonical field');
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowedFields.has(key)) {
+      const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
+      addIssue(issues, fieldPath, 'invariant', 'Unexpected canonical field');
     }
   }
+}
+
+function isCanonicalArrayIndex(key, length) {
+  if (typeof key !== 'string' || !/^(?:0|[1-9]\d*)$/.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index >= 0 && index < length;
+}
+
+function validateDenseArray(value, path, issues) {
+  const validIndices = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor) {
+      addIssue(issues, `${path}[${index}]`, 'required', 'Array entries must be dense');
+    } else if (!descriptor.enumerable || !hasOwn(descriptor, 'value')) {
+      addIssue(issues, `${path}[${index}]`, 'invariant', 'Array entries must be enumerable data');
+    } else {
+      validIndices.push(index);
+    }
+  }
+
+  for (const key of Reflect.ownKeys(value)) {
+    if (key === 'length' || isCanonicalArrayIndex(key, value.length)) continue;
+    const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
+    addIssue(issues, fieldPath, 'invariant', 'Arrays cannot own extra fields');
+  }
+  return validIndices;
+}
+
+function isPlainRecord(value) {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function validatePureDataAt(value, path, issues, ancestors = new WeakSet()) {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      addIssue(issues, path, 'format', 'Pure-data numbers must be finite');
+    }
+    return;
+  }
+  if (typeof value !== 'object') {
+    addIssue(issues, path, 'type', 'Expected structured-cloneable pure data');
+    return;
+  }
+  if (ancestors.has(value)) {
+    addIssue(issues, path, 'invariant', 'Pure-data details cannot contain cycles');
+    return;
+  }
+  if (!Array.isArray(value) && !isPlainRecord(value)) {
+    addIssue(issues, path, 'type', 'Pure-data objects must be plain records');
+    return;
+  }
+
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    for (const index of validateDenseArray(value, path, issues)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      validatePureDataAt(descriptor.value, `${path}[${index}]`, issues, ancestors);
+    }
+  } else {
+    for (const key of Reflect.ownKeys(value)) {
+      const fieldPath = typeof key === 'symbol' ? `${path}[${String(key)}]` : `${path}.${key}`;
+      if (typeof key === 'symbol') {
+        addIssue(issues, fieldPath, 'invariant', 'Pure-data records cannot own symbol fields');
+        continue;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor.enumerable || !hasOwn(descriptor, 'value')) {
+        addIssue(issues, fieldPath, 'invariant', 'Pure-data fields must be enumerable data');
+        continue;
+      }
+      validatePureDataAt(descriptor.value, fieldPath, issues, ancestors);
+    }
+  }
+  ancestors.delete(value);
 }
 
 function validateContractVersion(value, path, issues) {
@@ -157,6 +237,17 @@ function validateRequiredNonNegativeNumber(value, key, path, issues) {
   }
 }
 
+function validateRequiredFiniteNumber(value, key, path, issues) {
+  const fieldPath = `${path}.${key}`;
+  if (!hasOwn(value, key)) {
+    addIssue(issues, fieldPath, 'required', `${key} is required`);
+  } else if (typeof value[key] !== 'number') {
+    addIssue(issues, fieldPath, 'type', `${key} must be a number`);
+  } else if (!Number.isFinite(value[key])) {
+    addIssue(issues, fieldPath, 'format', `${key} must be a finite number`);
+  }
+}
+
 function validateRequiredNonNegativeInteger(value, key, path, issues) {
   const fieldPath = `${path}.${key}`;
   if (!hasOwn(value, key)) {
@@ -190,6 +281,76 @@ function validateFactsAt(value, path, issues) {
   validateAllowedFields(value, path, FACT_FIELDS, issues);
   validateRequiredNonNegativeInteger(value, 'directMediaCount', path, issues);
   validateRequiredNonNegativeInteger(value, 'childDirectoryCount', path, issues);
+}
+
+function validateDirectorySemantics(value, path, completenessFields, issues) {
+  if (!isRecord(value.completeness) || !isRecord(value.facts)
+    || !isRecord(value.approximate)) return;
+
+  const completenessValues = [...completenessFields].map((field) => value.completeness[field]);
+  const hasPartialObservation = completenessValues.includes('partial');
+  const allObservationsComplete = completenessValues.every((entry) => entry === 'complete');
+  const unavailable = UNAVAILABLE_DIRECTORY_STATUSES.has(value.status);
+
+  if (unavailable) {
+    for (const field of completenessFields) {
+      if (value.completeness[field] !== 'partial') {
+        addIssue(
+          issues,
+          `${path}.completeness.${field}`,
+          'invariant',
+          'Unavailable directories must have partial completeness'
+        );
+      }
+    }
+    if (value.approximate.hasDescendantMedia !== 'unknown') {
+      addIssue(
+        issues,
+        `${path}.approximate.hasDescendantMedia`,
+        'invariant',
+        'Unavailable directories cannot claim descendant media knowledge'
+      );
+    }
+  }
+
+  if ((unavailable || hasPartialObservation) && value.approximate.truncated !== true) {
+    addIssue(
+      issues,
+      `${path}.approximate.truncated`,
+      'invariant',
+      'Unavailable or partial observations must be truncated'
+    );
+  }
+
+  const hasPositiveEvidence = value.facts.directMediaCount > 0
+    || (Array.isArray(value.approximate.coverSamples) && value.approximate.coverSamples.length > 0);
+  if (hasPositiveEvidence && value.approximate.hasDescendantMedia === 'no') {
+    addIssue(
+      issues,
+      `${path}.approximate.hasDescendantMedia`,
+      'invariant',
+      'Positive media evidence cannot be reported as no descendant media'
+    );
+  }
+
+  const completeEmptyLeaf = !unavailable && allObservationsComplete
+    && value.facts.directMediaCount === 0 && value.facts.childDirectoryCount === 0;
+  if (completeEmptyLeaf && value.approximate.hasDescendantMedia !== 'no') {
+    addIssue(
+      issues,
+      `${path}.approximate.hasDescendantMedia`,
+      'invariant',
+      'A complete empty leaf must report no descendant media'
+    );
+  }
+  if (completeEmptyLeaf && value.approximate.truncated !== false) {
+    addIssue(
+      issues,
+      `${path}.approximate.truncated`,
+      'invariant',
+      'A complete empty leaf cannot be truncated'
+    );
+  }
 }
 
 function isExactlyOneSegmentBelow(parentPath, candidatePath) {
@@ -229,7 +390,8 @@ function validateApproximateAt(value, path, relativePath, issues) {
   } else if (!Array.isArray(value.coverSamples)) {
     addIssue(issues, `${path}.coverSamples`, 'type', 'coverSamples must be an array');
   } else {
-    value.coverSamples.forEach((sample, index) => {
+    for (const index of validateDenseArray(value.coverSamples, `${path}.coverSamples`, issues)) {
+      const sample = value.coverSamples[index];
       const samplePath = `${path}.coverSamples[${index}]`;
       if (typeof sample !== 'string') {
         addIssue(issues, samplePath, 'type', 'Cover sample must be a string');
@@ -239,7 +401,7 @@ function validateApproximateAt(value, path, relativePath, issues) {
         && !isDescendantOf(relativePath, sample)) {
         addIssue(issues, samplePath, 'invariant', 'Cover sample must be below its directory');
       }
-    });
+    }
   }
 
   validateRequiredEnum(
@@ -295,7 +457,7 @@ function validateMediaAt(value, path, rootRelativePath, issues) {
   }
 
   validateRequiredNonNegativeNumber(value, 'size', path, issues);
-  validateRequiredNonNegativeNumber(value, 'mtimeMs', path, issues);
+  validateRequiredFiniteNumber(value, 'mtimeMs', path, issues);
 }
 
 function validateChildAt(value, path, rootRef, issues) {
@@ -342,6 +504,7 @@ function validateChildAt(value, path, rootRef, issues) {
   validateRequiredObjectField(value, 'approximate', path, issues, (field, fieldPath, fieldIssues) => {
     validateApproximateAt(field, fieldPath, childRef?.relativePath, fieldIssues);
   });
+  validateDirectorySemantics(value, path, CHILD_COMPLETENESS_FIELDS, issues);
 }
 
 function validateNoLegacyFields(value, path, issues, seen = new WeakSet()) {
@@ -349,7 +512,12 @@ function validateNoLegacyFields(value, path, issues, seen = new WeakSet()) {
   seen.add(value);
 
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => validateNoLegacyFields(entry, `${path}[${index}]`, issues, seen));
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor && hasOwn(descriptor, 'value')) {
+        validateNoLegacyFields(descriptor.value, `${path}[${index}]`, issues, seen);
+      }
+    }
     return;
   }
 
@@ -391,9 +559,14 @@ function validateDirectorySnapshotAt(value, path, issues) {
   } else if (!Array.isArray(value.directMedia)) {
     addIssue(issues, `${path}.directMedia`, 'type', 'directMedia must be an array');
   } else {
-    value.directMedia.forEach((media, index) => {
-      validateMediaAt(media, `${path}.directMedia[${index}]`, rootRelativePath, issues);
-    });
+    for (const index of validateDenseArray(value.directMedia, `${path}.directMedia`, issues)) {
+      validateMediaAt(
+        value.directMedia[index],
+        `${path}.directMedia[${index}]`,
+        rootRelativePath,
+        issues
+      );
+    }
   }
 
   if (!hasOwn(value, 'children')) {
@@ -401,9 +574,9 @@ function validateDirectorySnapshotAt(value, path, issues) {
   } else if (!Array.isArray(value.children)) {
     addIssue(issues, `${path}.children`, 'type', 'children must be an array');
   } else {
-    value.children.forEach((child, index) => {
-      validateChildAt(child, `${path}.children[${index}]`, rootRef, issues);
-    });
+    for (const index of validateDenseArray(value.children, `${path}.children`, issues)) {
+      validateChildAt(value.children[index], `${path}.children[${index}]`, rootRef, issues);
+    }
   }
 
   validateRequiredObjectField(value, 'approximate', path, issues, (field, fieldPath, fieldIssues) => {
@@ -430,6 +603,7 @@ function validateDirectorySnapshotAt(value, path, issues) {
       'Child directory count must match the returned entries'
     );
   }
+  validateDirectorySemantics(value, path, ROOT_COMPLETENESS_FIELDS, issues);
 }
 
 function validateRuntimeSourceV1(value) {
@@ -525,8 +699,8 @@ function validateErrorAt(value, path, issues) {
   } else if (typeof value.retryable !== 'boolean') {
     addIssue(issues, `${path}.retryable`, 'type', 'retryable must be a boolean');
   }
-  if (hasOwn(value, 'details') && !isRecord(value.details)) {
-    addIssue(issues, `${path}.details`, 'type', 'details must be an object');
+  if (hasOwn(value, 'details')) {
+    validatePureDataAt(value.details, `${path}.details`, issues);
   }
 }
 
@@ -545,6 +719,15 @@ function validateDirectoryEnvelopeV1(value) {
       addIssue(issues, '$.data', 'required', 'Successful envelope requires data');
     } else {
       validateDirectorySnapshotAt(value.data, '$.data', issues);
+      if (isRecord(value.data) && hasOwn(value.data, 'status')
+        && value.data.status !== 'ready') {
+        addIssue(
+          issues,
+          '$.data.status',
+          'invariant',
+          'Successful envelopes require a ready top-level directory'
+        );
+      }
     }
     if (hasOwn(value, 'error')) {
       addIssue(issues, '$.error', 'invariant', 'Successful envelope cannot own error');
