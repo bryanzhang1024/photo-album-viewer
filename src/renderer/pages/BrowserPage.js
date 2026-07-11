@@ -57,6 +57,11 @@ const HYDRATION_PENDING = 'pending';
 const HYDRATION_SUCCEEDED = 'succeeded';
 const HYDRATION_FAILED = 'failed';
 
+const createPendingNavigation = (browserLocation, rootOperationToken = null) => ({
+  identity: getBrowserLocationIdentity(browserLocation),
+  rootOperationToken
+});
+
 const getDefaultRootPath = () => normalizeTargetPath(localStorage.getItem(DEFAULT_ROOT_PATH_KEY) || '');
 
 const parseURLLocation = (pathname, search) => {
@@ -248,6 +253,13 @@ const createLocationFromAbsolutePath = (
   };
 };
 
+const createLegacyRootLocation = (absolutePath) => ({
+  kind: 'legacyAbsolute',
+  legacyAbsolutePath: normalizeTargetPath(absolutePath),
+  viewMode: 'folder',
+  legacyInitialMediaPath: null
+});
+
 const resolveURLLocation = (location, sources) => {
   if (location.kind !== 'legacyAbsolute') return location;
   return createLocationFromAbsolutePath(
@@ -310,8 +322,12 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   const navigate = useNavigate();
   const params = useParams();
   const hydrationCompletedRef = useRef(false);
+  const hydrationGenerationRef = useRef(0);
+  const mountedRef = useRef(false);
+  const rootOperationGenerationRef = useRef(0);
   const initialTabRef = useRef(null);
   const pendingNavigationRef = useRef(null);
+  const observedRouteKeyRef = useRef(`${location.pathname}\n${location.search}`);
   const sourcesRef = useRef([]);
   const [openFolderMenuAnchorEl, setOpenFolderMenuAnchorEl] = useState(null);
   const [tabsMenuAnchorEl, setTabsMenuAnchorEl] = useState(null);
@@ -322,6 +338,28 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   const [hydrationStatus, setHydrationStatus] = useState(HYDRATION_PENDING);
   const draggingTabIdRef = useRef(null);
   const [dragIndicator, setDragIndicator] = useState({ tabId: null, position: DRAG_INSERT_BEFORE });
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      rootOperationGenerationRef.current += 1;
+      hydrationGenerationRef.current += 1;
+    };
+  }, []);
+
+  const beginRootOperation = useCallback(() => {
+    rootOperationGenerationRef.current += 1;
+    return rootOperationGenerationRef.current;
+  }, []);
+
+  const invalidateRootOperations = useCallback(() => {
+    rootOperationGenerationRef.current += 1;
+  }, []);
+
+  const isCurrentRootOperation = useCallback((operationToken) => (
+    mountedRef.current && rootOperationGenerationRef.current === operationToken
+  ), []);
 
   const urlLocation = useMemo(() =>
     parseURLLocation(location.pathname, location.search),
@@ -430,12 +468,22 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     append = false,
     replace = false,
     state,
-    sourcesOverride = sourcesRef.current
+    sourcesOverride = sourcesRef.current,
+    rootOperationToken = null
   }) => {
+    if (rootOperationToken === null) {
+      invalidateRootOperations();
+    } else if (!isCurrentRootOperation(rootOperationToken)) {
+      return null;
+    }
+
     const nextTab = createRuntimeTab(browserLocation, sourcesOverride, tabId);
     if (tabId !== activeTabId) saveActiveTabScrollPosition();
 
-    pendingNavigationRef.current = getBrowserLocationIdentity(browserLocation);
+    pendingNavigationRef.current = createPendingNavigation(
+      browserLocation,
+      rootOperationToken
+    );
     setTabs((prevTabs) => (
       append
         ? [...prevTabs, nextTab]
@@ -444,7 +492,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     setActiveTabId(tabId);
     navigateBrowserLocation(browserLocation, { replace, state });
     return nextTab;
-  }, [activeTabId, navigateBrowserLocation, saveActiveTabScrollPosition]);
+  }, [activeTabId, invalidateRootOperations, isCurrentRootOperation, navigateBrowserLocation, saveActiveTabScrollPosition]);
 
   const registerAbsoluteRoot = useCallback(async (absolutePath) => {
     try {
@@ -456,8 +504,6 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       });
       const source = response?.ok ? response.data?.source : null;
       if (source) {
-        const nextSources = upsertSourceRoot(sourcesRef.current, source);
-        setRuntimeSources(nextSources);
         return {
           browserLocation: {
             kind: 'directory',
@@ -468,7 +514,8 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
               initialMediaRelativePath: null
             }
           },
-          sources: nextSources
+          source,
+          fallback: false
         };
       }
     } catch (error) {
@@ -476,14 +523,22 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     }
 
     return {
-      browserLocation: createLocationFromAbsolutePath(
-        absolutePath,
-        'folder',
-        null,
-        sourcesRef.current
-      ),
-      sources: sourcesRef.current
+      browserLocation: createLegacyRootLocation(absolutePath),
+      source: null,
+      fallback: true
     };
+  }, []);
+
+  const applyRegisteredRoot = useCallback((registered) => {
+    let nextSources = sourcesRef.current;
+    if (registered.source) {
+      nextSources = upsertSourceRoot(nextSources, registered.source);
+      setRuntimeSources(nextSources);
+    }
+    if (registered.fallback) {
+      setErrorMessage('来源注册失败，已使用兼容模式打开');
+    }
+    return nextSources;
   }, [setRuntimeSources]);
 
   useEffect(() => {
@@ -528,6 +583,13 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   useEffect(() => {
     if (hydrationCompletedRef.current || redirectFromOldRoute) return undefined;
     let cancelled = false;
+    const generation = hydrationGenerationRef.current + 1;
+    hydrationGenerationRef.current = generation;
+    const isCurrentHydration = () => (
+      !cancelled
+      && mountedRef.current
+      && hydrationGenerationRef.current === generation
+    );
 
     const hydrate = async () => {
       let loadedSources = [];
@@ -544,8 +606,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         console.warn('加载来源根目录失败:', error);
       }
 
-      if (cancelled) return;
-      hydrationCompletedRef.current = true;
+      if (!isCurrentHydration()) return;
       setRuntimeSources(loadedSources);
 
       const restoredSession = loadTabsSession({
@@ -567,6 +628,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       const commandLinePath = searchParams.get('initialPath');
 
       const applyExplicitURL = (browserLocation) => {
+        if (!isCurrentHydration()) return;
         const matchingTab = findSessionTabMatchingLocation(restoredSession, browserLocation);
         if (matchingTab) {
           const runtimeTabs = materializeSessionTabs(restoredSession, sourcesRef.current);
@@ -578,6 +640,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
           setActiveTabId(explicitTab.id);
         }
         setHydrationStatus(nextHydrationStatus);
+        hydrationCompletedRef.current = true;
       };
 
       if (urlLocation.kind === 'directory') {
@@ -587,16 +650,18 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
 
       if (commandLinePath) {
         const registered = await registerAbsoluteRoot(commandLinePath);
-        if (cancelled) return;
+        if (!isCurrentHydration()) return;
+        const registeredSources = applyRegisteredRoot(registered);
         const commandLineTab = createRuntimeTab(
           registered.browserLocation,
-          registered.sources
+          registeredSources
         );
         setTabs([commandLineTab]);
         setActiveTabId(commandLineTab.id);
-        pendingNavigationRef.current = getBrowserLocationIdentity(registered.browserLocation);
+        pendingNavigationRef.current = createPendingNavigation(registered.browserLocation);
         navigateBrowserLocation(registered.browserLocation, { replace: true });
         setHydrationStatus(nextHydrationStatus);
+        hydrationCompletedRef.current = true;
         return;
       }
 
@@ -612,9 +677,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         )) || runtimeTabs[0];
         setTabs(runtimeTabs);
         setActiveTabId(restoredActiveTab.id);
-        pendingNavigationRef.current = getBrowserLocationIdentity(restoredActiveTab.location);
+        pendingNavigationRef.current = createPendingNavigation(restoredActiveTab.location);
         navigateBrowserLocation(restoredActiveTab.location, { replace: true });
         setHydrationStatus(nextHydrationStatus);
+        hydrationCompletedRef.current = true;
         return;
       }
 
@@ -631,7 +697,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         const fallbackTab = createRuntimeTab(fallbackLocation, loadedSources);
         setTabs([fallbackTab]);
         setActiveTabId(fallbackTab.id);
-        pendingNavigationRef.current = getBrowserLocationIdentity(fallbackLocation);
+        pendingNavigationRef.current = createPendingNavigation(fallbackLocation);
         navigateBrowserLocation(fallbackLocation, { replace: true });
       } else {
         const landingTab = createRuntimeTab({ kind: 'landing' }, loadedSources);
@@ -639,30 +705,47 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         setActiveTabId(landingTab.id);
       }
       setHydrationStatus(nextHydrationStatus);
+      hydrationCompletedRef.current = true;
     };
 
     hydrate();
     return () => {
       cancelled = true;
     };
-  }, [location.search, navigateBrowserLocation, redirectFromOldRoute, registerAbsoluteRoot, setRuntimeSources, urlLocation]);
+  }, [applyRegisteredRoot, location.search, navigateBrowserLocation, redirectFromOldRoute, registerAbsoluteRoot, setRuntimeSources, urlLocation]);
 
   useEffect(() => {
     if (hydrationStatus === HYDRATION_PENDING || redirectFromOldRoute) return;
 
     const browserLocation = resolveURLLocation(urlLocation, sourcesRef.current);
     const nextIdentity = getBrowserLocationIdentity(browserLocation);
-    if (pendingNavigationRef.current) {
-      if (pendingNavigationRef.current !== nextIdentity) return;
-      pendingNavigationRef.current = null;
+    const routeKey = `${location.pathname}\n${location.search}`;
+    const routeChanged = observedRouteKeyRef.current !== routeKey;
+    observedRouteKeyRef.current = routeKey;
+
+    const pendingNavigation = pendingNavigationRef.current;
+    if (pendingNavigation) {
+      const pendingIsCurrentRootOperation = pendingNavigation.rootOperationToken === null
+        || isCurrentRootOperation(pendingNavigation.rootOperationToken);
+      if (pendingNavigation.identity !== nextIdentity) {
+        if (!routeChanged) return;
+        pendingNavigationRef.current = null;
+        invalidateRootOperations();
+      } else {
+        pendingNavigationRef.current = null;
+        if (!pendingIsCurrentRootOperation) return;
+      }
+    } else if (routeChanged) {
+      invalidateRootOperations();
     }
 
+    if (!mountedRef.current) return;
     setTabs((prevTabs) => prevTabs.map((tab) => {
       if (tab.id !== activeTabId) return tab;
       if (getBrowserLocationIdentity(tab.location) === nextIdentity) return tab;
       return createRuntimeTab(browserLocation, sourcesRef.current, tab.id);
     }));
-  }, [activeTabId, hydrationStatus, redirectFromOldRoute, urlLocation]);
+  }, [activeTabId, hydrationStatus, invalidateRootOperations, isCurrentRootOperation, location.pathname, location.search, redirectFromOldRoute, urlLocation]);
 
   useEffect(() => {
     if (displayState?.targetPath) setLastPath(displayState.targetPath);
@@ -745,11 +828,16 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     });
   }, [activeTab, activeTabId, commitTabLocation]);
 
-  const openLocationInNewTab = useCallback((browserLocation, sourcesOverride = sourcesRef.current) => {
+  const openLocationInNewTab = useCallback((
+    browserLocation,
+    sourcesOverride = sourcesRef.current,
+    rootOperationToken = null
+  ) => {
     commitTabLocation({
       browserLocation,
       append: true,
-      sourcesOverride
+      sourcesOverride,
+      rootOperationToken
     });
   }, [commitTabLocation]);
 
@@ -784,6 +872,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       if (!isExternalFileDrag(event)) return;
       event.preventDefault();
       if (!ipcRenderer) return;
+      const operationToken = beginRootOperation();
 
       const droppedPaths = Array.from(event.dataTransfer?.files || [])
         .map((file) => {
@@ -802,6 +891,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
 
       try {
         const result = await ipcRenderer.invoke(CHANNELS.RESOLVE_DROPPED_FOLDERS, droppedPaths);
+        if (!isCurrentRootOperation(operationToken)) return;
         const folders = Array.isArray(result?.folders) ? result.folders : [];
         if (folders.length === 0) {
           setErrorMessage('只支持拖入文件夹');
@@ -810,9 +900,16 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
 
         for (const folderPath of folders) {
           const registered = await registerAbsoluteRoot(folderPath);
-          openLocationInNewTab(registered.browserLocation, registered.sources);
+          if (!isCurrentRootOperation(operationToken)) return;
+          const registeredSources = applyRegisteredRoot(registered);
+          openLocationInNewTab(
+            registered.browserLocation,
+            registeredSources,
+            operationToken
+          );
         }
       } catch (error) {
+        if (!isCurrentRootOperation(operationToken)) return;
         console.error('处理拖入文件夹失败:', error);
         setErrorMessage('打开拖入文件夹失败');
       }
@@ -824,7 +921,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       document.removeEventListener('dragover', handleDocumentDragOver);
       document.removeEventListener('drop', handleDocumentDrop);
     };
-  }, [openLocationInNewTab, registerAbsoluteRoot]);
+  }, [applyRegisteredRoot, beginRootOperation, isCurrentRootOperation, openLocationInNewTab, registerAbsoluteRoot]);
 
   const clearTabDragIndicator = useCallback(() => {
     setDragIndicator((prev) => (prev.tabId ? { tabId: null, position: DRAG_INSERT_BEFORE } : prev));
@@ -952,6 +1049,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
 
   const handleRestoreTabsSnapshot = useCallback(() => {
     setTabsMenuAnchorEl(null);
+    invalidateRootOperations();
 
     const savedTabsSession = loadTabsSession({
       storage: localStorage,
@@ -969,44 +1067,60 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     setActiveTabId(savedTabsSession.activeTabId);
     const nextActiveTab = runtimeTabs.find((tab) => tab.id === savedTabsSession.activeTabId)
       || runtimeTabs[0];
-    pendingNavigationRef.current = getBrowserLocationIdentity(nextActiveTab.location);
+    pendingNavigationRef.current = createPendingNavigation(nextActiveTab.location);
     navigateBrowserLocation(nextActiveTab.location, { replace: true });
     setSuccessMessage(`已恢复 ${savedTabsSession.tabs.length} 个标签页`);
-  }, [navigateBrowserLocation]);
+  }, [invalidateRootOperations, navigateBrowserLocation]);
 
   const handleOpenFolderToTarget = useCallback(async (target) => {
     setOpenFolderMenuAnchorEl(null);
     if (!ipcRenderer) return;
+    const operationToken = beginRootOperation();
 
     try {
       const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
-      if (!selectedDir) return;
+      if (!selectedDir || !isCurrentRootOperation(operationToken)) return;
       const registered = await registerAbsoluteRoot(selectedDir);
+      if (!isCurrentRootOperation(operationToken)) return;
+      const registeredSources = applyRegisteredRoot(registered);
 
       if (target === 'current') {
         commitTabLocation({
           tabId: activeTabId,
           browserLocation: registered.browserLocation,
-          sourcesOverride: registered.sources
+          sourcesOverride: registeredSources,
+          rootOperationToken: operationToken
         });
         return;
       }
 
       if (target === 'new-tab') {
-        openLocationInNewTab(registered.browserLocation, registered.sources);
+        openLocationInNewTab(
+          registered.browserLocation,
+          registeredSources,
+          operationToken
+        );
         return;
       }
 
       if (target === 'new-window') {
-        const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, selectedDir);
+        const newWindowPayload = registered.browserLocation.kind === 'directory'
+          ? {
+            contractVersion: 1,
+            target: registered.browserLocation.target
+          }
+          : registered.browserLocation.legacyAbsolutePath;
+        const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, newWindowPayload);
+        if (!isCurrentRootOperation(operationToken)) return;
         if (!result?.success) {
           throw new Error(result?.error || '创建新窗口失败');
         }
       }
     } catch (error) {
+      if (!isCurrentRootOperation(operationToken)) return;
       console.error('打开文件夹失败:', error);
     }
-  }, [activeTabId, commitTabLocation, openLocationInNewTab, registerAbsoluteRoot]);
+  }, [activeTabId, applyRegisteredRoot, beginRootOperation, commitTabLocation, isCurrentRootOperation, openLocationInNewTab, registerAbsoluteRoot]);
 
   const renderTabsHeader = useMemo(() => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>

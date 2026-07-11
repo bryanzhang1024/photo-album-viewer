@@ -614,6 +614,413 @@ describe('BrowserPage', () => {
     });
   });
 
+  test('opens a registered source root in a new window with the canonical target contract', async () => {
+    const selectedSource = createSource({ rootPath: '/Selected/Photos', label: 'Photos' });
+    setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Photos');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve(createSaveSourceResponse(selectedSource));
+      }
+      if (channel === CHANNELS.CREATE_NEW_INSTANCE) return Promise.resolve({ success: true });
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.LOAD_SOURCE_ROOTS_V1,
+        { contractVersion: 1 }
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在新窗口打开文件夹'));
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.CREATE_NEW_INSTANCE, {
+        contractVersion: 1,
+        target: {
+          sourceId: SOURCE_ID,
+          relativePath: '',
+          viewMode: 'browse',
+          initialMediaRelativePath: null
+        }
+      });
+    });
+  });
+
+  test('opens an unregistered legacy root in a new window with the absolute path fallback', async () => {
+    setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Photos');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve({ contractVersion: 1, ok: false, error: 'save failed' });
+      }
+      if (channel === CHANNELS.CREATE_NEW_INSTANCE) return Promise.resolve({ success: true });
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.LOAD_SOURCE_ROOTS_V1,
+        { contractVersion: 1 }
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在新窗口打开文件夹'));
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.CREATE_NEW_INSTANCE,
+        '/Selected/Photos'
+      );
+    });
+  });
+
+  test('keeps the selected root as an explicit legacy location when source registration throws', async () => {
+    const ancestorSource = createSource({ rootPath: '/Photos' });
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([ancestorSource]));
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Photos/Nested');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.reject(new Error('disk unavailable'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenLastCalledWith('/Photos/Nested', {
+        viewMode: 'folder',
+        initialImage: null,
+        replace: false
+      });
+      expect(screen.getByText('来源注册失败，已使用兼容模式打开')).toBeInTheDocument();
+    });
+  });
+
+  test('keeps the selected root as an explicit legacy location when source registration returns ok false', async () => {
+    const ancestorSource = createSource({ rootPath: '/Photos' });
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([ancestorSource]));
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Photos/Nested');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve({ contractVersion: 1, ok: false, error: 'save failed' });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenLastCalledWith('/Photos/Nested', {
+        viewMode: 'folder',
+        initialImage: null,
+        replace: false
+      });
+      expect(screen.getByText('来源注册失败，已使用兼容模式打开')).toBeInTheDocument();
+    });
+  });
+
+  test('uses the returned canonical source when registration reports created false', async () => {
+    const ancestorSource = createSource({ rootPath: '/Photos' });
+    const selectedSource = createSource({
+      sourceId: SECOND_SOURCE_ID,
+      rootPath: '/Photos/Nested',
+      label: 'Nested'
+    });
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([ancestorSource]));
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Photos/Nested');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve(createSaveSourceResponse(selectedSource, false));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenLastCalledWith(
+        navigationUtils.buildNavigationTargetUrl({
+          sourceId: SECOND_SOURCE_ID,
+          relativePath: '',
+          viewMode: 'browse',
+          initialMediaRelativePath: null
+        }),
+        {}
+      );
+    });
+    expect(screen.queryByText('来源注册失败，已使用兼容模式打开')).not.toBeInTheDocument();
+  });
+
+  test('ignores a selected folder registration that resolves after unmount', async () => {
+    const deferredSave = createDeferred();
+    const selectedSource = createSource({ rootPath: '/Selected/Photos', label: 'Photos' });
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Photos');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) return deferredSave.promise;
+      return Promise.resolve(undefined);
+    });
+
+    const { unmount } = render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.SAVE_SOURCE_ROOT_V1, expect.anything());
+    });
+
+    unmount();
+    await act(async () => {
+      deferredSave.resolve(createSaveSourceResponse(selectedSource));
+      await deferredSave.promise;
+    });
+
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  test('ignores an older selected folder when a newer selection finishes first', async () => {
+    const firstSave = createDeferred();
+    const firstSource = createSource({ rootPath: '/Selected/First', label: 'First' });
+    const secondSource = createSource({
+      sourceId: SECOND_SOURCE_ID,
+      rootPath: '/Selected/Second',
+      label: 'Second'
+    });
+    let selectionCount = 0;
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel, payload) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) {
+        selectionCount += 1;
+        return Promise.resolve(selectionCount === 1 ? '/Selected/First' : '/Selected/Second');
+      }
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return payload.rootPath === '/Selected/First'
+          ? firstSave.promise
+          : Promise.resolve(createSaveSourceResponse(secondSource));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SAVE_SOURCE_ROOT_V1,
+        expect.objectContaining({ rootPath: '/Selected/First' })
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+    const secondUrl = navigationUtils.buildNavigationTargetUrl({
+      sourceId: SECOND_SOURCE_ID,
+      relativePath: '',
+      viewMode: 'browse',
+      initialMediaRelativePath: null
+    });
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenLastCalledWith(secondUrl, {});
+    });
+
+    await act(async () => {
+      firstSave.resolve(createSaveSourceResponse(firstSource));
+      await firstSave.promise;
+    });
+
+    expect(navigateMock).toHaveBeenLastCalledWith(secondUrl, {});
+    expect(screen.getByRole('tab', { name: /Second/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('lets ordinary navigation supersede a pending selected folder registration', async () => {
+    const deferredSave = createDeferred();
+    const loadedSource = createSource();
+    const selectedSource = createSource({
+      sourceId: SECOND_SOURCE_ID,
+      rootPath: '/Selected/Slow',
+      label: 'Slow'
+    });
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=&view=folder`
+    });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([loadedSource]));
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Slow');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) return deferredSave.promise;
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.SAVE_SOURCE_ROOT_V1, expect.anything());
+    });
+
+    const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+    act(() => {
+      homeProps.onFolderClick('/Volumes/NAS/Photos/Ordinary');
+    });
+    const ordinaryUrl = navigationUtils.buildNavigationTargetUrl({
+      sourceId: SOURCE_ID,
+      relativePath: 'Ordinary',
+      viewMode: 'browse',
+      initialMediaRelativePath: null
+    });
+    expect(navigateMock).toHaveBeenLastCalledWith(ordinaryUrl, {});
+
+    await act(async () => {
+      deferredSave.resolve(createSaveSourceResponse(selectedSource));
+      await deferredSave.promise;
+    });
+
+    expect(navigateMock).toHaveBeenLastCalledWith(ordinaryUrl, {});
+    expect(screen.getByRole('tab', { name: /Ordinary/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('lets an external URL supersede a newer selection when an older pending navigation is stale', async () => {
+    const deferredSave = createDeferred();
+    const loadedSource = createSource();
+    const selectedSource = createSource({
+      sourceId: SECOND_SOURCE_ID,
+      rootPath: '/Selected/Slow',
+      label: 'Slow'
+    });
+    let selectionCount = 0;
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=&view=folder`
+    });
+    ipcRenderer.invoke.mockImplementation((channel, payload) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([loadedSource]));
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) {
+        selectionCount += 1;
+        return Promise.resolve(selectionCount === 1
+          ? '/Volumes/NAS/Photos'
+          : '/Selected/Slow');
+      }
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return payload.rootPath === '/Volumes/NAS/Photos'
+          ? Promise.resolve(createSaveSourceResponse(loadedSource, false))
+          : deferredSave.promise;
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const { rerender } = render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+    const rootUrl = navigationUtils.buildNavigationTargetUrl({
+      sourceId: SOURCE_ID,
+      relativePath: '',
+      viewMode: 'browse',
+      initialMediaRelativePath: null
+    });
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenLastCalledWith(rootUrl, {});
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SAVE_SOURCE_ROOT_V1,
+        expect.objectContaining({ rootPath: '/Selected/Slow' })
+      );
+    });
+
+    reactRouter.useLocation.mockReturnValue({
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=External&view=folder`,
+      state: null
+    });
+    rerender(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
+      expect(activeTab.location).toEqual(createCanonicalLocation({ relativePath: 'External' }));
+      expect(screen.getByRole('tab', { name: /External/i })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    await act(async () => {
+      deferredSave.resolve(createSaveSourceResponse(selectedSource));
+      await deferredSave.promise;
+    });
+
+    const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+    const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
+    expect(activeTab.location).toEqual(createCanonicalLocation({ relativePath: 'External' }));
+    expect(navigateMock).toHaveBeenCalledTimes(1);
+    expect(navigateMock).toHaveBeenLastCalledWith(rootUrl, {});
+  });
+
   test('registers every dropped directory before opening canonical root tabs', async () => {
     const tripSource = createSource({ rootPath: '/photos/trip', label: 'trip' });
     const familySource = createSource({
@@ -681,6 +1088,113 @@ describe('BrowserPage', () => {
     expect(screen.getByRole('tab', { name: /family/i })).toHaveAttribute('aria-selected', 'true');
   });
 
+  test('ignores a dropped folder registration that resolves after unmount', async () => {
+    const deferredSave = createDeferred();
+    const droppedSource = createSource({ rootPath: '/Dropped/Slow', label: 'Slow' });
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel, payload) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.RESOLVE_DROPPED_FOLDERS) {
+        return Promise.resolve({ folders: payload, rejected: [] });
+      }
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) return deferredSave.promise;
+      return Promise.resolve(undefined);
+    });
+
+    const { unmount } = render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.drop(document, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [{ name: 'Slow', mockPath: '/Dropped/Slow' }]
+      }
+    });
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.SAVE_SOURCE_ROOT_V1, expect.anything());
+    });
+
+    unmount();
+    await act(async () => {
+      deferredSave.resolve(createSaveSourceResponse(droppedSource));
+      await deferredSave.promise;
+    });
+
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  test('ignores an older dropped folder when a newer drop finishes first', async () => {
+    const firstSave = createDeferred();
+    const firstSource = createSource({ rootPath: '/Dropped/First', label: 'First' });
+    const secondSource = createSource({
+      sourceId: SECOND_SOURCE_ID,
+      rootPath: '/Dropped/Second',
+      label: 'Second'
+    });
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel, payload) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.RESOLVE_DROPPED_FOLDERS) {
+        return Promise.resolve({ folders: payload, rejected: [] });
+      }
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return payload.rootPath === '/Dropped/First'
+          ? firstSave.promise
+          : Promise.resolve(createSaveSourceResponse(secondSource));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+    });
+
+    fireEvent.drop(document, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [{ name: 'First', mockPath: '/Dropped/First' }]
+      }
+    });
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SAVE_SOURCE_ROOT_V1,
+        expect.objectContaining({ rootPath: '/Dropped/First' })
+      );
+    });
+
+    fireEvent.drop(document, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [{ name: 'Second', mockPath: '/Dropped/Second' }]
+      }
+    });
+    const secondUrl = navigationUtils.buildNavigationTargetUrl({
+      sourceId: SECOND_SOURCE_ID,
+      relativePath: '',
+      viewMode: 'browse',
+      initialMediaRelativePath: null
+    });
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenLastCalledWith(secondUrl, {});
+    });
+
+    await act(async () => {
+      firstSave.resolve(createSaveSourceResponse(firstSource));
+      await firstSave.promise;
+    });
+
+    expect(navigateMock).toHaveBeenLastCalledWith(secondUrl, {});
+    expect(screen.queryByRole('tab', { name: /First/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Second/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
   test('registers an already-decoded legacy initialPath without decoding percent twice', async () => {
     const initialSource = createSource({
       rootPath: '/photos/100%done',
@@ -719,6 +1233,67 @@ describe('BrowserPage', () => {
         { replace: true }
       );
     });
+  });
+
+  test('lets a newer canonical URL finish hydration while an initialPath registration is pending', async () => {
+    const loadedSource = createSource();
+    const delayedSource = createSource({
+      sourceId: SECOND_SOURCE_ID,
+      rootPath: '/Slow/Root',
+      label: 'Slow Root'
+    });
+    const deferredSave = createDeferred();
+    const navigateMock = setupRouterMocks({
+      pathname: '/',
+      search: '?initialPath=%2FSlow%2FRoot'
+    });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([loadedSource]));
+      }
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) return deferredSave.promise;
+      return Promise.resolve(undefined);
+    });
+
+    const { rerender } = render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.SAVE_SOURCE_ROOT_V1, {
+        contractVersion: 1,
+        sourceId: null,
+        rootPath: '/Slow/Root',
+        label: null
+      });
+    });
+
+    reactRouter.useLocation.mockReturnValue({
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=2027&view=album`,
+      state: null
+    });
+    rerender(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
+      expect(activeTab.location).toEqual(createCanonicalLocation({
+        relativePath: '2027',
+        viewMode: 'photoSet'
+      }));
+      expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Volumes/NAS/Photos/2027');
+    });
+
+    await act(async () => {
+      deferredSave.resolve(createSaveSourceResponse(delayedSource));
+      await deferredSave.promise;
+    });
+
+    const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+    const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
+    expect(activeTab.location).toEqual(createCanonicalLocation({
+      relativePath: '2027',
+      viewMode: 'photoSet'
+    }));
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   test('lets canonical URL intent win over an unrelated stored session', async () => {
