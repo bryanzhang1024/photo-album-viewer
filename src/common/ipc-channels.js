@@ -2,6 +2,8 @@ module.exports = {
     SELECT_DIRECTORY: 'select-directory',
     SCAN_NAVIGATION_LEVEL: 'scan-navigation-level',
     GET_DIRECTORY_LEVEL_V1: 'get-directory-level-v1',
+    LOAD_SOURCE_ROOTS_V1: 'load-source-roots-v1',
+    SAVE_SOURCE_ROOT_V1: 'save-source-root-v1',
     RESOLVE_DROPPED_FOLDERS: 'resolve-dropped-folders',
     GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',
     GET_THUMBNAIL: 'get-thumbnail',

@@ -8,6 +8,7 @@ const createImageStub = () => ({
 const setupMainProcess = ({
   fileSystemService = {},
   directorySnapshotService = {},
+  sourceRootService = {},
   configureElectron
 } = {}) => {
   jest.resetModules();
@@ -59,6 +60,41 @@ const setupMainProcess = ({
     scanDirectorySnapshot: jest.fn(),
     ...directorySnapshotService
   };
+  const resolvedSourceRootService = {
+    initialize: jest.fn(() => Promise.resolve()),
+    listSourceRoots: jest.fn(() => Promise.resolve([])),
+    getSourceRoot: jest.fn((sourceId) => Promise.resolve({
+      schemaVersion: 1,
+      sourceId,
+      label: 'photos',
+      rootPath: '/photos',
+      sourceGeneration: 1
+    })),
+    resolveNavigationTarget: jest.fn((target) => Promise.resolve({
+      source: {
+        schemaVersion: 1,
+        sourceId: target.sourceId,
+        label: 'photos',
+        rootPath: '/photos',
+        sourceGeneration: 1
+      },
+      target,
+      absolutePath: '/photos',
+      initialMediaAbsolutePath: null
+    })),
+    saveSourceRoot: jest.fn(() => Promise.resolve({
+      source: {
+        schemaVersion: 1,
+        sourceId: 'src_11111111-1111-4111-8111-111111111111',
+        label: 'photos',
+        rootPath: '/photos',
+        sourceGeneration: 1
+      },
+      created: true
+    })),
+    ...sourceRootService
+  };
+  const createSourceRootService = jest.fn(() => resolvedSourceRootService);
 
   jest.doMock('electron', () => electron);
   jest.doMock('electron-is-dev', () => false);
@@ -87,12 +123,17 @@ const setupMainProcess = ({
     '../../src/main/services/DirectorySnapshotService',
     () => resolvedDirectorySnapshotService
   );
+  jest.doMock('../../src/main/services/SourceRootService', () => ({
+    createSourceRootService
+  }));
 
   require('../../src/main/main');
   return {
     electron,
     fileSystemService: resolvedFileSystemService,
-    directorySnapshotService: resolvedDirectorySnapshotService
+    directorySnapshotService: resolvedDirectorySnapshotService,
+    sourceRootService: resolvedSourceRootService,
+    createSourceRootService
   };
 };
 

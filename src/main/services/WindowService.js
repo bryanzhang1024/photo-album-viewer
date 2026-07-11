@@ -2,10 +2,39 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
 const http = require('http');
-const url = require('url');
+const {
+  validateNavigationTargetV1
+} = require('../../common/contracts/navigation-contract-v1');
+const { getRootPathFlavor } = require('../../common/path-codec');
 
 let mainWindow;
 const windows = new Set();
+
+function buildWindowUrl(startUrl, launchTarget = null) {
+  if (launchTarget === null) {
+    return startUrl;
+  }
+
+  const params = new URLSearchParams();
+  if (typeof launchTarget === 'string') {
+    if (getRootPathFlavor(launchTarget) === null) {
+      throw new TypeError('Invalid window launch target');
+    }
+    params.set('initialPath', launchTarget);
+    return `${startUrl}#/browse?${params.toString()}`;
+  }
+
+  if (!validateNavigationTargetV1(launchTarget).valid) {
+    throw new TypeError('Invalid window launch target');
+  }
+  params.set('sourceId', launchTarget.sourceId);
+  params.set('relativePath', launchTarget.relativePath);
+  if (launchTarget.viewMode === 'photoSet') params.set('view', 'album');
+  if (launchTarget.initialMediaRelativePath) {
+    params.set('image', launchTarget.initialMediaRelativePath);
+  }
+  return `${startUrl}#/browse?${params.toString()}`;
+}
 
 // 检查服务器是否准备好
 const waitForServer = (url, callback) => {
@@ -45,7 +74,7 @@ const waitForServer = (url, callback) => {
   check();
 };
 
-function createWindow(albumPath = null) {
+function createWindow(launchTarget = null) {
   // 创建一个新的BrowserWindow实例
   const newWindow = new BrowserWindow({
     width: 1200,
@@ -103,16 +132,11 @@ function createWindow(albumPath = null) {
   });
 
   const startUrl = isDev
-    ? 'http://localhost:3000'
+    ? 'http://localhost:3000/'
     : `file://${path.join(__dirname, '../../../build/index.html')}`;
-  
-  // 如果有指定的相簿路径，添加到URL参数
-  let finalUrl = startUrl;
-  if (albumPath) {
-    const encodedPath = encodeURIComponent(albumPath);
-    finalUrl = isDev 
-      ? `http://localhost:3000/?initialPath=${encodedPath}`
-      : `file://${path.join(__dirname, '../../../build/index.html')}?initialPath=${encodedPath}`;
+
+  const finalUrl = buildWindowUrl(startUrl, launchTarget);
+  if (launchTarget) {
     console.log('创建窗口的URL:', finalUrl);
   }
 
@@ -191,4 +215,4 @@ function getMainWindow() {
     return mainWindow;
 }
 
-module.exports = { createWindow, getMainWindow, windows };
+module.exports = { buildWindowUrl, createWindow, getMainWindow, windows };
