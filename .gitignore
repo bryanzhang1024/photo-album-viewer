@@ -5,7 +5,14 @@ AGENTS.md
 agents/
 .serena
 doc
-docs/
+docs/*
+!docs/plans/
+docs/plans/*
+!docs/plans/ADR-001.md
+!docs/superpowers/
+docs/superpowers/*
+!docs/superpowers/plans/
+!docs/superpowers/plans/**
 
 # 依赖
 node_modules/
