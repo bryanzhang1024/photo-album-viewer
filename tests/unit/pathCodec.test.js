@@ -93,6 +93,12 @@ describe('path-codec', () => {
     expect(getPortableRelativePath('C:/Photos', 'D:/Photos/Trip')).toBeNull();
   });
 
+  test('rejects malformed UNC components instead of aliasing a drive root', () => {
+    expect(getRootPathFlavor('//C:/Photos/Trip')).toBeNull();
+    expect(getRootPathFlavor('//server/C:/Trip')).toBeNull();
+    expect(getPortableRelativePath('C:/Photos', '//C:/Photos/Trip')).toBeNull();
+  });
+
   test('resolves portable relative paths without Node path APIs', () => {
     expect(resolvePortableRelativePath('C:/Photos', 'Trip/2026'))
       .toBe('C:/Photos/Trip/2026');

@@ -1,6 +1,6 @@
 const WINDOWS_DRIVE_ROOT = /^[A-Za-z]:[\\/]/;
 const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/;
-const WINDOWS_UNC_ROOT = /^(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/;
+const WINDOWS_UNC_ROOT = /^(?:\\\\|\/\/)[^\\/:]+[\\/][^\\/:]+(?:[\\/]|$)/;
 
 function getRootPathFlavor(rootPath) {
   if (typeof rootPath !== 'string' || rootPath.length === 0 || rootPath.includes('\0')) {

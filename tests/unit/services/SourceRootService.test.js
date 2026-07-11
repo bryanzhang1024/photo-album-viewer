@@ -7,10 +7,14 @@ const {
   createSourceRootRegistryV1,
   createSourceRootV1
 } = require('../../helpers/sourceRootFixtures');
+const {
+  validateSourceRootV1
+} = require('../../../src/common/contracts/navigation-contract-v1');
 
 const REGISTRY_PATH = '/state/library-sources.json';
 const SECOND_UUID = '22222222-2222-4222-8222-222222222222';
 const THIRD_UUID = '33333333-3333-4333-8333-333333333333';
+const PREEXISTING_TEMP_CONTENTS = 'pre-existing temp file';
 
 function createIoError(code, message = code) {
   return Object.assign(new Error(message), { code });
@@ -20,7 +24,8 @@ function createFakeFs({
   directories = ['/Photos'],
   initialRegistry,
   openHandles = true,
-  renameFailures = 0
+  renameFailures = 0,
+  writeCollisions = 0
 } = {}) {
   const files = new Map();
   if (initialRegistry !== undefined) {
@@ -32,6 +37,8 @@ function createFakeFs({
   const directorySet = new Set(directories);
   const calls = [];
   let remainingRenameFailures = renameFailures;
+  let remainingWriteCollisions = writeCollisions;
+  const collidingTempPaths = [];
 
   const fsApi = {
     async readFile(target, encoding) {
@@ -44,6 +51,12 @@ function createFakeFs({
     },
     async writeFile(target, contents, options) {
       calls.push(['writeFile', target, contents, options]);
+      if (remainingWriteCollisions > 0) {
+        remainingWriteCollisions -= 1;
+        collidingTempPaths.push(target);
+        files.set(target, PREEXISTING_TEMP_CONTENTS);
+        throw createIoError('EEXIST');
+      }
       if (options?.flag === 'wx' && files.has(target)) throw createIoError('EEXIST');
       files.set(target, contents);
     },
@@ -90,6 +103,7 @@ function createFakeFs({
 
   return {
     calls,
+    collidingTempPaths,
     files,
     fsApi,
     getRegistryDocument() {
@@ -227,6 +241,27 @@ describe('SourceRootService', () => {
     expect(fakeFs.calls.filter(([operation, , to]) => (
       operation === 'rename' && to === REGISTRY_PATH
     ))).toHaveLength(1);
+  });
+
+  test.each([
+    ['overlong', `/${'a'.repeat(201)}`, 'a'.repeat(200)],
+    ['blank', '/   ', '照片来源']
+  ])('creates a reloadable contract-valid default label for an %s basename', async (
+    _name,
+    rootPath,
+    expectedLabel
+  ) => {
+    const fakeFs = createFakeFs({ directories: [rootPath] });
+    const service = loadService(fakeFs);
+    await service.initialize();
+
+    const result = await service.saveSourceRoot({ sourceId: null, rootPath, label: null });
+
+    expect(result.source.label).toBe(expectedLabel);
+    expect(validateSourceRootV1(result.source).valid).toBe(true);
+    const reloadedService = loadService(fakeFs);
+    await expect(reloadedService.initialize()).resolves.toBeUndefined();
+    await expect(reloadedService.listSourceRoots()).resolves.toEqual([result.source]);
   });
 
   test('retries a colliding generated UUID', async () => {
@@ -428,6 +463,24 @@ describe('SourceRootService', () => {
     await expect(service.getSourceRoot(SOURCE_ID)).resolves.toEqual(existing);
     expect(writeTargets(fakeFs)).not.toContain(REGISTRY_PATH);
     expect(fakeFs.calls.some(([operation]) => operation === 'unlink')).toBe(true);
+  });
+
+  test('preserves a pre-existing temp file when exclusive creation collides', async () => {
+    const fakeFs = createFakeFs({ writeCollisions: 1 });
+    const service = loadService(fakeFs);
+    await service.initialize();
+
+    await expect(service.saveSourceRoot({
+      sourceId: null,
+      rootPath: '/Photos',
+      label: null
+    })).rejects.toMatchObject({ code: 'SOURCE_ROOT_PERSIST_FAILED' });
+
+    expect(fakeFs.collidingTempPaths).toHaveLength(1);
+    const [collidingPath] = fakeFs.collidingTempPaths;
+    expect(fakeFs.files.get(collidingPath)).toBe(PREEXISTING_TEMP_CONTENTS);
+    expect(fakeFs.calls).not.toContainEqual(['unlink', collidingPath]);
+    expect(fakeFs.files.has(REGISTRY_PATH)).toBe(false);
   });
 
   test('continues the mutation queue after a rejected save', async () => {

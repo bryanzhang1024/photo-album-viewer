@@ -60,7 +60,9 @@ function deriveLabel(rootPath) {
   if (rootPath === '/') return '/';
   if (/^[A-Za-z]:\/$/.test(rootPath)) return rootPath.slice(0, 2);
   const segments = rootPath.replace(/^\/\//, '').split('/');
-  return segments[segments.length - 1];
+  const basename = segments[segments.length - 1];
+  if (basename.trim().length === 0) return '照片来源';
+  return basename.slice(0, 200);
 }
 
 function isPlainRecordWithExactFields(value, fields) {
@@ -202,6 +204,7 @@ function createSourceRootService({
 
   async function persistSources(nextSources) {
     const temporaryPath = makeTemporaryPath(registryPath);
+    let ownsTemporaryFile = false;
     const serialized = `${JSON.stringify({
       schemaVersion: SOURCE_ROOT_SCHEMA_VERSION,
       sources: nextSources
@@ -210,6 +213,7 @@ function createSourceRootService({
     try {
       await fsApi.mkdir(path.dirname(registryPath), { recursive: true });
       await fsApi.writeFile(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' });
+      ownsTemporaryFile = true;
 
       if (typeof fsApi.open === 'function') {
         let handle;
@@ -223,7 +227,7 @@ function createSourceRootService({
 
       await fsApi.rename(temporaryPath, registryPath);
     } catch (error) {
-      if (typeof fsApi.unlink === 'function') {
+      if (ownsTemporaryFile && typeof fsApi.unlink === 'function') {
         try {
           await fsApi.unlink(temporaryPath);
         } catch (_cleanupError) {
@@ -301,6 +305,12 @@ function createSourceRootService({
           rootPath: normalizedRoot,
           sourceGeneration: 1
         };
+        if (!validateSourceRootV1(source).valid) {
+          throw createServiceError(
+            'INVALID_SOURCE_ROOT_REQUEST',
+            'Could not create a valid SourceRoot from the save request'
+          );
+        }
         const nextSources = [...sources, source];
         await persistSources(nextSources);
         sources = cloneSources(nextSources);
