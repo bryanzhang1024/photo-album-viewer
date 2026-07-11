@@ -26,6 +26,16 @@ function hasOwn(value, key) {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
+function normalizeSourceIdV1(sourceId) {
+  if (typeof sourceId !== 'string' || !SOURCE_ID_PATTERN.test(sourceId)) return null;
+  return sourceId.toLowerCase();
+}
+
+function sourceIdsEqualV1(left, right) {
+  const normalizedLeft = normalizeSourceIdV1(left);
+  return normalizedLeft !== null && normalizedLeft === normalizeSourceIdV1(right);
+}
+
 function addIssue(issues, path, code, message) {
   issues.push({ path, code, message });
 }
@@ -116,7 +126,7 @@ function validateSourceId(value, path, issues, { nullable = false } = {}) {
   if (nullable && value === null) return;
   if (typeof value !== 'string') {
     addIssue(issues, path, 'type', 'Source id must be a string');
-  } else if (!SOURCE_ID_PATTERN.test(value)) {
+  } else if (normalizeSourceIdV1(value) === null) {
     addIssue(issues, path, 'format', 'Source id must use src_<uuid-v4>');
   }
 }
@@ -153,6 +163,36 @@ function validateRequiredField(record, key, path, issues, validator) {
     return;
   }
   validator(record[key], `${path}.${key}`, issues);
+}
+
+function validateInitialMediaWithinTarget(record, path, issues) {
+  if (!hasOwn(record, 'relativePath') || !hasOwn(record, 'initialMediaRelativePath')) return;
+
+  const relativePath = record.relativePath;
+  const mediaPath = record.initialMediaRelativePath;
+  if (!isPortableRelativePath(relativePath) || mediaPath === null
+      || !isPortableRelativePath(mediaPath)) {
+    return;
+  }
+
+  if (mediaPath.length === 0) {
+    addIssue(
+      issues,
+      `${path}.initialMediaRelativePath`,
+      'invariant',
+      'Initial media path must not be empty'
+    );
+    return;
+  }
+
+  if (relativePath && !mediaPath.startsWith(`${relativePath}/`)) {
+    addIssue(
+      issues,
+      `${path}.initialMediaRelativePath`,
+      'invariant',
+      'Initial media path must be inside the target directory'
+    );
+  }
 }
 
 function validateSourceRootAt(value, path, issues) {
@@ -194,6 +234,7 @@ function validateNavigationTargetV1(value) {
     issues,
     (mediaPath, path, list) => validatePortablePath(mediaPath, path, list, { nullable: true })
   );
+  validateInitialMediaWithinTarget(record, '$', issues);
   return createValidationResult(value, issues);
 }
 
@@ -228,10 +269,11 @@ function validateSourcesArray(value, path, issues) {
   for (const entry of entries) {
     const source = validateSourceRootAt(entry.value, `${path}[${entry.index}]`, issues);
     if (source && typeof source.sourceId === 'string') {
-      if (sourceIds.has(source.sourceId)) {
+      const normalizedSourceId = normalizeSourceIdV1(source.sourceId);
+      if (sourceIds.has(normalizedSourceId)) {
         addIssue(issues, `${path}[${entry.index}].sourceId`, 'invariant', 'Duplicate source id');
       }
-      sourceIds.add(source.sourceId);
+      sourceIds.add(normalizedSourceId);
     }
   }
 }
@@ -358,6 +400,8 @@ module.exports = {
   SOURCE_ROOT_SCHEMA_VERSION,
   createNavigationErrorEnvelopeV1,
   createNavigationSuccessEnvelopeV1,
+  normalizeSourceIdV1,
+  sourceIdsEqualV1,
   toCanonicalViewMode,
   toLegacyViewMode,
   validateLoadSourceRootsRequestV1,

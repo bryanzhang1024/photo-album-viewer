@@ -38,6 +38,7 @@ import {
   isPortableRelativePath,
   resolvePortableRelativePath
 } from '../../common/path-codec';
+import { sourceIdsEqualV1 } from '../../common/contracts/navigation-contract-v1';
 import {
   getBrowserLocationIdentity,
   getParentBrowserLocation,
@@ -285,7 +286,9 @@ const isExplicitURLLocation = (location) => (
 );
 
 const upsertSourceRoot = (sources, source) => {
-  const existingIndex = sources.findIndex((item) => item.sourceId === source.sourceId);
+  const existingIndex = sources.findIndex((item) => (
+    sourceIdsEqualV1(item.sourceId, source.sourceId)
+  ));
   if (existingIndex === -1) return [...sources, source];
   const nextSources = [...sources];
   nextSources[existingIndex] = source;
@@ -379,7 +382,9 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   const displayState = activeTab;
   const activeSourceRoot = useMemo(() => {
     if (activeTab?.location?.kind !== 'directory') return null;
-    return sources.find((source) => source.sourceId === activeTab.location.target.sourceId) || null;
+    return sources.find((source) => (
+      sourceIdsEqualV1(source.sourceId, activeTab.location.target.sourceId)
+    )) || null;
   }, [activeTab, sources]);
   const sourceBreadcrumbs = useMemo(() => {
     if (!activeSourceRoot || activeTab.location.kind !== 'directory') return null;
@@ -764,7 +769,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     }
 
     const sourceRoot = sourcesRef.current.find((source) => (
-      source.sourceId === activeTab.location.target.sourceId
+      sourceIdsEqualV1(source.sourceId, activeTab.location.target.sourceId)
     ));
     if (!sourceRoot) return null;
 

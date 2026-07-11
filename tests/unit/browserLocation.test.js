@@ -45,6 +45,24 @@ describe('BrowserLocation domain', () => {
     });
   });
 
+  test('materializes a mixed-case canonical source id from the lowercase registry source', () => {
+    const sourceRoot = createSource();
+    const location = createDirectoryLocation({ sourceId: SOURCE_ID.toUpperCase() });
+
+    expect(materializeBrowserLocation(location, [sourceRoot])).toEqual(expect.objectContaining({
+      location,
+      sourceRoot,
+      absolutePath: '/Volumes/Photos/2026/旅行'
+    }));
+  });
+
+  test('uses one canonical identity for source id case variants', () => {
+    expect(getBrowserLocationIdentity(createDirectoryLocation()))
+      .toBe(getBrowserLocationIdentity(createDirectoryLocation({
+        sourceId: SOURCE_ID.toUpperCase()
+      })));
+  });
+
   test('relinks the same canonical target under a changed root without changing its identity', () => {
     const location = createDirectoryLocation();
     const oldSource = createSource({ rootPath: '/Volumes/OldPhotos' });
@@ -74,8 +92,56 @@ describe('BrowserLocation domain', () => {
       .toBe(materializeBrowserLocation(second, sources).absolutePath);
     expect(getBrowserLocationIdentity(first)).not.toBe(getBrowserLocationIdentity(second));
     expect(getBrowserLocationIdentity(first)).toBe(
-      `directory:${SOURCE_ID}:2026/旅行:photoSet:2026/旅行/001.jpg`
+      JSON.stringify([
+        'directory',
+        SOURCE_ID,
+        '2026/旅行',
+        'photoSet',
+        '2026/旅行/001.jpg'
+      ])
     );
+  });
+
+  test('keeps the exact strict-valid colon targets in distinct canonical identities', () => {
+    const locationA = createDirectoryLocation({
+      relativePath: 'aa',
+      viewMode: 'browse',
+      initialMediaRelativePath: 'aa/xx:photoSet:aa:browse:aa/xx/y'
+    });
+    const locationB = createDirectoryLocation({
+      relativePath: 'aa:browse:aa/xx',
+      viewMode: 'photoSet',
+      initialMediaRelativePath: 'aa:browse:aa/xx/y'
+    });
+
+    expect(isBrowserLocation(locationA)).toBe(true);
+    expect(isBrowserLocation(locationB)).toBe(true);
+    expect(getBrowserLocationIdentity(locationA))
+      .not.toBe(getBrowserLocationIdentity(locationB));
+  });
+
+  test('encodes legacy and app locations as fixed tuples', () => {
+    const legacyA = {
+      kind: 'legacyAbsolute',
+      legacyAbsolutePath: '/aa',
+      viewMode: 'folder',
+      legacyInitialMediaPath: '/aa/xx:album:/aa/y'
+    };
+    const legacyB = {
+      kind: 'legacyAbsolute',
+      legacyAbsolutePath: '/aa:folder:/aa/xx',
+      viewMode: 'album',
+      legacyInitialMediaPath: '/aa/y'
+    };
+
+    expect(isBrowserLocation(legacyA)).toBe(true);
+    expect(isBrowserLocation(legacyB)).toBe(true);
+    expect(getBrowserLocationIdentity(legacyA))
+      .not.toBe(getBrowserLocationIdentity(legacyB));
+    expect(getBrowserLocationIdentity({ kind: 'landing' }))
+      .toBe(JSON.stringify(['landing']));
+    expect(getBrowserLocationIdentity({ kind: 'favorites' }))
+      .toBe(JSON.stringify(['favorites']));
   });
 
   test('creates child navigation from portable segments while preserving sourceId', () => {
@@ -201,5 +267,14 @@ describe('BrowserLocation domain', () => {
       viewMode: 'folder',
       legacyInitialMediaPath: null
     })).toBe(false);
+  });
+
+  test.each([
+    '2026/其他/cover.jpg',
+    '2026/旅行2/cover.jpg'
+  ])('rejects a canonical BrowserLocation whose media is outside its target: %s', (
+    initialMediaRelativePath
+  ) => {
+    expect(isBrowserLocation(createDirectoryLocation({ initialMediaRelativePath }))).toBe(false);
   });
 });

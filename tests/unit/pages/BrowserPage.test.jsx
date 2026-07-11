@@ -358,6 +358,79 @@ describe('BrowserPage', () => {
     });
   });
 
+  test('restores a mixed-case v2 source id against the lowercase registry source', async () => {
+    const source = createSource();
+    const mixedCaseSourceId = SOURCE_ID.toUpperCase();
+    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+      tabs: [{
+        id: 'tab-mixed-source',
+        location: createCanonicalLocation({
+          sourceId: mixedCaseSourceId,
+          relativePath: '2026'
+        })
+      }]
+    })));
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([source]));
+      }
+      return Promise.resolve(undefined);
+    });
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+      expect(homeProps.currentPath).toBe('/Volumes/NAS/Photos/2026');
+      expect(homeProps.sourceBoundary?.sourceId).toBe(SOURCE_ID);
+    });
+
+    const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+    act(() => {
+      homeProps.onFolderClick('/Volumes/NAS/Photos/2026/旅行');
+    });
+    expect(navigateMock).toHaveBeenLastCalledWith(
+      navigationUtils.buildNavigationTargetUrl({
+        sourceId: mixedCaseSourceId,
+        relativePath: '2026/旅行',
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      }),
+      {}
+    );
+  });
+
+  test('materializes a mixed-case canonical URL against the lowercase registry source', async () => {
+    const source = createSource();
+    const mixedCaseSourceId = SOURCE_ID.toUpperCase();
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([source]));
+      }
+      return Promise.resolve(undefined);
+    });
+    setupRouterMocks({
+      pathname: '/browse',
+      search: `?${new URLSearchParams({
+        sourceId: mixedCaseSourceId,
+        relativePath: '2026/旅行',
+        view: 'folder'
+      }).toString()}`
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+      expect(homeProps.currentPath).toBe('/Volumes/NAS/Photos/2026/旅行');
+      expect(homeProps.sourceBoundary?.sourceId).toBe(SOURCE_ID);
+      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
+      expect(activeTab.location.target.sourceId).toBe(mixedCaseSourceId);
+    });
+  });
+
   test('migrates a unique v1 root, keeps unresolved tabs open, and preserves v1 raw bytes', async () => {
     const source = createSource();
     const sessionRaw = `  ${JSON.stringify({
@@ -1331,6 +1404,50 @@ describe('BrowserPage', () => {
       CHANNELS.SAVE_SOURCE_ROOT_V1,
       expect.anything()
     );
+  });
+
+  test('lets explicit URL target B win when session target A has the old colon identity', async () => {
+    const source = createSource();
+    const sessionLocationA = createCanonicalLocation({
+      relativePath: 'aa',
+      viewMode: 'browse',
+      initialMediaRelativePath: 'aa/xx:photoSet:aa:browse:aa/xx/y'
+    });
+    const explicitTargetB = {
+      sourceId: SOURCE_ID,
+      relativePath: 'aa:browse:aa/xx',
+      viewMode: 'photoSet',
+      initialMediaRelativePath: 'aa:browse:aa/xx/y'
+    };
+    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+      tabs: [{ id: 'tab-collision-a', location: sessionLocationA }]
+    })));
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([source]));
+      }
+      return Promise.resolve(undefined);
+    });
+    setupRouterMocks({
+      pathname: '/browse',
+      search: `?${new URLSearchParams({
+        sourceId: explicitTargetB.sourceId,
+        relativePath: explicitTargetB.relativePath,
+        view: 'album',
+        image: explicitTargetB.initialMediaRelativePath
+      }).toString()}`
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-album-path'))
+        .toHaveTextContent('/Volumes/NAS/Photos/aa:browse:aa/xx');
+      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
+      expect(activeTab.location).toEqual({ kind: 'directory', target: explicitTargetB });
+    });
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
   });
 
   test('renders HomePage for root folder view', async () => {

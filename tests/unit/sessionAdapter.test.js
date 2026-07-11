@@ -363,6 +363,36 @@ describe('browser tabs session adapter', () => {
   });
 
   test.each([
+    'v2-other/cover.jpg',
+    'v2-trip2/cover.jpg'
+  ])('rejects v2 session media outside the target directory: %s', (
+    initialMediaRelativePath
+  ) => {
+    const invalidPayload = createV2Payload({
+      tabs: [{
+        id: 'tab-v2',
+        location: {
+          kind: 'directory',
+          target: {
+            sourceId: SOURCE_ID,
+            relativePath: 'v2-trip',
+            viewMode: 'photoSet',
+            initialMediaRelativePath
+          }
+        }
+      }]
+    });
+    const storage = createStorage({ [SESSION_V2_KEY]: JSON.stringify(invalidPayload) });
+
+    expect(loadTabsSession({ storage, sources: [createSource()] })).toBeNull();
+    expect(() => createTabsSessionPayload(
+      invalidPayload.tabs,
+      invalidPayload.activeTabId,
+      NOW
+    )).toThrow(TypeError);
+  });
+
+  test.each([
     [false, SESSION_V2_KEY],
     [true, SNAPSHOT_V2_KEY]
   ])('writes only the selected v2 key when saving (snapshot=%s)', (snapshot, expectedKey) => {

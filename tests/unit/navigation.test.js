@@ -131,6 +131,10 @@ describe('navigation helpers', () => {
       ['absolute initial media', { initialMediaRelativePath: '/etc/passwd' }],
       ['traversal initial media', { initialMediaRelativePath: '2026/../escape.jpg' }],
       ['backslash initial media', { initialMediaRelativePath: '2026\\escape.jpg' }],
+      ['empty initial media', { initialMediaRelativePath: '' }],
+      ['media equal to target directory', { initialMediaRelativePath: '2026/旅行' }],
+      ['sibling initial media', { initialMediaRelativePath: '2026/其他/escape.jpg' }],
+      ['prefix-sibling initial media', { initialMediaRelativePath: '2026/旅行2/escape.jpg' }],
       ['legacy view mode', { viewMode: 'album' }]
     ])('refuses to build a canonical URL with %s', (_name, overrides) => {
       expect(() => buildNavigationTargetUrl({ ...target, ...overrides })).toThrow(TypeError);
@@ -144,6 +148,10 @@ describe('navigation helpers', () => {
       ['absolute initial media', { image: '/etc/passwd' }],
       ['traversal initial media', { image: '2026/../escape.jpg' }],
       ['backslash initial media', { image: '2026\\escape.jpg' }],
+      ['empty initial media', { image: '' }],
+      ['media equal to target directory', { image: '2026/Trip' }],
+      ['sibling initial media', { image: '2026/Other/escape.jpg' }],
+      ['prefix-sibling initial media', { image: '2026/Trip2/escape.jpg' }],
       ['canonical view name in legacy query', { view: 'photoSet' }],
       ['unknown view', { view: 'grid' }]
     ])('rejects a canonical query with %s', (_name, overrides) => {

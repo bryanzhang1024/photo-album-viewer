@@ -4,6 +4,8 @@ const {
   SOURCE_ROOT_SCHEMA_VERSION,
   createNavigationErrorEnvelopeV1,
   createNavigationSuccessEnvelopeV1,
+  normalizeSourceIdV1,
+  sourceIdsEqualV1,
   toCanonicalViewMode,
   toLegacyViewMode,
   validateLoadSourceRootsRequestV1,
@@ -39,6 +41,16 @@ describe('navigation-contract-v1', () => {
     expect(validateSourceRootV1(source)).toEqual({ valid: true, issues: [], value: source });
   });
 
+  test('normalizes valid source ids for ASCII case-insensitive comparison', () => {
+    const lowerSourceId = 'src_abcdef12-3456-4abc-8def-1234567890ab';
+    const upperSourceId = lowerSourceId.toUpperCase();
+
+    expect(normalizeSourceIdV1(upperSourceId)).toBe(lowerSourceId);
+    expect(sourceIdsEqualV1(lowerSourceId, upperSourceId)).toBe(true);
+    expect(sourceIdsEqualV1(lowerSourceId, 'not-a-source-id')).toBe(false);
+    expect(sourceIdsEqualV1(lowerSourceId, null)).toBe(false);
+  });
+
   test('accepts the canonical NavigationTarget example and a null initial media path', () => {
     const target = {
       sourceId: 'src_11111111-1111-4111-8111-111111111111',
@@ -51,6 +63,10 @@ describe('navigation-contract-v1', () => {
     expect(validateNavigationTargetV1(createNavigationTargetV1({
       viewMode: 'browse',
       initialMediaRelativePath: null
+    })).valid).toBe(true);
+    expect(validateNavigationTargetV1(createNavigationTargetV1({
+      relativePath: '',
+      initialMediaRelativePath: 'anywhere/in-the-source.jpg'
     })).valid).toBe(true);
   });
 
@@ -75,6 +91,10 @@ describe('navigation-contract-v1', () => {
     ['absolute initial media path', { initialMediaRelativePath: '/2026/旅行/001.jpg' }],
     ['traversal initial media path', { initialMediaRelativePath: '2026/../001.jpg' }],
     ['backslash initial media path', { initialMediaRelativePath: '2026\\001.jpg' }],
+    ['empty initial media path', { initialMediaRelativePath: '' }],
+    ['initial media equal to target directory', { initialMediaRelativePath: '2026/旅行' }],
+    ['sibling initial media path', { initialMediaRelativePath: '2026/其他/001.jpg' }],
+    ['prefix-sibling initial media path', { initialMediaRelativePath: '2026/旅行2/001.jpg' }],
     ['unknown field', { path: '/Photos/2026' }]
   ])('rejects a NavigationTarget with %s', (_name, overrides) => {
     expect(validateNavigationTargetV1(createNavigationTargetV1(overrides)).valid).toBe(false);
@@ -112,6 +132,30 @@ describe('navigation-contract-v1', () => {
     });
     expect(validateSourceRootsEnvelopeV1(listEnvelope).valid).toBe(true);
     expect(validateSourceRootsEnvelopeV1(saveEnvelope).valid).toBe(true);
+  });
+
+  test('rejects list envelopes whose source ids differ only by ASCII case', () => {
+    const source = createSourceRootV1();
+    const envelope = createNavigationSuccessEnvelopeV1({
+      sources: [
+        source,
+        createSourceRootV1({
+          sourceId: source.sourceId.toUpperCase(),
+          label: '重复来源',
+          rootPath: '/Other'
+        })
+      ]
+    });
+
+    expect(validateSourceRootsEnvelopeV1(envelope)).toEqual(expect.objectContaining({
+      valid: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: '$.data.sources[1].sourceId',
+          code: 'invariant'
+        })
+      ])
+    }));
   });
 
   test('creates and validates strict error envelopes', () => {

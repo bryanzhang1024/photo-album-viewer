@@ -1,8 +1,15 @@
 /** @jest-environment node */
 
 const {
-  createNavigationTargetV1
+  createNavigationTargetV1,
+  createSourceRootV1
 } = require('../../helpers/sourceRootFixtures');
+const {
+  materializeBrowserLocation
+} = require('../../../src/renderer/domain/browserLocation');
+const {
+  parseBrowseLocation
+} = require('../../../src/renderer/utils/navigation');
 
 const setupWindowService = ({ isDev = true, httpImpl } = {}) => {
   jest.resetModules();
@@ -156,6 +163,31 @@ describe('WindowService', () => {
     expect(windowUrl).not.toContain('photoSet');
   });
 
+  test('round-trips a mixed-case canonical window target into its lowercase registry source', () => {
+    const { WindowService } = setupWindowService({ isDev: false });
+    const target = createNavigationTargetV1({
+      sourceId: createSourceRootV1().sourceId.toUpperCase(),
+      relativePath: '2026/Trip',
+      initialMediaRelativePath: '2026/Trip/cover.jpg'
+    });
+
+    const windowUrl = WindowService.buildWindowUrl('http://localhost:3000/', target);
+    const hashRoute = new URL(windowUrl).hash.slice(1);
+    const queryIndex = hashRoute.indexOf('?');
+    const location = parseBrowseLocation(
+      hashRoute.slice(0, queryIndex),
+      hashRoute.slice(queryIndex)
+    );
+    const sourceRoot = createSourceRootV1({ rootPath: '/Volumes/Photos' });
+
+    expect(materializeBrowserLocation(location, [sourceRoot])).toEqual(expect.objectContaining({
+      sourceRoot,
+      absolutePath: '/Volumes/Photos/2026/Trip',
+      absoluteInitialImage: '/Volumes/Photos/2026/Trip/cover.jpg'
+    }));
+    expect(location.target.sourceId).toBe(target.sourceId);
+  });
+
   test('rejects unsupported launch target shapes', () => {
     const { WindowService } = setupWindowService({ isDev: false });
 
@@ -165,5 +197,21 @@ describe('WindowService', () => {
       ...createNavigationTargetV1(),
       extra: true
     })).toThrow('Invalid window launch target');
+  });
+
+  test.each([
+    '2026/Other/cover.jpg',
+    '2026/Trip2/cover.jpg'
+  ])('rejects canonical window media outside the target directory: %s', (
+    initialMediaRelativePath
+  ) => {
+    const { WindowService } = setupWindowService({ isDev: false });
+    const target = createNavigationTargetV1({
+      relativePath: '2026/Trip',
+      initialMediaRelativePath
+    });
+
+    expect(() => WindowService.buildWindowUrl('http://localhost:3000/', target))
+      .toThrow('Invalid window launch target');
   });
 });

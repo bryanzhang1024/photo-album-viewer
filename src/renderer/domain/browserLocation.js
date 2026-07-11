@@ -6,6 +6,8 @@ import {
   splitPortableRelativePath
 } from '../../common/path-codec';
 import {
+  normalizeSourceIdV1,
+  sourceIdsEqualV1,
   toLegacyViewMode,
   validateNavigationTargetV1
 } from '../../common/contracts/navigation-contract-v1';
@@ -59,31 +61,33 @@ export const isBrowserLocation = (location) => {
 export const getBrowserLocationIdentity = (location) => {
   if (location.kind === 'directory') {
     const { target } = location;
-    return [
+    return JSON.stringify([
       'directory',
-      target.sourceId,
+      normalizeSourceIdV1(target.sourceId),
       target.relativePath,
       target.viewMode,
-      target.initialMediaRelativePath || ''
-    ].join(':');
+      target.initialMediaRelativePath
+    ]);
   }
 
   if (location.kind === 'legacyAbsolute') {
-    return [
-      'legacy',
+    return JSON.stringify([
+      'legacyAbsolute',
       location.legacyAbsolutePath,
       location.viewMode,
-      location.legacyInitialMediaPath || ''
-    ].join(':');
+      location.legacyInitialMediaPath
+    ]);
   }
 
-  return location.kind;
+  return JSON.stringify([location.kind]);
 };
 
 export const materializeBrowserLocation = (location, sources) => {
   if (location?.kind !== 'directory' || !Array.isArray(sources)) return null;
 
-  const sourceRoot = sources.find((source) => source?.sourceId === location.target.sourceId);
+  const sourceRoot = sources.find((source) => (
+    sourceIdsEqualV1(source?.sourceId, location.target.sourceId)
+  ));
   if (!sourceRoot) return null;
 
   return {
