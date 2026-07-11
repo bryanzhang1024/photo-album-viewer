@@ -81,6 +81,27 @@ describe('FileSystemService', () => {
     expect(result.parentPath).toBe('/photos');
   });
 
+  test('scanNavigationLevel omits empty and unsupported-only child directories', async () => {
+    mockFs = createFsMock({
+      '/photos': {
+        visible: { '1.jpg': Buffer.from('image') },
+        empty: {},
+        documents: { 'notes.txt': 'not an image' }
+      }
+    });
+
+    const result = await scanNavigationLevel('/photos');
+
+    expect(result.success).toBe(true);
+    expect(result.nodes.map((node) => node.name)).toEqual(['visible']);
+    expect(result.nodes[0]).toMatchObject({
+      type: 'album',
+      contentKind: 'photoSet',
+      canViewAsPhotoSet: true,
+      canBrowseChildren: false
+    });
+  });
+
   test('scanNavigationLevel classifies folders and albums correctly', async () => {
     mockFs = createFsMock({
       '/photos': {

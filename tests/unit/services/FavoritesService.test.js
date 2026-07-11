@@ -50,11 +50,13 @@ describe('FavoritesService', () => {
     const data = await electron.ipcMain.invoke(CHANNELS.LOAD_FAVORITES);
 
     expect(data).toMatchObject({
+      folders: [],
       albums: [],
       images: [],
       collections: [],
       version: 1
     });
+    expect(data).not.toHaveProperty('schemaVersion');
 
     const favoritesPath = path.join('/mock/userData', 'favorites.json');
     expect(() => require('fs').readFileSync(favoritesPath, 'utf8')).not.toThrow();

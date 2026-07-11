@@ -1,0 +1,17 @@
+{
+  "tabs": [
+    {
+      "id": "tab-folder",
+      "targetPath": "/albums/trip",
+      "viewMode": "folder",
+      "initialImage": null
+    },
+    {
+      "id": "tab-album",
+      "targetPath": "/albums/wedding",
+      "viewMode": "album",
+      "initialImage": "cover.jpg"
+    }
+  ],
+  "activeTabId": "tab-folder"
+}

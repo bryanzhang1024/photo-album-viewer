@@ -2,6 +2,7 @@ import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { FavoritesProvider, useFavorites } from '../../../src/renderer/contexts/FavoritesContext';
 
+const favoritesV1 = require('../../fixtures/legacy/favorites-v1.json');
 const ipcRenderer = global.electronMock.ipcRenderer;
 
 function FavoriteProbe() {
@@ -9,11 +10,11 @@ function FavoriteProbe() {
 
   return (
     <div>
-      <div data-testid="folder-status">{String(isFolderFavorited('/photos'))}</div>
-      <div data-testid="photo-set-status">{String(isAlbumFavorited('/photos'))}</div>
+      <div data-testid="folder-status">{String(isFolderFavorited('/photos/shared'))}</div>
+      <div data-testid="photo-set-status">{String(isAlbumFavorited('/photos/shared'))}</div>
       <button
         type="button"
-        onClick={() => toggleAlbumFavorite({ kind: 'photoSet', path: '/photos', name: 'photos' })}
+        onClick={() => toggleAlbumFavorite({ kind: 'photoSet', path: '/photos/shared', name: 'shared photos' })}
       >
         toggle photo set
       </button>
@@ -37,28 +38,9 @@ function RemoveImageFavoriteProbe() {
 describe('FavoritesContext item identity', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    ipcRenderer.invoke.mockResolvedValue({
-      folders: [
-        {
-          id: 'folder_1',
-          kind: 'folder',
-          path: '/photos',
-          name: 'photos'
-        }
-      ],
-      albums: [
-        {
-          id: 'album_1',
-          kind: 'photoSet',
-          path: '/photos',
-          name: 'photos',
-          imageCount: 2
-        }
-      ],
-      images: [],
-      collections: [],
-      version: 1
-    });
+    ipcRenderer.invoke.mockResolvedValue(
+      JSON.parse(JSON.stringify(favoritesV1))
+    );
   });
 
   test('tracks folder and photo-set favorites separately even when paths match', async () => {

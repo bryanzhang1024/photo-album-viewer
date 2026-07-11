@@ -105,6 +105,7 @@ const { ScrollPositionContext } = require('../../../src/renderer/App');
 const navigationUtils = require('../../../src/renderer/utils/navigation');
 const reactRouter = require('react-router-dom');
 const CHANNELS = require('../../../src/common/ipc-channels');
+const browserTabsSessionV1 = require('../../fixtures/legacy/browser-tabs-session-v1.json');
 const ipcRenderer = global.electronMock.ipcRenderer;
 
 const setupRouterMocks = ({
@@ -235,23 +236,10 @@ describe('BrowserPage', () => {
       search: '?view=album&image=cover.jpg'
     });
 
-    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
-      tabs: [
-        {
-          id: 'tab-folder',
-          targetPath: '/albums/trip',
-          viewMode: 'folder',
-          initialImage: null
-        },
-        {
-          id: 'tab-album',
-          targetPath: '/albums/wedding',
-          viewMode: 'album',
-          initialImage: 'cover.jpg'
-        }
-      ],
-      activeTabId: 'tab-folder'
-    }));
+    localStorage.setItem(
+      'browser_tabs_session_v1',
+      JSON.stringify(browserTabsSessionV1)
+    );
 
     render(<BrowserPage colorMode="dark" />);
 
