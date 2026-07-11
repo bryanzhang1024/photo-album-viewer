@@ -25,77 +25,50 @@ import AlbumPage from './AlbumPage';
 import FavoritesPage from './FavoritesPage';
 import CHANNELS from '../../common/ipc-channels';
 import {
+  buildNavigationTargetUrl,
+  parseBrowseLocation,
   normalizeTargetPath,
   withLastPathTracking,
   getLastPath,
   setLastPath
 } from '../utils/navigation';
-import { getDirname } from '../utils/pathUtils';
+import {
+  findUniqueLongestSourceRoot,
+  getPortableRelativePath,
+  isPortableRelativePath,
+  resolvePortableRelativePath
+} from '../../common/path-codec';
+import {
+  getBrowserLocationIdentity,
+  getParentBrowserLocation,
+  getSourceRootBreadcrumbs,
+  materializeBrowserLocation
+} from '../domain/browserLocation';
+import {
+  loadTabsSession,
+  saveTabsSession
+} from '../persistence/sessionAdapter';
 
-const parseURLPath = (pathname, search) => {
-  const searchParams = new URLSearchParams(search);
-  const view = searchParams.get('view');
-  const safeViewMode = view === 'album' || view === 'favorites' ? view : 'folder';
-  const image = searchParams.get('image');
-
-  // 处理不同的路由模式
-  if (pathname === '/') {
-    return {
-      targetPath: '',
-      viewMode: 'folder',
-      initialImage: null,
-      isRoot: true
-    };
-  }
-
-  if (pathname === '/favorites') {
-    return {
-      targetPath: '',
-      viewMode: 'favorites',
-      initialImage: null,
-      isRoot: true
-    };
-  }
-
-  if (pathname === '/browse') {
-    return {
-      targetPath: '',
-      viewMode: safeViewMode,
-      initialImage: null,
-      isRoot: true
-    };
-  }
-
-  if (pathname.startsWith('/browse/')) {
-    // 新路由模式: /browse/path?view=album&image=xxx
-    const pathPart = pathname.replace('/browse/', '');
-    const decodedPath = pathPart ? normalizeTargetPath(decodeURIComponent(pathPart)) : '';
-
-    return {
-      targetPath: decodedPath,
-      viewMode: safeViewMode,
-      initialImage: image ? decodeURIComponent(image) : null,
-      isRoot: !decodedPath
-    };
-  }
-
-  // 处理根路径
-  return {
-    targetPath: '',
-    viewMode: 'folder',
-    initialImage: null,
-    isRoot: true
-  };
-};
-
-const TABS_SESSION_KEY = 'browser_tabs_session_v1';
-const SAVED_TABS_SNAPSHOT_KEY = 'browser_tabs_snapshot_v1';
 const DEFAULT_ROOT_PATH_KEY = 'lastRootPath_default';
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const DRAG_INSERT_BEFORE = 'before';
 const DRAG_INSERT_AFTER = 'after';
+const HYDRATION_PENDING = 'pending';
+const HYDRATION_SUCCEEDED = 'succeeded';
+const HYDRATION_FAILED = 'failed';
 
 const getDefaultRootPath = () => normalizeTargetPath(localStorage.getItem(DEFAULT_ROOT_PATH_KEY) || '');
+
+const parseURLLocation = (pathname, search) => {
+  const searchParams = new URLSearchParams(search);
+  if (pathname === '/browse'
+      && searchParams.get('view') === 'favorites'
+      && !searchParams.has('sourceId')) {
+    return { kind: 'favorites' };
+  }
+
+  return parseBrowseLocation(pathname, search) || { kind: 'landing' };
+};
 
 const getPathDisplayName = (targetPath) => {
   const normalized = normalizeTargetPath(targetPath || '').replace(/\/+$/g, '');
@@ -104,7 +77,12 @@ const getPathDisplayName = (targetPath) => {
   const segments = normalized.split('/').filter(Boolean);
   if (!segments.length) return normalized;
 
-  return decodeURIComponent(segments[segments.length - 1]);
+  const lastSegment = segments[segments.length - 1];
+  try {
+    return decodeURIComponent(lastSegment);
+  } catch (_error) {
+    return lastSegment;
+  }
 };
 
 const normalizeViewMode = (viewMode) => {
@@ -120,70 +98,186 @@ const getTabTitle = (targetPath, viewMode = 'folder') => {
   return getPathDisplayName(targetPath);
 };
 
-const createTabFromState = (state) => ({
-  id: createTabId(),
-  targetPath: normalizeTargetPath(state?.targetPath || ''),
-  viewMode: normalizeViewMode(state?.viewMode),
-  initialImage: state?.initialImage || null,
-  title: getTabTitle(state?.targetPath || '', state?.viewMode)
-});
+const getLegacyInitialImageProjection = (location) => {
+  const initialImage = location.legacyInitialMediaPath;
+  if (!initialImage) return null;
+  if (!isPortableRelativePath(initialImage)) return normalizeTargetPath(initialImage);
 
-const createViewState = (targetPath = '', viewMode = 'folder', initialImage = null) => {
-  const normalizedTargetPath = normalizeTargetPath(targetPath || '');
-  const normalizedViewMode = normalizeViewMode(viewMode);
+  try {
+    return resolvePortableRelativePath(location.legacyAbsolutePath, initialImage);
+  } catch (_error) {
+    return null;
+  }
+};
+
+const materializeRuntimeTab = ({ id, location }, sources) => {
+  if (location.kind === 'directory') {
+    const materialized = materializeBrowserLocation(location, sources);
+    if (!materialized) {
+      return {
+        id,
+        location,
+        targetPath: '',
+        viewMode: location.target.viewMode === 'photoSet' ? 'album' : 'folder',
+        initialImage: null,
+        title: getPathDisplayName(location.target.relativePath),
+        sourceBoundary: null
+      };
+    }
+
+    const relativePath = location.target.relativePath;
+    return {
+      id,
+      location,
+      targetPath: materialized.absolutePath,
+      viewMode: materialized.legacyViewMode,
+      initialImage: materialized.absoluteInitialImage,
+      title: relativePath
+        ? getPathDisplayName(materialized.absolutePath)
+        : materialized.sourceRoot.label,
+      sourceBoundary: {
+        sourceId: materialized.sourceRoot.sourceId,
+        label: materialized.sourceRoot.label,
+        rootPath: materialized.sourceRoot.rootPath,
+        relativePath
+      }
+    };
+  }
+
+  if (location.kind === 'legacyAbsolute') {
+    const targetPath = normalizeTargetPath(location.legacyAbsolutePath);
+    return {
+      id,
+      location,
+      targetPath,
+      viewMode: normalizeViewMode(location.viewMode),
+      initialImage: getLegacyInitialImageProjection(location),
+      title: getTabTitle(targetPath, location.viewMode),
+      sourceBoundary: null
+    };
+  }
+
+  if (location.kind === 'favorites') {
+    return {
+      id,
+      location,
+      targetPath: '',
+      viewMode: 'favorites',
+      initialImage: null,
+      title: '我的收藏',
+      sourceBoundary: null
+    };
+  }
 
   return {
-    targetPath: normalizedTargetPath,
-    viewMode: normalizedViewMode,
-    initialImage: initialImage || null,
-    isRoot: normalizedViewMode === 'favorites' ? true : !normalizedTargetPath
+    id,
+    location: { kind: 'landing' },
+    targetPath: '',
+    viewMode: 'folder',
+    initialImage: null,
+    title: '主页',
+    sourceBoundary: null
   };
 };
 
-const viewStateMatches = (state, targetPath = '', viewMode = 'folder', initialImage = null) => {
-  if (!state) return false;
-  return (
-    state.targetPath === normalizeTargetPath(targetPath || '')
-    && state.viewMode === normalizeViewMode(viewMode)
-    && (state.initialImage || null) === (initialImage || null)
+const createRuntimeTab = (location, sources, id = createTabId()) => (
+  materializeRuntimeTab({ id, location }, sources)
+);
+
+const materializeSessionTabs = (session, sources) => session.tabs.map((tab) => (
+  materializeRuntimeTab(tab, sources)
+));
+
+const getCanonicalInitialMediaPath = (sourceRoot, targetRelativePath, initialImage) => {
+  if (!initialImage) return null;
+
+  const targetAbsolutePath = resolvePortableRelativePath(
+    sourceRoot.rootPath,
+    targetRelativePath
+  );
+  let absoluteImagePath = initialImage;
+  if (isPortableRelativePath(initialImage)) {
+    absoluteImagePath = resolvePortableRelativePath(targetAbsolutePath, initialImage);
+  }
+
+  if (getPortableRelativePath(targetAbsolutePath, absoluteImagePath) === null) {
+    return null;
+  }
+  return getPortableRelativePath(sourceRoot.rootPath, absoluteImagePath);
+};
+
+const createLocationFromAbsolutePath = (
+  targetPath,
+  viewMode = 'folder',
+  initialImage = null,
+  sources = []
+) => {
+  const normalizedTargetPath = normalizeTargetPath(targetPath || '');
+  if (!normalizedTargetPath) return { kind: 'landing' };
+
+  const normalizedViewMode = normalizeViewMode(viewMode);
+  const match = findUniqueLongestSourceRoot(sources, normalizedTargetPath);
+  if (match.status === 'resolved') {
+    return {
+      kind: 'directory',
+      target: {
+        sourceId: match.source.sourceId,
+        relativePath: match.relativePath,
+        viewMode: normalizedViewMode === 'album' ? 'photoSet' : 'browse',
+        initialMediaRelativePath: getCanonicalInitialMediaPath(
+          match.source,
+          match.relativePath,
+          initialImage
+        )
+      }
+    };
+  }
+
+  let legacyInitialMediaPath = initialImage || null;
+  if (legacyInitialMediaPath && isPortableRelativePath(legacyInitialMediaPath)) {
+    legacyInitialMediaPath = resolvePortableRelativePath(
+      normalizedTargetPath,
+      legacyInitialMediaPath
+    );
+  }
+  return {
+    kind: 'legacyAbsolute',
+    legacyAbsolutePath: normalizedTargetPath,
+    viewMode: normalizedViewMode === 'album' ? 'album' : 'folder',
+    legacyInitialMediaPath
+  };
+};
+
+const resolveURLLocation = (location, sources) => {
+  if (location.kind !== 'legacyAbsolute') return location;
+  return createLocationFromAbsolutePath(
+    location.legacyAbsolutePath,
+    location.viewMode,
+    location.legacyInitialMediaPath,
+    sources
   );
 };
 
-const sanitizeTabFromSession = (tab) => {
-  if (!tab || typeof tab !== 'object') return null;
-
-  const targetPath = normalizeTargetPath(tab.targetPath || '');
-  const viewMode = normalizeViewMode(tab.viewMode);
-
-  return {
-    id: typeof tab.id === 'string' && tab.id ? tab.id : createTabId(),
-    targetPath,
-    viewMode,
-    initialImage: typeof tab.initialImage === 'string' && tab.initialImage ? tab.initialImage : null,
-    title: getTabTitle(targetPath, viewMode)
-  };
+const findSessionTabMatchingLocation = (session, location) => {
+  if (!session || !location) return null;
+  const identity = getBrowserLocationIdentity(location);
+  return session.tabs.find((tab) => (
+    getBrowserLocationIdentity(tab.location) === identity
+  )) || null;
 };
 
-const findSessionTabMatchingURL = (tabsSession, urlState) => {
-  if (!tabsSession || !Array.isArray(tabsSession.tabs) || !urlState) {
-    return null;
-  }
+const isExplicitURLLocation = (location) => (
+  location.kind === 'directory'
+  || location.kind === 'legacyAbsolute'
+  || location.kind === 'favorites'
+);
 
-  const normalizedTargetPath = normalizeTargetPath(urlState.targetPath || '');
-  const expectedViewMode = normalizeViewMode(urlState.viewMode);
-  const expectedImage = urlState.initialImage || null;
-
-  return tabsSession.tabs.find((tab) => (
-    tab.viewMode === expectedViewMode
-    && (
-      expectedViewMode === 'favorites'
-        ? true
-        : (
-          tab.targetPath === normalizedTargetPath
-          && (tab.initialImage || null) === expectedImage
-        )
-    )
-  )) || null;
+const upsertSourceRoot = (sources, source) => {
+  const existingIndex = sources.findIndex((item) => item.sourceId === source.sourceId);
+  if (existingIndex === -1) return [...sources, source];
+  const nextSources = [...sources];
+  nextSources[existingIndex] = source;
+  return nextSources;
 };
 
 export const reorderTabsById = (tabs, sourceTabId, targetTabId, position = DRAG_INSERT_BEFORE) => {
@@ -204,48 +298,6 @@ export const reorderTabsById = (tabs, sourceTabId, targetTabId, position = DRAG_
   return reordered;
 };
 
-const createTabsSessionPayload = (tabs, activeTabId) => ({
-  tabs: tabs.map((tab) => ({
-    id: tab.id,
-    targetPath: tab.targetPath || '',
-    viewMode: tab.viewMode || 'folder',
-    initialImage: tab.initialImage || null
-  })),
-  activeTabId,
-  savedAt: Date.now()
-});
-
-const loadTabsSession = (storageKey = TABS_SESSION_KEY) => {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.tabs) || parsed.tabs.length === 0) {
-      return null;
-    }
-
-    const sanitizedTabs = parsed.tabs
-      .map(sanitizeTabFromSession)
-      .filter(Boolean);
-
-    if (!sanitizedTabs.length) {
-      return null;
-    }
-
-    const requestedActiveId = typeof parsed.activeTabId === 'string' ? parsed.activeTabId : null;
-    const hasRequestedActive = requestedActiveId && sanitizedTabs.some((tab) => tab.id === requestedActiveId);
-
-    return {
-      tabs: sanitizedTabs,
-      activeTabId: hasRequestedActive ? requestedActiveId : sanitizedTabs[0].id
-    };
-  } catch (error) {
-    console.warn('恢复标签会话失败:', error);
-    return null;
-  }
-};
-
 const ipcRenderer = window.electronAPI || null;
 
 const isExternalFileDrag = (event) => {
@@ -257,35 +309,47 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
-  const hasRestoredSession = useRef(false);
-  const hasInitializedTabsSession = useRef(false);
+  const hydrationCompletedRef = useRef(false);
   const initialTabRef = useRef(null);
   const pendingNavigationRef = useRef(null);
+  const sourcesRef = useRef([]);
   const [openFolderMenuAnchorEl, setOpenFolderMenuAnchorEl] = useState(null);
   const [tabsMenuAnchorEl, setTabsMenuAnchorEl] = useState(null);
-  const [hasSavedTabsSnapshot, setHasSavedTabsSnapshot] = useState(
-    () => Boolean(loadTabsSession(SAVED_TABS_SNAPSHOT_KEY))
-  );
+  const [hasSavedTabsSnapshot, setHasSavedTabsSnapshot] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [sources, setSources] = useState([]);
+  const [hydrationStatus, setHydrationStatus] = useState(HYDRATION_PENDING);
   const draggingTabIdRef = useRef(null);
   const [dragIndicator, setDragIndicator] = useState({ tabId: null, position: DRAG_INSERT_BEFORE });
 
-  // 解析URL状态
-  const urlState = useMemo(() =>
-    parseURLPath(location.pathname, location.search),
+  const urlLocation = useMemo(() =>
+    parseURLLocation(location.pathname, location.search),
     [location.pathname, location.search]
   );
 
   if (!initialTabRef.current) {
-    initialTabRef.current = createTabFromState(urlState);
+    initialTabRef.current = createRuntimeTab(urlLocation, []);
   }
 
   const [tabs, setTabs] = useState(() => [initialTabRef.current]);
   const [activeTabId, setActiveTabId] = useState(() => initialTabRef.current.id);
-  const [displayState, setDisplayState] = useState(() =>
-    createViewState(urlState.targetPath, urlState.viewMode, urlState.initialImage)
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) || tabs[0] || initialTabRef.current,
+    [activeTabId, tabs]
   );
+  const displayState = activeTab;
+  const activeSourceRoot = useMemo(() => {
+    if (activeTab?.location?.kind !== 'directory') return null;
+    return sources.find((source) => source.sourceId === activeTab.location.target.sourceId) || null;
+  }, [activeTab, sources]);
+  const sourceBreadcrumbs = useMemo(() => {
+    if (!activeSourceRoot || activeTab.location.kind !== 'directory') return null;
+    return getSourceRootBreadcrumbs(
+      activeSourceRoot,
+      activeTab.location.target.relativePath
+    );
+  }, [activeSourceRoot, activeTab]);
   const activeTabScrollKey = useMemo(
     () => activeTabId || '__default__',
     [activeTabId]
@@ -310,312 +374,414 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     scrollContext.savePosition(scopedKey, scrollContainer.scrollTop || 0);
   }, [activeTabScrollKey, location.pathname, location.search, scrollContext]);
 
+  const setRuntimeSources = useCallback((nextSources) => {
+    sourcesRef.current = nextSources;
+    setSources(nextSources);
+    setTabs((prevTabs) => prevTabs.map((tab) => (
+      materializeRuntimeTab(tab, nextSources)
+    )));
+  }, []);
+
+  const navigateBrowserLocation = useCallback((browserLocation, {
+    replace = false,
+    state
+  } = {}) => {
+    if (browserLocation.kind === 'directory') {
+      const options = {};
+      if (replace) options.replace = true;
+      if (state !== undefined) options.state = state;
+      const projected = createRuntimeTab(browserLocation, sourcesRef.current);
+      if (projected.targetPath) setLastPath(projected.targetPath);
+      navigate(buildNavigationTargetUrl(browserLocation.target), options);
+      return;
+    }
+
+    if (browserLocation.kind === 'favorites') {
+      navigateWithPersist('', {
+        viewMode: 'favorites',
+        initialImage: null,
+        replace,
+        ...(state !== undefined ? { state } : {})
+      });
+      return;
+    }
+
+    if (browserLocation.kind === 'legacyAbsolute') {
+      navigateWithPersist(browserLocation.legacyAbsolutePath, {
+        viewMode: browserLocation.viewMode,
+        initialImage: getLegacyInitialImageProjection(browserLocation),
+        replace,
+        ...(state !== undefined ? { state } : {})
+      });
+      return;
+    }
+
+    navigateWithPersist('', {
+      viewMode: 'folder',
+      initialImage: null,
+      replace,
+      ...(state !== undefined ? { state } : {})
+    });
+  }, [navigate, navigateWithPersist]);
+
+  const commitTabLocation = useCallback(({
+    tabId = createTabId(),
+    browserLocation,
+    append = false,
+    replace = false,
+    state,
+    sourcesOverride = sourcesRef.current
+  }) => {
+    const nextTab = createRuntimeTab(browserLocation, sourcesOverride, tabId);
+    if (tabId !== activeTabId) saveActiveTabScrollPosition();
+
+    pendingNavigationRef.current = getBrowserLocationIdentity(browserLocation);
+    setTabs((prevTabs) => (
+      append
+        ? [...prevTabs, nextTab]
+        : prevTabs.map((tab) => (tab.id === tabId ? nextTab : tab))
+    ));
+    setActiveTabId(tabId);
+    navigateBrowserLocation(browserLocation, { replace, state });
+    return nextTab;
+  }, [activeTabId, navigateBrowserLocation, saveActiveTabScrollPosition]);
+
+  const registerAbsoluteRoot = useCallback(async (absolutePath) => {
+    try {
+      const response = await ipcRenderer?.invoke(CHANNELS.SAVE_SOURCE_ROOT_V1, {
+        contractVersion: 1,
+        sourceId: null,
+        rootPath: absolutePath,
+        label: null
+      });
+      const source = response?.ok ? response.data?.source : null;
+      if (source) {
+        const nextSources = upsertSourceRoot(sourcesRef.current, source);
+        setRuntimeSources(nextSources);
+        return {
+          browserLocation: {
+            kind: 'directory',
+            target: {
+              sourceId: source.sourceId,
+              relativePath: '',
+              viewMode: 'browse',
+              initialMediaRelativePath: null
+            }
+          },
+          sources: nextSources
+        };
+      }
+    } catch (error) {
+      console.warn('保存来源根目录失败:', error);
+    }
+
+    return {
+      browserLocation: createLocationFromAbsolutePath(
+        absolutePath,
+        'folder',
+        null,
+        sourcesRef.current
+      ),
+      sources: sourcesRef.current
+    };
+  }, [setRuntimeSources]);
+
   useEffect(() => {
-    if (!hasInitializedTabsSession.current) return;
-    if (redirectFromOldRoute) return;
+    if (hydrationStatus !== HYDRATION_SUCCEEDED || redirectFromOldRoute) return;
 
     try {
-      localStorage.setItem(TABS_SESSION_KEY, JSON.stringify(createTabsSessionPayload(tabs, activeTabId)));
+      saveTabsSession({
+        storage: localStorage,
+        tabs,
+        activeTabId
+      });
     } catch (error) {
       console.warn('保存标签会话失败:', error);
     }
-  }, [tabs, activeTabId, redirectFromOldRoute]);
+  }, [tabs, activeTabId, hydrationStatus, redirectFromOldRoute]);
 
-  // 处理旧路由的重定向
   useEffect(() => {
-    if (redirectFromOldRoute) {
-      const { albumPath } = params;
-      const searchParams = new URLSearchParams(location.search);
-      const image = searchParams.get('image');
+    if (!redirectFromOldRoute) return;
 
-      if (albumPath) {
-        const targetPath = decodeURIComponent(albumPath);
-        const imagePath = image ? decodeURIComponent(image) : null;
-        navigateWithPersist(targetPath, {
-          viewMode: 'album',
-          initialImage: imagePath,
-          replace: true,
-          state: location.state
-        });
-      } else {
-        navigate('/', { replace: true, state: location.state });
+    const { albumPath } = params;
+    const searchParams = new URLSearchParams(location.search);
+    const imagePath = searchParams.get('image');
+
+    if (albumPath) {
+      let targetPath = albumPath;
+      try {
+        targetPath = decodeURIComponent(albumPath);
+      } catch (_error) {
+        // Keep malformed legacy input usable instead of crashing the redirect.
       }
+      navigateWithPersist(targetPath, {
+        viewMode: 'album',
+        initialImage: imagePath || null,
+        replace: true,
+        state: location.state
+      });
+    } else {
+      navigate('/', { replace: true, state: location.state });
     }
   }, [redirectFromOldRoute, params, location, navigate, navigateWithPersist]);
 
-  // 启动时恢复会话
   useEffect(() => {
-    if (hasRestoredSession.current) {
-      return;
-    }
+    if (hydrationCompletedRef.current || redirectFromOldRoute) return undefined;
+    let cancelled = false;
 
-    // 旧路由重定向流程不做会话恢复
-    if (redirectFromOldRoute) {
-      hasInitializedTabsSession.current = true;
-      return;
-    }
-
-    const searchParams = new URLSearchParams(location.search);
-    const commandLinePath = searchParams.get('initialPath');
-
-    if (commandLinePath) {
-      hasRestoredSession.current = true;
-      hasInitializedTabsSession.current = true;
-      const decodedPath = decodeURIComponent(commandLinePath);
-      const commandLineTab = createTabFromState({
-        targetPath: decodedPath,
-        viewMode: 'folder',
-        initialImage: null
-      });
-      setTabs([commandLineTab]);
-      setActiveTabId(commandLineTab.id);
-      setDisplayState(createViewState(decodedPath, 'folder', null));
-      navigateWithPersist(decodedPath, {
-        viewMode: 'folder',
-        initialImage: null,
-        replace: true
-      });
-      return;
-    }
-
-    const restoredTabsSession = loadTabsSession();
-    if (restoredTabsSession) {
-      const matchedURLTab = findSessionTabMatchingURL(restoredTabsSession, urlState);
-      const hasExplicitURLIntent = Boolean(urlState.targetPath) || urlState.viewMode === 'favorites';
-      if (hasExplicitURLIntent && !matchedURLTab) {
-        // 保持深链接行为：URL 无法匹配历史标签时，不覆盖当前 URL 导航
-        hasInitializedTabsSession.current = true;
-        return;
+    const hydrate = async () => {
+      let loadedSources = [];
+      let registrySucceeded = false;
+      try {
+        const response = await ipcRenderer?.invoke(CHANNELS.LOAD_SOURCE_ROOTS_V1, {
+          contractVersion: 1
+        });
+        if (response?.ok && Array.isArray(response.data?.sources)) {
+          loadedSources = response.data.sources;
+          registrySucceeded = true;
+        }
+      } catch (error) {
+        console.warn('加载来源根目录失败:', error);
       }
 
-      hasRestoredSession.current = true;
-      hasInitializedTabsSession.current = true;
-      setTabs(restoredTabsSession.tabs);
-      const nextActiveTabId = matchedURLTab?.id || restoredTabsSession.activeTabId;
-      setActiveTabId(nextActiveTabId);
+      if (cancelled) return;
+      hydrationCompletedRef.current = true;
+      setRuntimeSources(loadedSources);
 
-      if (hasExplicitURLIntent) {
-        setDisplayState(createViewState(urlState.targetPath, urlState.viewMode, urlState.initialImage));
-        return;
-      }
-
-      const activeTab = restoredTabsSession.tabs.find((tab) => tab.id === nextActiveTabId)
-        || restoredTabsSession.tabs[0];
-      setDisplayState(createViewState(activeTab.targetPath, activeTab.viewMode, activeTab.initialImage));
-
-      navigateWithPersist(activeTab.targetPath, {
-        viewMode: activeTab.viewMode,
-        initialImage: activeTab.initialImage,
-        replace: true
+      const restoredSession = loadTabsSession({
+        storage: localStorage,
+        sources: loadedSources
       });
-      return;
-    }
-
-    const lastPath = getLastPath();
-    if (lastPath) {
-      hasRestoredSession.current = true;
-      hasInitializedTabsSession.current = true;
-      // 恢复上次会话的路径
-      const fallbackTab = createTabFromState({
-        targetPath: lastPath,
-        viewMode: 'folder',
-        initialImage: null
+      const savedSnapshot = loadTabsSession({
+        storage: localStorage,
+        sources: loadedSources,
+        snapshot: true
       });
-      setTabs([fallbackTab]);
-      setActiveTabId(fallbackTab.id);
-      setDisplayState(createViewState(lastPath, 'folder', null));
-      navigateWithPersist(lastPath, {
-        viewMode: 'folder',
-        initialImage: null,
-        replace: true
-      });
-      return;
-    }
+      setHasSavedTabsSnapshot(Boolean(savedSnapshot));
 
-    const defaultRootPath = getDefaultRootPath();
-    if (defaultRootPath) {
-      hasRestoredSession.current = true;
-      hasInitializedTabsSession.current = true;
-      const defaultRootTab = createTabFromState({
-        targetPath: defaultRootPath,
-        viewMode: 'folder',
-        initialImage: null
-      });
-      setTabs([defaultRootTab]);
-      setActiveTabId(defaultRootTab.id);
-      setDisplayState(createViewState(defaultRootPath, 'folder', null));
-      navigateWithPersist(defaultRootPath, {
-        viewMode: 'folder',
-        initialImage: null,
-        replace: true
-      });
-      return;
-    }
+      const nextHydrationStatus = registrySucceeded
+        ? HYDRATION_SUCCEEDED
+        : HYDRATION_FAILED;
+      const resolvedURLLocation = resolveURLLocation(urlLocation, loadedSources);
+      const searchParams = new URLSearchParams(location.search);
+      const commandLinePath = searchParams.get('initialPath');
 
-    hasInitializedTabsSession.current = true;
-  }, [redirectFromOldRoute, urlState.targetPath, urlState.viewMode, urlState.initialImage, location.search, navigateWithPersist]);
-
-  // 路径变化时保存会话
-  useEffect(() => {
-    if (urlState.targetPath && !urlState.isRoot) {
-      setLastPath(urlState.targetPath);
-    } else if (urlState.isRoot) {
-      // 如果返回到根目录，可以选择清除lastPath，以便下次打开是主页
-      // clearLastPath();
-    }
-  }, [urlState.targetPath, urlState.isRoot]);
-
-  useEffect(() => {
-    const pendingNavigation = pendingNavigationRef.current;
-    if (pendingNavigation) {
-      if (!viewStateMatches(pendingNavigation, urlState.targetPath, urlState.viewMode, urlState.initialImage)) {
-        return;
-      }
-      pendingNavigationRef.current = null;
-    }
-
-    setDisplayState(createViewState(urlState.targetPath, urlState.viewMode, urlState.initialImage));
-  }, [urlState.targetPath, urlState.viewMode, urlState.initialImage]);
-
-  // URL变化时，将当前URL同步回激活标签
-  useEffect(() => {
-    if (redirectFromOldRoute) return;
-
-    const pendingNavigation = pendingNavigationRef.current;
-    if (pendingNavigation) {
-      if (!viewStateMatches(pendingNavigation, urlState.targetPath, urlState.viewMode, urlState.initialImage)) {
-        return;
-      }
-      pendingNavigationRef.current = null;
-    }
-
-    setTabs((prevTabs) => {
-      const activeIndex = prevTabs.findIndex((tab) => tab.id === activeTabId);
-      if (activeIndex === -1) {
-        return prevTabs;
-      }
-
-      const activeTab = prevTabs[activeIndex];
-      const normalizedTargetPath = normalizeTargetPath(urlState.targetPath || '');
-      const nextViewMode = normalizeViewMode(urlState.viewMode);
-      const nextTitle = getTabTitle(normalizedTargetPath, nextViewMode);
-
-      if (
-        activeTab.targetPath === normalizedTargetPath &&
-        activeTab.viewMode === nextViewMode &&
-        activeTab.initialImage === (urlState.initialImage || null) &&
-        activeTab.title === nextTitle
-      ) {
-        return prevTabs;
-      }
-
-      const nextTabs = [...prevTabs];
-      nextTabs[activeIndex] = {
-        ...activeTab,
-        targetPath: normalizedTargetPath,
-        viewMode: nextViewMode,
-        initialImage: urlState.initialImage || null,
-        title: nextTitle
+      const applyExplicitURL = (browserLocation) => {
+        const matchingTab = findSessionTabMatchingLocation(restoredSession, browserLocation);
+        if (matchingTab) {
+          const runtimeTabs = materializeSessionTabs(restoredSession, sourcesRef.current);
+          setTabs(runtimeTabs);
+          setActiveTabId(matchingTab.id);
+        } else {
+          const explicitTab = createRuntimeTab(browserLocation, sourcesRef.current);
+          setTabs([explicitTab]);
+          setActiveTabId(explicitTab.id);
+        }
+        setHydrationStatus(nextHydrationStatus);
       };
-      return nextTabs;
-    });
-  }, [urlState.targetPath, urlState.viewMode, urlState.initialImage, activeTabId, redirectFromOldRoute]);
 
-  const navigateTab = useCallback((tabId, targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
-    const normalizedTargetPath = normalizeTargetPath(targetPath || '');
-    const nextViewMode = normalizeViewMode(viewMode);
-    const nextInitialImage = initialImage || null;
-    if (tabId !== activeTabId) {
-      saveActiveTabScrollPosition();
-    }
-    pendingNavigationRef.current = {
-      targetPath: normalizedTargetPath,
-      viewMode: nextViewMode,
-      initialImage: nextInitialImage
+      if (urlLocation.kind === 'directory') {
+        applyExplicitURL(resolvedURLLocation);
+        return;
+      }
+
+      if (commandLinePath) {
+        const registered = await registerAbsoluteRoot(commandLinePath);
+        if (cancelled) return;
+        const commandLineTab = createRuntimeTab(
+          registered.browserLocation,
+          registered.sources
+        );
+        setTabs([commandLineTab]);
+        setActiveTabId(commandLineTab.id);
+        pendingNavigationRef.current = getBrowserLocationIdentity(registered.browserLocation);
+        navigateBrowserLocation(registered.browserLocation, { replace: true });
+        setHydrationStatus(nextHydrationStatus);
+        return;
+      }
+
+      if (isExplicitURLLocation(resolvedURLLocation)) {
+        applyExplicitURL(resolvedURLLocation);
+        return;
+      }
+
+      if (restoredSession) {
+        const runtimeTabs = materializeSessionTabs(restoredSession, loadedSources);
+        const restoredActiveTab = runtimeTabs.find((tab) => (
+          tab.id === restoredSession.activeTabId
+        )) || runtimeTabs[0];
+        setTabs(runtimeTabs);
+        setActiveTabId(restoredActiveTab.id);
+        pendingNavigationRef.current = getBrowserLocationIdentity(restoredActiveTab.location);
+        navigateBrowserLocation(restoredActiveTab.location, { replace: true });
+        setHydrationStatus(nextHydrationStatus);
+        return;
+      }
+
+      const lastPath = getLastPath();
+      const defaultRootPath = lastPath ? '' : getDefaultRootPath();
+      const fallbackPath = lastPath || defaultRootPath;
+      if (fallbackPath) {
+        const fallbackLocation = createLocationFromAbsolutePath(
+          fallbackPath,
+          'folder',
+          null,
+          loadedSources
+        );
+        const fallbackTab = createRuntimeTab(fallbackLocation, loadedSources);
+        setTabs([fallbackTab]);
+        setActiveTabId(fallbackTab.id);
+        pendingNavigationRef.current = getBrowserLocationIdentity(fallbackLocation);
+        navigateBrowserLocation(fallbackLocation, { replace: true });
+      } else {
+        const landingTab = createRuntimeTab({ kind: 'landing' }, loadedSources);
+        setTabs([landingTab]);
+        setActiveTabId(landingTab.id);
+      }
+      setHydrationStatus(nextHydrationStatus);
     };
-    setTabs((prevTabs) => prevTabs.map((tab) => (
-      tab.id === tabId
-        ? {
-            ...tab,
-            targetPath: normalizedTargetPath,
-            viewMode: nextViewMode,
-            initialImage: nextInitialImage,
-            title: getTabTitle(normalizedTargetPath, nextViewMode)
-          }
-        : tab
-    )));
 
-    setActiveTabId(tabId);
-    setDisplayState(createViewState(normalizedTargetPath, nextViewMode, nextInitialImage));
-    navigateWithPersist(normalizedTargetPath, { viewMode: nextViewMode, initialImage: nextInitialImage, replace });
-  }, [activeTabId, navigateWithPersist, saveActiveTabScrollPosition]);
+    hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search, navigateBrowserLocation, redirectFromOldRoute, registerAbsoluteRoot, setRuntimeSources, urlLocation]);
 
-  // 导航函数 - 供子组件使用
-  const navigateToPath = useCallback(
-    (targetPath, viewMode = 'folder', initialImage = null, replace = false) => {
-      navigateTab(activeTabId, targetPath, viewMode, initialImage, replace);
-    },
-    [activeTabId, navigateTab]
-  );
+  useEffect(() => {
+    if (hydrationStatus === HYDRATION_PENDING || redirectFromOldRoute) return;
 
-  // 面包屑导航函数
-  const navigateToBreadcrumb = (targetPath) => {
-    // 根据路径类型自动判断视图模式
-    // 这里可以加入路径类型检测逻辑
-    navigateToPath(targetPath, 'folder');
-  };
-
-  // 相册点击处理
-  const handleAlbumClick = (albumPath, albumName = null, initialImage = null) => {
-    navigateToPath(albumPath, 'album', initialImage);
-  };
-
-  // 文件夹点击处理
-  const handleFolderClick = (folderPath) => {
-    navigateToPath(folderPath, 'folder');
-  };
-
-  // 返回处理
-  const handleGoBack = () => {
-    // 根据当前路径计算父路径
-    if (!displayState.targetPath || displayState.isRoot) {
-      return; // 已经在根目录
+    const browserLocation = resolveURLLocation(urlLocation, sourcesRef.current);
+    const nextIdentity = getBrowserLocationIdentity(browserLocation);
+    if (pendingNavigationRef.current) {
+      if (pendingNavigationRef.current !== nextIdentity) return;
+      pendingNavigationRef.current = null;
     }
 
-    const parentPath = normalizeTargetPath(getDirname(displayState.targetPath));
-    if (!parentPath || parentPath === displayState.targetPath) {
-      navigateToPath('', 'folder');
+    setTabs((prevTabs) => prevTabs.map((tab) => {
+      if (tab.id !== activeTabId) return tab;
+      if (getBrowserLocationIdentity(tab.location) === nextIdentity) return tab;
+      return createRuntimeTab(browserLocation, sourcesRef.current, tab.id);
+    }));
+  }, [activeTabId, hydrationStatus, redirectFromOldRoute, urlLocation]);
+
+  useEffect(() => {
+    if (displayState?.targetPath) setLastPath(displayState.targetPath);
+  }, [displayState?.targetPath]);
+
+  const createLocationForActivePath = useCallback((
+    targetPath,
+    viewMode = 'folder',
+    initialImage = null
+  ) => {
+    if (viewMode === 'favorites') return { kind: 'favorites' };
+    if (!targetPath) return { kind: 'landing' };
+
+    if (activeTab?.location?.kind !== 'directory') {
+      return createLocationFromAbsolutePath(targetPath, viewMode, initialImage, []);
+    }
+
+    const sourceRoot = sourcesRef.current.find((source) => (
+      source.sourceId === activeTab.location.target.sourceId
+    ));
+    if (!sourceRoot) return null;
+
+    const relativePath = getPortableRelativePath(sourceRoot.rootPath, targetPath);
+    if (relativePath === null) return null;
+    const initialMediaRelativePath = getCanonicalInitialMediaPath(
+      sourceRoot,
+      relativePath,
+      initialImage
+    );
+    if (initialImage && initialMediaRelativePath === null) return null;
+
+    return {
+      kind: 'directory',
+      target: {
+        sourceId: activeTab.location.target.sourceId,
+        relativePath,
+        viewMode: viewMode === 'album' ? 'photoSet' : 'browse',
+        initialMediaRelativePath
+      }
+    };
+  }, [activeTab]);
+
+  const navigateToPath = useCallback((
+    targetPath,
+    viewMode = 'folder',
+    initialImage = null,
+    replace = false
+  ) => {
+    const browserLocation = createLocationForActivePath(targetPath, viewMode, initialImage);
+    if (!browserLocation) return;
+    commitTabLocation({
+      tabId: activeTabId,
+      browserLocation,
+      replace
+    });
+  }, [activeTabId, commitTabLocation, createLocationForActivePath]);
+
+  const navigateToBreadcrumb = useCallback((targetPath) => {
+    navigateToPath(targetPath, 'folder');
+  }, [navigateToPath]);
+
+  const handleAlbumClick = useCallback((albumPath, albumName = null, initialImage = null) => {
+    navigateToPath(albumPath, 'album', initialImage);
+  }, [navigateToPath]);
+
+  const handleFolderClick = useCallback((folderPath) => {
+    navigateToPath(folderPath, 'folder');
+  }, [navigateToPath]);
+
+  const handleGoBack = useCallback(() => {
+    if (!activeTab?.location) return;
+    const parentLocation = getParentBrowserLocation(activeTab.location);
+    if (getBrowserLocationIdentity(parentLocation)
+        === getBrowserLocationIdentity(activeTab.location)) {
       return;
     }
-    navigateToPath(parentPath, 'folder');
-  };
+    commitTabLocation({
+      tabId: activeTabId,
+      browserLocation: parentLocation
+    });
+  }, [activeTab, activeTabId, commitTabLocation]);
+
+  const openLocationInNewTab = useCallback((browserLocation, sourcesOverride = sourcesRef.current) => {
+    commitTabLocation({
+      browserLocation,
+      append: true,
+      sourcesOverride
+    });
+  }, [commitTabLocation]);
 
   const openNewTab = useCallback((targetPath = '', viewMode = 'folder', initialImage = null) => {
+    if (viewMode === 'favorites') {
+      openLocationInNewTab({ kind: 'favorites' });
+      return;
+    }
     const resolvedTargetPath = (!targetPath && viewMode === 'folder')
-      ? (getDefaultRootPath() || '')
+      ? getDefaultRootPath()
       : targetPath;
-    const newTab = createTabFromState({ targetPath: resolvedTargetPath, viewMode, initialImage });
-    setTabs((prevTabs) => [...prevTabs, newTab]);
-    navigateTab(newTab.id, newTab.targetPath, newTab.viewMode, newTab.initialImage, false);
-  }, [navigateTab]);
+    openLocationInNewTab(createLocationFromAbsolutePath(
+      resolvedTargetPath,
+      viewMode,
+      initialImage,
+      sourcesRef.current
+    ));
+  }, [openLocationInNewTab]);
 
   const openFavoritesInNewTab = useCallback(() => {
-    openNewTab('', 'favorites', null);
-  }, [openNewTab]);
+    openLocationInNewTab({ kind: 'favorites' });
+  }, [openLocationInNewTab]);
 
   useEffect(() => {
     const handleDocumentDragOver = (event) => {
       if (!isExternalFileDrag(event)) return;
-
       event.preventDefault();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = 'copy';
-      }
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
     };
 
     const handleDocumentDrop = async (event) => {
       if (!isExternalFileDrag(event)) return;
-
       event.preventDefault();
       if (!ipcRenderer) return;
 
@@ -623,7 +789,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         .map((file) => {
           try {
             return ipcRenderer.getPathForFile?.(file) || file.path || '';
-          } catch (error) {
+          } catch (_error) {
             return '';
           }
         })
@@ -637,15 +803,15 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       try {
         const result = await ipcRenderer.invoke(CHANNELS.RESOLVE_DROPPED_FOLDERS, droppedPaths);
         const folders = Array.isArray(result?.folders) ? result.folders : [];
-
         if (folders.length === 0) {
           setErrorMessage('只支持拖入文件夹');
           return;
         }
 
-        folders.forEach((folderPath) => {
-          openNewTab(folderPath, 'folder', null);
-        });
+        for (const folderPath of folders) {
+          const registered = await registerAbsoluteRoot(folderPath);
+          openLocationInNewTab(registered.browserLocation, registered.sources);
+        }
       } catch (error) {
         console.error('处理拖入文件夹失败:', error);
         setErrorMessage('打开拖入文件夹失败');
@@ -654,12 +820,11 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
 
     document.addEventListener('dragover', handleDocumentDragOver);
     document.addEventListener('drop', handleDocumentDrop);
-
     return () => {
       document.removeEventListener('dragover', handleDocumentDragOver);
       document.removeEventListener('drop', handleDocumentDrop);
     };
-  }, [openNewTab]);
+  }, [openLocationInNewTab, registerAbsoluteRoot]);
 
   const clearTabDragIndicator = useCallback(() => {
     setDragIndicator((prev) => (prev.tabId ? { tabId: null, position: DRAG_INSERT_BEFORE } : prev));
@@ -725,54 +890,37 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     const targetTab = tabs.find((tab) => tab.id === nextTabId);
     if (!targetTab) return;
 
-    navigateTab(
-      targetTab.id,
-      targetTab.targetPath,
-      targetTab.viewMode,
-      targetTab.initialImage,
-      true
-    );
-  }, [activeTabId, tabs, navigateTab]);
+    commitTabLocation({
+      tabId: targetTab.id,
+      browserLocation: targetTab.location,
+      replace: true
+    });
+  }, [activeTabId, commitTabLocation, tabs]);
 
   const closeTabById = useCallback((tabId) => {
-    let fallbackTab = null;
-    let shouldNavigate = false;
+    const closingIndex = tabs.findIndex((tab) => tab.id === tabId);
+    if (closingIndex === -1) return;
 
-    setTabs((prevTabs) => {
-      const closingIndex = prevTabs.findIndex((tab) => tab.id === tabId);
-      if (closingIndex === -1) return prevTabs;
-
-      if (prevTabs.length === 1) {
-        const resetTab = {
-          ...prevTabs[0],
-          targetPath: '',
-          viewMode: 'folder',
-          initialImage: null,
-          title: '主页'
-        };
-        fallbackTab = resetTab;
-        shouldNavigate = true;
-        return [resetTab];
-      }
-
-      const nextTabs = prevTabs.filter((tab) => tab.id !== tabId);
-      if (tabId === activeTabId) {
-        fallbackTab = nextTabs[Math.max(0, closingIndex - 1)] || nextTabs[0];
-        shouldNavigate = true;
-      }
-      return nextTabs;
-    });
-
-    if (shouldNavigate && fallbackTab) {
-      navigateTab(
-        fallbackTab.id,
-        fallbackTab.targetPath,
-        fallbackTab.viewMode,
-        fallbackTab.initialImage,
-        true
-      );
+    if (tabs.length === 1) {
+      commitTabLocation({
+        tabId,
+        browserLocation: { kind: 'landing' },
+        replace: true
+      });
+      return;
     }
-  }, [activeTabId, navigateTab]);
+
+    const nextTabs = tabs.filter((tab) => tab.id !== tabId);
+    setTabs(nextTabs);
+    if (tabId !== activeTabId) return;
+
+    const fallbackTab = nextTabs[Math.max(0, closingIndex - 1)] || nextTabs[0];
+    commitTabLocation({
+      tabId: fallbackTab.id,
+      browserLocation: fallbackTab.location,
+      replace: true
+    });
+  }, [activeTabId, commitTabLocation, tabs]);
 
   const handleCloseOthers = useCallback(() => {
     const activeTab = tabs.find((tab) => tab.id === activeTabId);
@@ -785,40 +933,46 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   const handleSaveTabsSnapshot = useCallback(() => {
     setTabsMenuAnchorEl(null);
     try {
-      localStorage.setItem(
-        SAVED_TABS_SNAPSHOT_KEY,
-        JSON.stringify(createTabsSessionPayload(tabs, activeTabId))
-      );
+      if (hydrationStatus !== HYDRATION_SUCCEEDED) {
+        throw new Error('SourceRoot hydration is incomplete');
+      }
+      saveTabsSession({
+        storage: localStorage,
+        tabs,
+        activeTabId,
+        snapshot: true
+      });
       setHasSavedTabsSnapshot(true);
       setSuccessMessage(`已保存 ${tabs.length} 个标签页`);
     } catch (error) {
       console.warn('保存标签组失败:', error);
       setErrorMessage('保存标签组失败，请稍后重试');
     }
-  }, [tabs, activeTabId]);
+  }, [tabs, activeTabId, hydrationStatus]);
 
   const handleRestoreTabsSnapshot = useCallback(() => {
     setTabsMenuAnchorEl(null);
 
-    const savedTabsSession = loadTabsSession(SAVED_TABS_SNAPSHOT_KEY);
+    const savedTabsSession = loadTabsSession({
+      storage: localStorage,
+      sources: sourcesRef.current,
+      snapshot: true
+    });
     if (!savedTabsSession) {
       setHasSavedTabsSnapshot(false);
       setErrorMessage('没有可恢复的已保存标签组');
       return;
     }
 
-    setTabs(savedTabsSession.tabs);
+    const runtimeTabs = materializeSessionTabs(savedTabsSession, sourcesRef.current);
+    setTabs(runtimeTabs);
     setActiveTabId(savedTabsSession.activeTabId);
-    const nextActiveTab = savedTabsSession.tabs.find((tab) => tab.id === savedTabsSession.activeTabId)
-      || savedTabsSession.tabs[0];
-    setDisplayState(createViewState(nextActiveTab.targetPath, nextActiveTab.viewMode, nextActiveTab.initialImage));
-    navigateWithPersist(nextActiveTab.targetPath, {
-      viewMode: nextActiveTab.viewMode,
-      initialImage: nextActiveTab.initialImage,
-      replace: true
-    });
+    const nextActiveTab = runtimeTabs.find((tab) => tab.id === savedTabsSession.activeTabId)
+      || runtimeTabs[0];
+    pendingNavigationRef.current = getBrowserLocationIdentity(nextActiveTab.location);
+    navigateBrowserLocation(nextActiveTab.location, { replace: true });
     setSuccessMessage(`已恢复 ${savedTabsSession.tabs.length} 个标签页`);
-  }, [navigateWithPersist]);
+  }, [navigateBrowserLocation]);
 
   const handleOpenFolderToTarget = useCallback(async (target) => {
     setOpenFolderMenuAnchorEl(null);
@@ -827,14 +981,19 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     try {
       const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
       if (!selectedDir) return;
+      const registered = await registerAbsoluteRoot(selectedDir);
 
       if (target === 'current') {
-        navigateTab(activeTabId, selectedDir, 'folder', null, false);
+        commitTabLocation({
+          tabId: activeTabId,
+          browserLocation: registered.browserLocation,
+          sourcesOverride: registered.sources
+        });
         return;
       }
 
       if (target === 'new-tab') {
-        openNewTab(selectedDir, 'folder', null);
+        openLocationInNewTab(registered.browserLocation, registered.sources);
         return;
       }
 
@@ -847,7 +1006,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     } catch (error) {
       console.error('打开文件夹失败:', error);
     }
-  }, [activeTabId, navigateTab, openNewTab]);
+  }, [activeTabId, commitTabLocation, openLocationInNewTab, registerAbsoluteRoot]);
 
   const renderTabsHeader = useMemo(() => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
@@ -1018,7 +1177,11 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
             selected={tab.id === activeTabId}
             onClick={() => {
               setTabsMenuAnchorEl(null);
-              navigateTab(tab.id, tab.targetPath, tab.viewMode, tab.initialImage, true);
+              commitTabLocation({
+                tabId: tab.id,
+                browserLocation: tab.location,
+                replace: true
+              });
             }}
           >
             {tab.title}
@@ -1043,7 +1206,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         </MenuItem>
       </Menu>
     </Box>
-  ), [activeTabId, closeTabById, dragIndicator.position, dragIndicator.tabId, handleCloseOthers, handleOpenFolderToTarget, handleRestoreTabsSnapshot, handleSaveTabsSnapshot, handleTabChange, handleTabDragEnd, handleTabDragLeave, handleTabDragOver, handleTabDragStart, handleTabDrop, hasSavedTabsSnapshot, navigateTab, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
+  ), [activeTabId, closeTabById, commitTabLocation, dragIndicator.position, dragIndicator.tabId, handleCloseOthers, handleOpenFolderToTarget, handleRestoreTabsSnapshot, handleSaveTabsSnapshot, handleTabChange, handleTabDragEnd, handleTabDragLeave, handleTabDragOver, handleTabDragStart, handleTabDrop, hasSavedTabsSnapshot, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
 
   // 如果是重定向，不渲染内容
   if (redirectFromOldRoute) {
@@ -1057,6 +1220,8 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         // 通过props传递URL状态，而不是依赖路由参数
         albumPath={displayState.targetPath}
         initialImage={displayState.initialImage}
+        sourceBoundary={displayState.sourceBoundary}
+        sourceBreadcrumbs={sourceBreadcrumbs}
         onNavigate={navigateToPath}
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}
@@ -1084,6 +1249,8 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         colorMode={colorMode}
         // 通过props传递URL状态
         currentPath={displayState.targetPath}
+        sourceBoundary={displayState.sourceBoundary}
+        sourceBreadcrumbs={sourceBreadcrumbs}
         onNavigate={navigateToPath}
         onBreadcrumbNavigate={navigateToBreadcrumb}
         onAlbumClick={handleAlbumClick}

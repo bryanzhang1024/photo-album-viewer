@@ -74,8 +74,8 @@ jest.mock('../../../src/renderer/hooks/useAlbumImages', () =>
 );
 
 jest.mock('../../../src/renderer/hooks/useBreadcrumbs', () =>
-  jest.fn(() => ({
-    breadcrumbs: [],
+  jest.fn((albumPath, rootPath, sourceBreadcrumbs) => ({
+    breadcrumbs: sourceBreadcrumbs || [],
     metadata: null,
     loadBreadcrumbs: jest.fn(() => Promise.resolve())
   }))
@@ -101,14 +101,69 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
 const reactRouter = require('react-router-dom');
 const { ScrollPositionContext } = require('../../../src/renderer/App');
 const useAlbumImages = require('../../../src/renderer/hooks/useAlbumImages');
+const useBreadcrumbs = require('../../../src/renderer/hooks/useBreadcrumbs');
 const useNeighboringAlbums = require('../../../src/renderer/hooks/useNeighboringAlbums');
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
+const BreadcrumbNavigation = require('../../../src/renderer/components/BreadcrumbNavigation');
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage').default;
+const CHANNELS = require('../../../src/common/ipc-channels');
 const ipcRenderer = global.electronMock.ipcRenderer;
+
+const SOURCE_ID = 'src_11111111-1111-4111-8111-111111111111';
+
+const SOURCE_BOUNDARY_CASES = [
+  [
+    'POSIX',
+    {
+      sourceId: SOURCE_ID,
+      label: '家庭照片',
+      rootPath: '/Volumes/NAS/Photos',
+      relativePath: '2026/旅行'
+    },
+    '/Volumes/NAS/Photos/2026/旅行',
+    [
+      { name: '家庭照片', path: '/Volumes/NAS/Photos' },
+      { name: '2026', path: '/Volumes/NAS/Photos/2026' },
+      { name: '旅行', path: '/Volumes/NAS/Photos/2026/旅行' }
+    ]
+  ],
+  [
+    'Windows drive',
+    {
+      sourceId: SOURCE_ID,
+      label: 'Windows 照片',
+      rootPath: 'D:\\Pictures',
+      relativePath: '2026/Trip'
+    },
+    'D:/Pictures/2026/Trip',
+    [
+      { name: 'Windows 照片', path: 'D:\\Pictures' },
+      { name: '2026', path: 'D:/Pictures/2026' },
+      { name: 'Trip', path: 'D:/Pictures/2026/Trip' }
+    ]
+  ],
+  [
+    'UNC',
+    {
+      sourceId: SOURCE_ID,
+      label: 'NAS 照片',
+      rootPath: '\\\\NAS\\Photos',
+      relativePath: 'Family/Trip'
+    },
+    '//NAS/Photos/Family/Trip',
+    [
+      { name: 'NAS 照片', path: '\\\\NAS\\Photos' },
+      { name: 'Family', path: '//NAS/Photos/Family' },
+      { name: 'Trip', path: '//NAS/Photos/Family/Trip' }
+    ]
+  ]
+];
 
 describe('AlbumPage refresh button', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
+    window.history.pushState({}, '', '/');
     reactRouter.useNavigate.mockReturnValue(jest.fn());
     reactRouter.useLocation.mockReturnValue({
       pathname: '/browse/%2Falbums%2Ftrip',
@@ -130,9 +185,17 @@ describe('AlbumPage refresh button', () => {
       refresh: jest.fn(),
       removeImage: jest.fn()
     });
+    ipcRenderer.invoke.mockResolvedValue({
+      success: true,
+      currentPath: '/albums/trip',
+      nodes: [],
+      directImages: [],
+      breadcrumbs: [],
+      metadata: { totalNodes: 0 }
+    });
   });
 
-  test('places refresh first and random lives in tune popover', () => {
+  test('places refresh first and random lives in tune popover', async () => {
     const refresh = jest.fn();
     useAlbumImages.mockReturnValue({
       images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
@@ -161,6 +224,13 @@ describe('AlbumPage refresh button', () => {
       </ScrollPositionContext.Provider>
     );
 
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/albums/trip'
+      );
+    });
+
     const toolbar = screen.getByTestId('grid-page-toolbar');
     const refreshButton = screen.getByRole('button', { name: '刷新当前相簿' });
     const tuneButton = screen.getByRole('button', { name: '视图选项' });
@@ -178,6 +248,90 @@ describe('AlbumPage refresh button', () => {
     fireEvent.click(refreshButton);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
+
+  test('loads the legacy root key without decoding initialPath percent twice', async () => {
+    const initialPath = '/photos/100%done';
+    const storageKey = `lastRootPath_${btoa(initialPath).replace(/[+/=]/g, '')}`;
+    window.history.pushState({}, '', '/?initialPath=%2Fphotos%2F100%25done');
+    localStorage.setItem(storageKey, '/photos');
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath={initialPath}
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(useBreadcrumbs).toHaveBeenCalledWith(initialPath, '/photos', null);
+    });
+  });
+
+  test.each(SOURCE_BOUNDARY_CASES)(
+    'forwards %s SourceRoot breadcrumbs without switching album content APIs',
+    async (_name, sourceBoundary, albumPath, sourceBreadcrumbs) => {
+      imageCache.get.mockReturnValue(null);
+      ipcRenderer.invoke.mockImplementation((channel, targetPath) => {
+        if (channel === CHANNELS.SCAN_NAVIGATION_LEVEL) {
+          return Promise.resolve({
+            success: true,
+            currentPath: targetPath,
+            nodes: [],
+            directImages: [],
+            breadcrumbs: [
+              { name: '/', path: '/' },
+              { name: 'OS root', path: albumPath }
+            ],
+            metadata: { totalNodes: 0 }
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      render(
+        <ScrollPositionContext.Provider
+          value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+        >
+          <AlbumPage
+            colorMode={{ mode: 'light' }}
+            albumPath={albumPath}
+            sourceBoundary={sourceBoundary}
+            sourceBreadcrumbs={sourceBreadcrumbs}
+            urlMode={true}
+          />
+        </ScrollPositionContext.Provider>
+      );
+
+      await waitFor(() => {
+        expect(useBreadcrumbs).toHaveBeenCalledWith(
+          albumPath,
+          sourceBoundary.rootPath,
+          sourceBreadcrumbs
+        );
+        const breadcrumbProps = BreadcrumbNavigation.mock.calls[
+          BreadcrumbNavigation.mock.calls.length - 1
+        ][0];
+        expect(breadcrumbProps.breadcrumbs).toEqual(sourceBreadcrumbs);
+      });
+      expect(useAlbumImages).toHaveBeenCalledWith(
+        albumPath,
+        expect.objectContaining({ sortBy: 'name', sortDirection: 'asc' })
+      );
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        albumPath
+      );
+      expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(
+        CHANNELS.GET_DIRECTORY_LEVEL_V1,
+        expect.anything()
+      );
+    }
+  );
 
   test('shows browse entry when photo set view has child folders', async () => {
     const onNavigate = jest.fn();
@@ -218,7 +372,7 @@ describe('AlbumPage refresh button', () => {
     expect(onNavigate).toHaveBeenCalledWith('/albums/trip', 'folder', null, false);
   });
 
-  test('calls loadMore when virtuoso reaches end and more pages exist', () => {
+  test('calls loadMore when virtuoso reaches end and more pages exist', async () => {
     const loadMore = jest.fn();
     useAlbumImages.mockReturnValue({
       images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
@@ -246,6 +400,13 @@ describe('AlbumPage refresh button', () => {
         />
       </ScrollPositionContext.Provider>
     );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/albums/trip'
+      );
+    });
 
     expect(screen.getByText('共 500 张照片')).toBeInTheDocument();
     expect(loadMore).toHaveBeenCalled();
@@ -345,9 +506,17 @@ describe('AlbumPage sibling album keyboard navigation', () => {
       siblingAlbums,
       loadNeighboringAlbums: jest.fn(() => Promise.resolve())
     });
+    ipcRenderer.invoke.mockResolvedValue({
+      success: true,
+      currentPath: '/photos/A2',
+      nodes: [],
+      directImages: [],
+      breadcrumbs: [],
+      metadata: { totalNodes: 0 }
+    });
   });
 
-  test('Ctrl+ArrowRight jumps to last sibling album', () => {
+  test('Ctrl+ArrowRight jumps to last sibling album', async () => {
     const onAlbumClick = jest.fn();
 
     render(
@@ -362,13 +531,20 @@ describe('AlbumPage sibling album keyboard navigation', () => {
         />
       </ScrollPositionContext.Provider>
     );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/photos/A2'
+      );
+    });
 
     fireEvent.keyDown(window, { key: 'ArrowRight', ctrlKey: true });
 
     expect(onAlbumClick).toHaveBeenCalledWith('/photos/A3', 'A3', null);
   });
 
-  test('Ctrl+ArrowLeft jumps to first sibling album', () => {
+  test('Ctrl+ArrowLeft jumps to first sibling album', async () => {
     const onAlbumClick = jest.fn();
 
     render(
@@ -383,6 +559,13 @@ describe('AlbumPage sibling album keyboard navigation', () => {
         />
       </ScrollPositionContext.Provider>
     );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/photos/A2'
+      );
+    });
 
     fireEvent.keyDown(window, { key: 'ArrowLeft', ctrlKey: true });
 

@@ -42,6 +42,59 @@ describe('useBreadcrumbs', () => {
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
 
+  test.each([
+    [
+      'POSIX',
+      '/Volumes/NAS/Photos/2026/旅行',
+      '/Volumes/NAS/Photos',
+      [
+        { name: '家庭照片', path: '/Volumes/NAS/Photos' },
+        { name: '2026', path: '/Volumes/NAS/Photos/2026' },
+        { name: '旅行', path: '/Volumes/NAS/Photos/2026/旅行' }
+      ]
+    ],
+    [
+      'Windows drive',
+      'D:/Pictures/2026/Trip',
+      'D:\\Pictures',
+      [
+        { name: 'Windows 照片', path: 'D:\\Pictures' },
+        { name: '2026', path: 'D:/Pictures/2026' },
+        { name: 'Trip', path: 'D:/Pictures/2026/Trip' }
+      ]
+    ],
+    [
+      'UNC',
+      '//NAS/Photos/Family/Trip',
+      '\\\\NAS\\Photos',
+      [
+        { name: 'NAS 照片', path: '\\\\NAS\\Photos' },
+        { name: 'Family', path: '//NAS/Photos/Family' },
+        { name: 'Trip', path: '//NAS/Photos/Family/Trip' }
+      ]
+    ]
+  ])('returns supplied %s SourceRoot breadcrumbs without cache or IPC work', async (
+    _name,
+    albumPath,
+    rootPath,
+    sourceBreadcrumbs
+  ) => {
+    const { result } = renderHook(() =>
+      useBreadcrumbs(albumPath, rootPath, sourceBreadcrumbs)
+    );
+
+    expect(result.current.breadcrumbs).toEqual(sourceBreadcrumbs);
+    await act(async () => {
+      await result.current.loadBreadcrumbs();
+    });
+
+    expect(result.current.breadcrumbs).toEqual(sourceBreadcrumbs);
+    expect(result.current.metadata).toBeNull();
+    expect(imageCache.get).not.toHaveBeenCalled();
+    expect(ipcRenderer.invoke).not.toHaveBeenCalled();
+    expect(getBreadcrumbPaths).not.toHaveBeenCalled();
+  });
+
   test('reuses cached navigation data', async () => {
     const cachedResponse = {
       breadcrumbs: [

@@ -49,6 +49,8 @@ function AlbumPage({
   onAlbumClick = null,
   onGoBack = null,
   onOpenFavoritesInNewTab = null,
+  sourceBoundary = null,
+  sourceBreadcrumbs = null,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null
@@ -125,6 +127,7 @@ function AlbumPage({
     if (location.state?.albumPath) return location.state.albumPath;
     return albumPath ? safeDecodeURIPath(albumPath) : '';
   }, [urlMode, urlAlbumPath, albumPath, location.state]);
+  const breadcrumbRootPath = sourceBoundary?.rootPath || rootPath;
   const albumSortFields = useMemo(() => ['name', 'size', 'lastModified'], []);
   const albumLegacySortKeys = useMemo(
     () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
@@ -161,7 +164,11 @@ function AlbumPage({
     sortDirection,
     searchQuery: normalizedSearchQuery
   });
-  const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(decodedAlbumPath, rootPath);
+  const { breadcrumbs, metadata, loadBreadcrumbs } = useBreadcrumbs(
+    decodedAlbumPath,
+    breadcrumbRootPath,
+    sourceBreadcrumbs
+  );
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
   const { drawNext: drawRandomSiblingAlbum, resetBag: resetRandomBag } = useShuffleBag(
     siblingAlbums,
@@ -319,11 +326,11 @@ function AlbumPage({
         const initialPath = searchParams.get('initialPath');
         if (initialPath) {
           try {
-            const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
+            const pathHash = btoa(initialPath).replace(/[+/=]/g, '');
             return `lastRootPath_${pathHash}`;
           } catch (e) {
             let hash = 0;
-            const str = decodeURIComponent(initialPath);
+            const str = initialPath;
             for (let i = 0; i < str.length; i++) {
               const char = str.charCodeAt(i);
               hash = ((hash << 5) - hash) + char;
@@ -714,7 +721,9 @@ function AlbumPage({
   const renderHeader = () => (
     <>
       <BreadcrumbNavigation
-        breadcrumbs={breadcrumbs.length > 0 ? breadcrumbs : getBreadcrumbPaths(decodedAlbumPath, rootPath)}
+        breadcrumbs={breadcrumbs.length > 0
+          ? breadcrumbs
+          : getBreadcrumbPaths(decodedAlbumPath, breadcrumbRootPath)}
         currentPath={decodedAlbumPath}
         onNavigate={handleBreadcrumbNavigate}
         variant="minimal"

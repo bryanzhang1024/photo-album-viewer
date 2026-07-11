@@ -51,6 +51,8 @@ function HomePage({
   onAlbumClick = null,
   onFolderClick = null,
   onOpenFavoritesInNewTab = null,
+  sourceBoundary = null,
+  sourceBreadcrumbs = null,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null
@@ -87,6 +89,9 @@ function HomePage({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const { path: currentPath, nodes: navigationNodes, directImages, breadcrumbs, metadata } = navigationState;
+  const displayedBreadcrumbs = Array.isArray(sourceBreadcrumbs)
+    ? sourceBreadcrumbs
+    : breadcrumbs;
   const homeSortFields = useMemo(() => ['name', 'imageCount', 'lastModified'], []);
   const homeLegacySortKeys = useMemo(
     () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
@@ -179,12 +184,12 @@ function HomePage({
     if (initialPath) {
       // 如果有URL参数，使用该路径的哈希值作为标识
       try {
-        const pathHash = btoa(decodeURIComponent(initialPath)).replace(/[+/=]/g, '');
+        const pathHash = btoa(initialPath).replace(/[+/=]/g, '');
         return `lastRootPath_${pathHash}`;
       } catch (e) {
         // 如果btoa失败（如中文字符），使用简单哈希
         let hash = 0;
-        const str = decodeURIComponent(initialPath);
+        const str = initialPath;
         for (let i = 0; i < str.length; i++) {
           const char = str.charCodeAt(i);
           hash = ((hash << 5) - hash) + char;
@@ -662,7 +667,10 @@ function HomePage({
 
   // 返回上级目录
   const handleGoUp = async () => {
-    if (!currentPath || currentPath === rootPath || isNavigating) return;
+    const isAtNavigationRoot = sourceBoundary
+      ? sourceBoundary.relativePath === ''
+      : currentPath === rootPath;
+    if (!currentPath || isAtNavigationRoot || isNavigating) return;
 
     // 获取当前路径的上级目录
     const parentPath = getDirname(currentPath);
@@ -752,7 +760,7 @@ function HomePage({
     
     if (initialPath) {
       // 如果有URL参数，使用指定路径 - 优先处理
-      const decodedPath = decodeURIComponent(initialPath);
+      const decodedPath = initialPath;
       console.log('使用URL参数路径:', decodedPath);
       console.log('窗口存储键:', windowStorageKey);
       setRootPath(decodedPath);
@@ -817,7 +825,7 @@ function HomePage({
     const renderHeader = () => (
       <>
         <BreadcrumbNavigation
-          breadcrumbs={breadcrumbs}
+          breadcrumbs={displayedBreadcrumbs}
           currentPath={currentPath}
           onNavigate={handleBreadcrumbNavigate}
           variant="minimal"
