@@ -62,7 +62,15 @@ const getCanonicalInitialMediaPath = (initialImage, sourceRoot, directoryRelativ
   if (typeof initialImage !== 'string' || initialImage.length === 0) return null;
 
   const absoluteRelativePath = getPortableRelativePath(sourceRoot.rootPath, initialImage);
-  if (absoluteRelativePath !== null) return absoluteRelativePath;
+  if (absoluteRelativePath !== null) {
+    const directoryAbsolutePath = resolvePortableRelativePath(
+      sourceRoot.rootPath,
+      directoryRelativePath
+    );
+    return getPortableRelativePath(directoryAbsolutePath, initialImage) === null
+      ? null
+      : absoluteRelativePath;
+  }
 
   if (!isPortableRelativePath(initialImage)) return null;
   return directoryRelativePath
@@ -190,15 +198,22 @@ const serializeBrowserLocation = (location) => {
   return { kind: location.kind };
 };
 
-export const createTabsSessionPayload = (tabs, activeTabId, now = Date.now()) => ({
-  schemaVersion: 2,
-  tabs: tabs.map((tab) => ({
-    id: tab.id,
-    location: serializeBrowserLocation(tab.location)
-  })),
-  activeTabId,
-  savedAt: now
-});
+export const createTabsSessionPayload = (tabs, activeTabId, now = Date.now()) => {
+  const payload = {
+    schemaVersion: 2,
+    tabs: tabs.map((tab) => ({
+      id: tab.id,
+      location: serializeBrowserLocation(tab.location)
+    })),
+    activeTabId,
+    savedAt: now
+  };
+
+  if (!toRuntimeV2Session(payload)) {
+    throw new TypeError('Invalid tabs session payload');
+  }
+  return payload;
+};
 
 export const saveTabsSession = ({
   storage,

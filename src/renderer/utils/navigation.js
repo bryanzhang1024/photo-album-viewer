@@ -1,6 +1,7 @@
 import {
   toCanonicalViewMode,
-  toLegacyViewMode
+  toLegacyViewMode,
+  validateNavigationTargetV1
 } from '../../common/contracts/navigation-contract-v1';
 
 const LAST_PATH_KEY = 'lastPath';
@@ -42,6 +43,10 @@ export const buildBrowseUrl = (targetPath, viewMode = 'folder', initialImage = n
 };
 
 export const buildNavigationTargetUrl = (target) => {
+  if (!validateNavigationTargetV1(target).valid) {
+    throw new TypeError('Invalid NavigationTarget');
+  }
+
   const params = new URLSearchParams();
   params.set('sourceId', target.sourceId);
   params.set('relativePath', target.relativePath);
@@ -69,15 +74,18 @@ export const parseBrowseLocation = (pathname, search = '') => {
   const params = new URLSearchParams(search);
   if (pathname === '/browse') {
     if (params.has('sourceId') && params.has('relativePath')) {
-      return {
-        kind: 'directory',
-        target: {
-          sourceId: params.get('sourceId'),
-          relativePath: params.get('relativePath'),
-          viewMode: toCanonicalViewMode(params.get('view')) || 'browse',
-          initialMediaRelativePath: params.has('image') ? params.get('image') : null
-        }
+      const legacyViewMode = params.has('view') ? params.get('view') : 'folder';
+      if (legacyViewMode !== 'folder' && legacyViewMode !== 'album') return null;
+
+      const target = {
+        sourceId: params.get('sourceId'),
+        relativePath: params.get('relativePath'),
+        viewMode: toCanonicalViewMode(legacyViewMode),
+        initialMediaRelativePath: params.has('image') ? params.get('image') : null
       };
+      if (!validateNavigationTargetV1(target).valid) return null;
+
+      return { kind: 'directory', target };
     }
 
     return { kind: 'landing' };

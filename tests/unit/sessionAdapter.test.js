@@ -111,6 +111,36 @@ describe('browser tabs session adapter', () => {
     });
   });
 
+  test.each([
+    ['/albums/trip/cover.jpg', 'trip/cover.jpg'],
+    ['/albums/trip/nested/cover.jpg', 'trip/nested/cover.jpg'],
+    ['/albums/other/cover.jpg', null],
+    ['/albums/trip-archive/cover.jpg', null]
+  ])('keeps absolute v1 media within the current directory boundary: %s', (
+    initialImage,
+    expectedMediaPath
+  ) => {
+    const session = {
+      tabs: [{
+        id: 'tab-trip',
+        targetPath: '/albums/trip',
+        viewMode: 'album',
+        initialImage
+      }],
+      activeTabId: 'tab-trip'
+    };
+    const storage = createStorage({ [SESSION_V1_KEY]: JSON.stringify(session) });
+
+    const loaded = loadTabsSession({ storage, sources: [createSource()] });
+
+    expect(loaded.tabs[0].location.target).toEqual({
+      sourceId: SOURCE_ID,
+      relativePath: 'trip',
+      viewMode: 'photoSet',
+      initialMediaRelativePath: expectedMediaPath
+    });
+  });
+
   test('uses the unique longest nested root without probing the child path', () => {
     const nestedSession = {
       tabs: [{
@@ -356,5 +386,44 @@ describe('browser tabs session adapter', () => {
     expect(storage.removeItem).not.toHaveBeenCalled();
     expect(storage.values.get(SESSION_V1_KEY)).toBe('legacy-session-bytes');
     expect(storage.values.get(SNAPSHOT_V1_KEY)).toBe('legacy-snapshot-bytes');
+  });
+
+  test.each([
+    ['empty tabs', { tabs: [] }],
+    [
+      'duplicate tab ids',
+      {
+        tabs: [
+          createV2Payload().tabs[0],
+          { ...createV2Payload().tabs[0] }
+        ]
+      }
+    ],
+    [
+      'empty tab id',
+      { tabs: [{ ...createV2Payload().tabs[0], id: '' }], activeTabId: '' }
+    ],
+    ['missing active tab', { activeTabId: 'tab-missing' }],
+    ['negative savedAt', { now: -1 }],
+    ['fractional savedAt', { now: 1.5 }],
+    ['unsafe savedAt', { now: Number.MAX_SAFE_INTEGER + 1 }]
+  ])('rejects %s without writing an unreadable v2 payload', (_name, overrides) => {
+    const storage = createStorage();
+    const options = {
+      storage,
+      tabs: createV2Payload().tabs,
+      activeTabId: 'tab-v2',
+      now: NOW,
+      ...overrides
+    };
+
+    expect(() => createTabsSessionPayload(
+      options.tabs,
+      options.activeTabId,
+      options.now
+    )).toThrow(TypeError);
+    expect(() => saveTabsSession(options)).toThrow(TypeError);
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(storage.removeItem).not.toHaveBeenCalled();
   });
 });

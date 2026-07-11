@@ -122,6 +122,41 @@ describe('navigation helpers', () => {
         }
       });
     });
+
+    test.each([
+      ['invalid source id', { sourceId: 'not-a-source-id' }],
+      ['parent traversal relative path', { relativePath: '../escape' }],
+      ['absolute relative path', { relativePath: '/escape' }],
+      ['backslash relative path', { relativePath: '2026\\escape' }],
+      ['absolute initial media', { initialMediaRelativePath: '/etc/passwd' }],
+      ['traversal initial media', { initialMediaRelativePath: '2026/../escape.jpg' }],
+      ['backslash initial media', { initialMediaRelativePath: '2026\\escape.jpg' }],
+      ['legacy view mode', { viewMode: 'album' }]
+    ])('refuses to build a canonical URL with %s', (_name, overrides) => {
+      expect(() => buildNavigationTargetUrl({ ...target, ...overrides })).toThrow(TypeError);
+    });
+
+    test.each([
+      ['invalid source id', { sourceId: 'not-a-source-id' }],
+      ['parent traversal relative path', { relativePath: '../escape' }],
+      ['absolute relative path', { relativePath: '/escape' }],
+      ['backslash relative path', { relativePath: '2026\\escape' }],
+      ['absolute initial media', { image: '/etc/passwd' }],
+      ['traversal initial media', { image: '2026/../escape.jpg' }],
+      ['backslash initial media', { image: '2026\\escape.jpg' }],
+      ['canonical view name in legacy query', { view: 'photoSet' }],
+      ['unknown view', { view: 'grid' }]
+    ])('rejects a canonical query with %s', (_name, overrides) => {
+      const values = {
+        sourceId: SOURCE_ID,
+        relativePath: '2026/Trip',
+        view: 'folder',
+        ...overrides
+      };
+      const search = `?${new URLSearchParams(values).toString()}`;
+
+      expect(parseBrowseLocation('/browse', search)).toBeNull();
+    });
   });
 
   describe('browse route parsing', () => {
