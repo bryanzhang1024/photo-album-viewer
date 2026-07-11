@@ -22,6 +22,23 @@ function expectValidNavigationEnvelope(result) {
   });
 }
 
+function mockMissingApprovedRootsFile() {
+  jest.spyOn(fs, 'readFile').mockImplementation((filePath, encoding, callback) => {
+    callback(Object.assign(new Error('missing approved roots'), { code: 'ENOENT' }));
+  });
+}
+
+function mockApprovedRootsWrite() {
+  return jest.spyOn(fs, 'writeFile').mockImplementation((filePath, data, encoding, callback) => {
+    callback(null);
+  });
+}
+
+async function flushMainReady() {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
 describe('SourceRoot V1 IPC', () => {
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -304,11 +321,94 @@ describe('SourceRoot V1 IPC', () => {
     expect(WindowService.createWindow).not.toHaveBeenCalled();
   });
 
-  test('second-instance --folder creates a canonical SourceRoot window without approving it', async () => {
+  test('startup --folder registers the explicit root before opening a canonical window', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['electron', '.', '--folder', '/Photos/Startup'];
+    mockMissingApprovedRootsFile();
+    const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockResolvedValue({
+      isDirectory: () => true
+    });
+    const approvedRootsWrite = mockApprovedRootsWrite();
+    const source = createSourceRootV1({ rootPath: '/Photos/Startup' });
+    const saveSourceRoot = jest.fn().mockResolvedValue({ source, created: true });
+
+    try {
+      setupMainProcess({
+        sourceRootService: { saveSourceRoot },
+        configureElectron(electron) {
+          electron.app.whenReady.mockReturnValue(Promise.resolve());
+        }
+      });
+      const WindowService = require('../../src/main/services/WindowService');
+      WindowService.createWindow.mockReturnValue({ id: 703 });
+
+      await flushMainReady();
+
+      expect(saveSourceRoot).toHaveBeenCalledWith({
+        sourceId: null,
+        rootPath: '/Photos/Startup',
+        label: null
+      });
+      expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup');
+      expect(approvedRootsWrite).toHaveBeenCalledWith(
+        path.join('/mock/userData', 'approved-roots.json'),
+        expect.stringContaining('/Photos/Startup'),
+        'utf8',
+        expect.any(Function)
+      );
+      expect(WindowService.createWindow).toHaveBeenCalledWith({
+        sourceId: source.sourceId,
+        relativePath: '',
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      });
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
+
+  test('startup --folder fallback still opens a legacy window when root registration fails', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['electron', '.', '--folder=/Photos/Startup-Fallback'];
+    mockMissingApprovedRootsFile();
+    const saveSourceRoot = jest.fn().mockRejectedValue(new Error('registry unavailable'));
+    const registrationError = Object.assign(new Error('registration unavailable'), {
+      code: 'EACCES'
+    });
+    const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockRejectedValue(registrationError);
+
+    try {
+      setupMainProcess({
+        sourceRootService: { saveSourceRoot },
+        configureElectron(electron) {
+          electron.app.whenReady.mockReturnValue(Promise.resolve());
+        }
+      });
+      const WindowService = require('../../src/main/services/WindowService');
+      WindowService.createWindow.mockReturnValue({ id: 704 });
+
+      await flushMainReady();
+
+      expect(saveSourceRoot).toHaveBeenCalledWith({
+        sourceId: null,
+        rootPath: '/Photos/Startup-Fallback',
+        label: null
+      });
+      expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup-Fallback');
+      expect(WindowService.createWindow).toHaveBeenCalledWith('/Photos/Startup-Fallback');
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
+
+  test('second-instance --folder attempts root registration without blocking canonical window', async () => {
     const appHandlers = new Map();
     const source = createSourceRootV1({ rootPath: '/Photos/CLI' });
     const saveSourceRoot = jest.fn().mockResolvedValue({ source, created: true });
-    const approvedRootStat = jest.spyOn(fs.promises, 'stat');
+    const registrationError = Object.assign(new Error('registration unavailable'), {
+      code: 'EACCES'
+    });
+    const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockRejectedValue(registrationError);
     setupMainProcess({
       sourceRootService: { saveSourceRoot },
       configureElectron(electron) {
@@ -345,16 +445,16 @@ describe('SourceRoot V1 IPC', () => {
       viewMode: 'browse',
       initialMediaRelativePath: null
     });
-    expect(approvedRootStat).not.toHaveBeenCalled();
+    expect(approvedRootStat).toHaveBeenCalledWith('/Photos/CLI');
   });
 
   test('second-instance --folder falls back to the legacy target when SourceRoot save fails', async () => {
     const appHandlers = new Map();
     const saveSourceRoot = jest.fn().mockRejectedValue(new Error('registry unavailable'));
-    jest.spyOn(fs.promises, 'stat').mockResolvedValue({ isDirectory: () => true });
-    jest.spyOn(fs, 'writeFile').mockImplementation((filePath, data, encoding, callback) => {
-      callback(null);
+    const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockResolvedValue({
+      isDirectory: () => true
     });
+    const approvedRootsWrite = mockApprovedRootsWrite();
     setupMainProcess({
       sourceRootService: { saveSourceRoot },
       configureElectron(electron) {
@@ -379,7 +479,18 @@ describe('SourceRoot V1 IPC', () => {
       '--folder=/Photos/Fallback'
     ], '/');
 
-    expect(saveSourceRoot).toHaveBeenCalled();
+    expect(saveSourceRoot).toHaveBeenCalledWith({
+      sourceId: null,
+      rootPath: '/Photos/Fallback',
+      label: null
+    });
+    expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Fallback');
+    expect(approvedRootsWrite).toHaveBeenCalledWith(
+      path.join('/mock/userData', 'approved-roots.json'),
+      expect.stringContaining('/Photos/Fallback'),
+      'utf8',
+      expect.any(Function)
+    );
     expect(WindowService.createWindow).toHaveBeenCalledWith('/Photos/Fallback');
   });
 });

@@ -213,6 +213,58 @@ describe('GET_DIRECTORY_LEVEL_V1 IPC', () => {
     expect(scanDirectorySnapshot).not.toHaveBeenCalled();
   });
 
+  test('preserves request source-id casing while replacing only the runtime root path', async () => {
+    const uppercaseSourceId = 'SRC_11111111-1111-4111-8111-111111111111';
+    const request = createDirectoryLevelRequestV1({
+      runtimeSource: { sourceId: uppercaseSourceId, rootPath: '/forged/photos' },
+      ref: { sourceId: uppercaseSourceId }
+    });
+    const locator = {
+      ref: request.ref,
+      absolutePath: '/registered/photos',
+      name: 'photos'
+    };
+    const snapshot = createDirectorySnapshotV1({
+      ref: request.ref,
+      locator: { absolutePath: '/registered/photos' },
+      facts: { directMediaCount: 1, childDirectoryCount: 0 },
+      children: [],
+      approximate: {
+        coverSamples: ['cover.jpg'],
+        hasDescendantMedia: 'yes',
+        observedAt: 1783728000000,
+        truncated: false
+      }
+    });
+    const resolveDirectoryLocatorV1 = jest.fn(() => locator);
+    const scanDirectorySnapshot = jest.fn().mockResolvedValue(snapshot);
+    const getSourceRoot = jest.fn().mockResolvedValue({
+      schemaVersion: 1,
+      sourceId: uppercaseSourceId.toLowerCase(),
+      label: 'photos',
+      rootPath: '/registered/photos',
+      sourceGeneration: 1
+    });
+    const { electron } = setupMainProcess({
+      directorySnapshotService: { resolveDirectoryLocatorV1, scanDirectorySnapshot },
+      sourceRootService: { getSourceRoot }
+    });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.GET_DIRECTORY_LEVEL_V1, request);
+
+    expect(result).toEqual({ contractVersion: 1, ok: true, data: snapshot });
+    expectValidV1Envelope(result);
+    expect(getSourceRoot).toHaveBeenCalledWith(uppercaseSourceId);
+    expect(resolveDirectoryLocatorV1).toHaveBeenCalledWith({
+      contractVersion: 1,
+      runtimeSource: {
+        sourceId: uppercaseSourceId,
+        rootPath: '/registered/photos'
+      },
+      ref: request.ref
+    });
+  });
+
   test.each([
     ['ENOENT', 'ENOENT', false],
     ['ENOTDIR', 'ENOTDIR', false],

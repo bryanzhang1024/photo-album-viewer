@@ -229,18 +229,19 @@ function createRootNavigationTarget(source) {
 }
 
 async function createFolderLaunchTarget(folderPath) {
+  let launchTarget = folderPath;
   try {
     const { source } = await sourceRootService.saveSourceRoot({
       sourceId: null,
       rootPath: folderPath,
       label: null
     });
-    return createRootNavigationTarget(source);
+    launchTarget = createRootNavigationTarget(source);
   } catch (error) {
     console.warn('[SourceRoot] 创建来源失败，回退到旧路径启动:', error?.message || error);
-    await registerApprovedRoot(folderPath);
-    return folderPath;
   }
+  await registerApprovedRoot(folderPath);
+  return launchTarget;
 }
 
 if (!gotTheLock) {
@@ -644,7 +645,7 @@ ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
     }
     const authoritativeRequest = {
       contractVersion: request.contractVersion,
-      runtimeSource: { sourceId: source.sourceId, rootPath: source.rootPath },
+      runtimeSource: { sourceId: request.ref.sourceId, rootPath: source.rootPath },
       ref: request.ref
     };
     const locator = DirectorySnapshotService.resolveDirectoryLocatorV1(authoritativeRequest);
