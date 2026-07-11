@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.6.0] - 2026-07-11
+
+- 新增 `DirectorySnapshot v1` 共享契约、三值目录能力投影和跨平台 `DirectoryRef` 路径校验。
+- 新增独立 canonical 单层目录扫描服务，明确 exact/partial、empty、missing 与 unreadable 语义，不再从 legacy DTO 反推事实。
+- 新增 versioned `GET_DIRECTORY_LEVEL_V1` IPC 与 preload allowlist；现有 renderer、`SCAN_NAVIGATION_LEVEL`、route 和用户可见行为保持不变。
+
 ## [2.5.14] - 2026-07-11
 
 - 将“目录事实、能力与导航意图分离”的 ADR 和 Phase 0 实施计划纳入版本控制，明确后续渐进迁移边界。

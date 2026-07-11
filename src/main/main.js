@@ -9,9 +9,16 @@ const sharp = require('sharp');
 const crypto = require('crypto');
 const { createWindow, getMainWindow, windows } = require('./services/WindowService');
 const FileSystemService = require('./services/FileSystemService');
+const DirectorySnapshotService = require('./services/DirectorySnapshotService');
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
 const CHANNELS = require(path.join(__dirname, '..', 'common', 'ipc-channels.js'));
+const {
+  createDirectoryErrorEnvelopeV1,
+  createDirectorySuccessEnvelopeV1,
+  validateDirectoryEnvelopeV1,
+  validateDirectoryLevelRequestV1
+} = require('../common/contracts/directory-contract-v1');
 
 FavoritesService.registerIpcHandlers();
 
@@ -461,6 +468,100 @@ ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
   } catch (error) {
     console.error('智能扫描错误:', error);
     return FileSystemService.createErrorResponse(error.message, targetPath);
+  }
+});
+
+function finalizeDirectoryEnvelopeV1(envelope) {
+  const validation = validateDirectoryEnvelopeV1(envelope);
+  if (validation.valid) {
+    return envelope;
+  }
+
+  return createDirectoryErrorEnvelopeV1(
+    'INVALID_RESPONSE',
+    'Invalid directory response',
+    {
+      retryable: false,
+      details: { issues: validation.issues }
+    }
+  );
+}
+
+ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
+  const validation = validateDirectoryLevelRequestV1(request);
+  if (!validation.valid) {
+    const versionIssue = validation.issues.find(
+      (issue) => issue.path === '$.contractVersion' && issue.code === 'enum'
+    );
+    const sourceIssue = validation.issues.find(
+      (issue) => issue.path === '$.ref.sourceId' && issue.code === 'invariant'
+    );
+    const selectedIssue = versionIssue || sourceIssue || validation.issues[0];
+    const code = versionIssue
+      ? 'UNSUPPORTED_CONTRACT_VERSION'
+      : (sourceIssue ? 'SOURCE_ID_MISMATCH' : 'INVALID_REQUEST');
+    return finalizeDirectoryEnvelopeV1(
+      createDirectoryErrorEnvelopeV1(code, selectedIssue?.message || 'Invalid request', {
+        retryable: false,
+        details: { issues: validation.issues }
+      })
+    );
+  }
+
+  try {
+    const locator = DirectorySnapshotService.resolveDirectoryLocatorV1(validation.value);
+    const isAllowed = await assertApprovedPath(locator.absolutePath, { bootstrapWhenEmpty: true });
+    if (!isAllowed) {
+      return finalizeDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1('PATH_NOT_APPROVED', 'Path not approved', {
+          retryable: false
+        })
+      );
+    }
+    const concurrencyLimit = Math.max(
+      1,
+      Math.min(8, Number(performanceSettings.concurrentTasks) || 5)
+    );
+    const snapshot = await DirectorySnapshotService.scanDirectorySnapshot(locator, {
+      concurrencyLimit
+    });
+    return finalizeDirectoryEnvelopeV1(createDirectorySuccessEnvelopeV1(snapshot));
+  } catch (error) {
+    const sourceCode = error?.code;
+    if (sourceCode === 'INVALID_RESPONSE') {
+      return finalizeDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1(
+          'INVALID_RESPONSE',
+          'Invalid directory response',
+          { retryable: false }
+        )
+      );
+    }
+    if (sourceCode === 'ENOENT' || sourceCode === 'ENOTDIR') {
+      return finalizeDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1(sourceCode, error.message, { retryable: false })
+      );
+    }
+    if (sourceCode === 'EACCES' || sourceCode === 'EPERM') {
+      return finalizeDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1('EACCES', error.message, { retryable: false })
+      );
+    }
+    if (sourceCode === 'EIO' || sourceCode === 'ESTALE' || sourceCode === 'ETIMEDOUT') {
+      return finalizeDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1('IO_ERROR', error.message, { retryable: true })
+      );
+    }
+    if (sourceCode === 'PATH_OUTSIDE_SOURCE' || sourceCode === 'INVALID_REQUEST') {
+      return finalizeDirectoryEnvelopeV1(
+        createDirectoryErrorEnvelopeV1(sourceCode, error.message, { retryable: false })
+      );
+    }
+    return finalizeDirectoryEnvelopeV1(
+      createDirectoryErrorEnvelopeV1('INTERNAL_ERROR', 'Directory scan failed', {
+        retryable: false
+      })
+    );
   }
 });
 

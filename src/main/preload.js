@@ -15,6 +15,7 @@ try {
   CHANNELS = {
     SELECT_DIRECTORY: 'select-directory',
     SCAN_NAVIGATION_LEVEL: 'scan-navigation-level',
+    GET_DIRECTORY_LEVEL_V1: 'get-directory-level-v1',
     RESOLVE_DROPPED_FOLDERS: 'resolve-dropped-folders',
     GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',
     GET_THUMBNAIL: 'get-thumbnail',
@@ -41,6 +42,7 @@ try {
 const INVOKE_CHANNELS = new Set([
   CHANNELS.SELECT_DIRECTORY,
   CHANNELS.SCAN_NAVIGATION_LEVEL,
+  CHANNELS.GET_DIRECTORY_LEVEL_V1,
   CHANNELS.RESOLVE_DROPPED_FOLDERS,
   CHANNELS.GET_IMAGE_THUMBNAIL,
   CHANNELS.GET_THUMBNAIL,
