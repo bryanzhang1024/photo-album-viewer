@@ -226,25 +226,24 @@ describe('useRandomNavigationCoordinator normal draws', () => {
   });
 
   test.each([
-    [null, '当前文件夹缺少来源信息，无法随机浏览'],
-    [SECOND_SOURCE, '当前文件夹的来源信息不匹配，无法随机浏览']
+    [null],
+    [SECOND_SOURCE]
   ])(
-    'keeps canonical random browsing available and reports an invalid SourceRoot before IPC',
-    async (activeSourceRoot, expectedMessage) => {
+    'disables canonical random browsing when the active SourceRoot is invalid',
+    async (activeSourceRoot) => {
       const options = createOptions({ activeSourceRoot });
       const { result } = renderHook(() => useRandomNavigationCoordinator(options));
 
       expect(result.current).toMatchObject({
-        available: true,
+        available: false,
         randomBrowseLoading: false,
-        randomBrowseDisabled: false
+        randomBrowseDisabled: true
       });
       expect(await draw(result)).toBe(false);
 
       expect(options.ipcRenderer.invoke).not.toHaveBeenCalled();
       expect(options.commitTabLocation).not.toHaveBeenCalled();
-      expect(options.onError).toHaveBeenCalledTimes(1);
-      expect(options.onError).toHaveBeenCalledWith(expectedMessage);
+      expect(options.onError).not.toHaveBeenCalled();
     }
   );
 
@@ -252,7 +251,7 @@ describe('useRandomNavigationCoordinator normal draws', () => {
     ['the IPC bridge is missing', null],
     ['invoke is not callable', { invoke: 'unavailable' }]
   ])(
-    'keeps canonical random browsing available when %s and reports the service error without side effects',
+    'disables canonical random browsing when %s',
     async (_label, ipcRenderer) => {
       const options = createOptions({ ipcRenderer });
       const observedLoadingStates = [];
@@ -263,16 +262,15 @@ describe('useRandomNavigationCoordinator normal draws', () => {
       });
 
       expect(result.current).toMatchObject({
-        available: true,
+        available: false,
         randomBrowseLoading: false,
-        randomBrowseDisabled: false
+        randomBrowseDisabled: true
       });
       expect(await draw(result)).toBe(false);
 
       expect(observedLoadingStates).not.toContain(true);
       expect(options.commitTabLocation).not.toHaveBeenCalled();
-      expect(options.onError).toHaveBeenCalledTimes(1);
-      expect(options.onError).toHaveBeenCalledWith('随机浏览服务不可用，请重启应用后重试');
+      expect(options.onError).not.toHaveBeenCalled();
     }
   );
 
@@ -759,6 +757,57 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
       });
     }
   );
+
+  test.each(['SOURCE_NOT_FOUND', 'PATH_NOT_APPROVED', 'ENOENT', 'ENOTDIR'])(
+    'disables random browsing and asks to reopen the source after %s',
+    async (code) => {
+      const invoke = jest.fn().mockResolvedValue(createDirectoryErrorEnvelopeV1(
+        code,
+        'source unavailable',
+        { retryable: false }
+      ));
+      const options = createOptions({ ipcRenderer: { invoke } });
+      const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+      expect(await draw(result)).toBe(false);
+      expect(options.onError).toHaveBeenCalledWith('照片来源不可用，请重新打开来源目录');
+      expect(result.current).toMatchObject({
+        available: false,
+        randomBrowseLoading: false,
+        randomBrowseDisabled: true
+      });
+
+      act(() => result.current.clearAllRandomState());
+      expect(result.current.available).toBe(true);
+    }
+  );
+
+  test('keeps multiple unavailable sources disabled until source state is cleared', async () => {
+    const invoke = jest.fn().mockResolvedValue(createDirectoryErrorEnvelopeV1(
+      'SOURCE_NOT_FOUND',
+      'source unavailable',
+      { retryable: false }
+    ));
+    const createSourceOptions = (source) => {
+      const activeTab = createTab('tab-a', 'S', 'browse', source.sourceId);
+      return createOptions({ activeTab, activeSourceRoot: source, ipcRenderer: { invoke } });
+    };
+    const { result, rerender } = renderHook(
+      (options) => useRandomNavigationCoordinator(options),
+      { initialProps: createSourceOptions(SOURCE) }
+    );
+
+    expect(await draw(result)).toBe(false);
+    expect(result.current.available).toBe(false);
+
+    rerender(createSourceOptions(SECOND_SOURCE));
+    expect(result.current.available).toBe(true);
+    expect(await draw(result)).toBe(false);
+    expect(result.current.available).toBe(false);
+
+    rerender(createSourceOptions(SOURCE));
+    expect(result.current.available).toBe(false);
+  });
 
   test('does not consume the bag when the active tab changes during validation', async () => {
     const validation = createDeferred();

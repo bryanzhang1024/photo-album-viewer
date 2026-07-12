@@ -382,18 +382,6 @@ function createNavigationErrorEnvelopeV1(code, message, options = {}) {
   return { contractVersion: NAVIGATION_CONTRACT_VERSION, ok: false, error };
 }
 
-function toCanonicalViewMode(value) {
-  if (value === 'folder') return 'browse';
-  if (value === 'album') return 'photoSet';
-  return NAVIGATION_VIEW_MODES.includes(value) ? value : null;
-}
-
-function toLegacyViewMode(value) {
-  if (value === 'browse') return 'folder';
-  if (value === 'photoSet') return 'album';
-  return null;
-}
-
 module.exports = {
   NAVIGATION_CONTRACT_VERSION,
   NAVIGATION_VIEW_MODES,
@@ -402,8 +390,6 @@ module.exports = {
   createNavigationSuccessEnvelopeV1,
   normalizeSourceIdV1,
   sourceIdsEqualV1,
-  toCanonicalViewMode,
-  toLegacyViewMode,
   validateLoadSourceRootsRequestV1,
   validateNavigationTargetV1,
   validateSaveSourceRootRequestV1,

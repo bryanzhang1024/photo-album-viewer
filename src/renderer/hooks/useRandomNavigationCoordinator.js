@@ -22,6 +22,13 @@ const STALE_TARGET_MESSAGE = '随机目标已变化，请刷新后重试';
 const MISSING_SOURCE_MESSAGE = '当前文件夹缺少来源信息，无法随机浏览';
 const MISMATCHED_SOURCE_MESSAGE = '当前文件夹的来源信息不匹配，无法随机浏览';
 const UNAVAILABLE_SERVICE_MESSAGE = '随机浏览服务不可用，请重启应用后重试';
+const REOPEN_SOURCE_MESSAGE = '照片来源不可用，请重新打开来源目录';
+const SOURCE_ACCESS_ERRORS = new Set([
+  'SOURCE_NOT_FOUND',
+  'PATH_NOT_APPROVED',
+  'ENOENT',
+  'ENOTDIR'
+]);
 
 function getTabSourceIdentity(tab) {
   const sourceId = tab?.location?.kind === 'directory'
@@ -92,6 +99,7 @@ export function useRandomNavigationCoordinator({
   const activeTabIdRef = useRef(activeTabId);
   const activeTabRef = useRef(activeTab);
   const [loadingTabIds, setLoadingTabIds] = useState(() => new Set());
+  const [blockedSourceKeys, setBlockedSourceKeys] = useState(() => new Set());
   const [, setCacheRevision] = useState(0);
 
   activeTabIdRef.current = activeTabId;
@@ -101,9 +109,20 @@ export function useRandomNavigationCoordinator({
     () => getRandomNavigationContext(activeTab?.location),
     [activeTab]
   );
+  const activeSourceKey = activeSourceRoot
+    ? [
+      activeSourceRoot.sourceId?.toLowerCase(),
+      activeSourceRoot.sourceGeneration,
+      activeSourceRoot.rootPath
+    ].join(':')
+    : null;
   const available = Boolean(
     activeTabId
     && activeContext
+    && activeSourceRoot
+    && sourceIdsEqualV1(activeSourceRoot.sourceId, activeContext.scopeRef.sourceId)
+    && typeof ipcRenderer?.invoke === 'function'
+    && !blockedSourceKeys.has(activeSourceKey)
   );
   const activeLocationIdentity = getBrowserLocationIdentity(activeTab?.location);
   const observedActiveIdentityRef = useRef({
@@ -325,7 +344,16 @@ export function useRandomNavigationCoordinator({
       return false;
     } catch (error) {
       if (!operationStillMatches()) return false;
-      onError?.(error.message || '目录扫描失败');
+      if (SOURCE_ACCESS_ERRORS.has(error?.code)) {
+        setBlockedSourceKeys((current) => {
+          const next = new Set(current);
+          next.add(activeSourceKey);
+          return next;
+        });
+        onError?.(REOPEN_SOURCE_MESSAGE);
+      } else {
+        onError?.(error.message || '目录扫描失败');
+      }
       return false;
     } finally {
       releaseLoadingOwner(capturedTabId, operationToken);
@@ -333,6 +361,7 @@ export function useRandomNavigationCoordinator({
   }, [
     activeContext,
     activeSourceRoot,
+    activeSourceKey,
     activeTab,
     activeTabId,
     available,
@@ -371,6 +400,7 @@ export function useRandomNavigationCoordinator({
     globalEpochRef.current += 1;
     randomStateByTabRef.current.clear();
     loadingOwnersByTabRef.current.clear();
+    setBlockedSourceKeys(new Set());
     setLoadingTabIds(new Set());
     setCacheRevision((revision) => revision + 1);
   }, []);

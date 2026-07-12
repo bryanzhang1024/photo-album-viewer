@@ -6,8 +6,6 @@ const {
   createNavigationSuccessEnvelopeV1,
   normalizeSourceIdV1,
   sourceIdsEqualV1,
-  toCanonicalViewMode,
-  toLegacyViewMode,
   validateLoadSourceRootsRequestV1,
   validateNavigationTargetV1,
   validateSaveSourceRootRequestV1,
@@ -200,13 +198,4 @@ describe('navigation-contract-v1', () => {
     }).valid).toBe(false);
   });
 
-  test('maps canonical and legacy view names without accepting unrelated values', () => {
-    expect(toCanonicalViewMode('folder')).toBe('browse');
-    expect(toCanonicalViewMode('album')).toBe('photoSet');
-    expect(toCanonicalViewMode('browse')).toBe('browse');
-    expect(toLegacyViewMode('browse')).toBe('folder');
-    expect(toLegacyViewMode('photoSet')).toBe('album');
-    expect(toCanonicalViewMode('grid')).toBeNull();
-    expect(toLegacyViewMode('grid')).toBeNull();
-  });
 });

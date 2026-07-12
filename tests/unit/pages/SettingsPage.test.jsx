@@ -44,6 +44,15 @@ jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
 }));
 
 const SettingsPage = require('../../../src/renderer/pages/SettingsPage').default;
+const CHANNELS = require('../../../src/common/ipc-channels');
+
+const SOURCE = {
+  sourceId: 'src_11111111-1111-4111-8111-111111111111',
+  rootPath: '/Photos',
+  label: 'Photos',
+  createdAt: '2026-07-12T00:00:00.000Z',
+  updatedAt: '2026-07-12T00:00:00.000Z'
+};
 
 describe('SettingsPage sorting preferences', () => {
   beforeEach(() => {
@@ -86,6 +95,57 @@ describe('SettingsPage sorting preferences', () => {
 
     await waitFor(() => {
       expect(global.electronMock.ipcRenderer.invoke).toHaveBeenCalled();
+    });
+  });
+
+  test('registers a selected directory as a SourceRoot without writing a legacy default path', async () => {
+    localStorage.setItem('lastRootPath_default', '/Legacy');
+    global.electronMock.ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Photos');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve({ contractVersion: 1, ok: true, data: { source: SOURCE, created: true } });
+      }
+      return Promise.resolve({ success: true });
+    });
+
+    render(<SettingsPage colorMode={{ mode: 'light', toggleColorMode: jest.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: '注册照片来源' }));
+
+    await waitFor(() => {
+      expect(global.electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SAVE_SOURCE_ROOT_V1,
+        { contractVersion: 1, sourceId: null, rootPath: '/Photos', label: null }
+      );
+    });
+    expect(localStorage.getItem('lastRootPath_default')).toBe('/Legacy');
+  });
+
+  test('opens a selected directory in a new window with a canonical target', async () => {
+    global.electronMock.ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Photos');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve({ contractVersion: 1, ok: true, data: { source: SOURCE, created: true } });
+      }
+      if (channel === CHANNELS.CREATE_NEW_INSTANCE) return Promise.resolve({ success: true });
+      return Promise.resolve({ success: true });
+    });
+
+    render(<SettingsPage colorMode={{ mode: 'light', toggleColorMode: jest.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: '在新窗口中打开' }));
+
+    await waitFor(() => {
+      expect(global.electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.CREATE_NEW_INSTANCE,
+        {
+          contractVersion: 1,
+          target: {
+            sourceId: SOURCE.sourceId,
+            relativePath: '',
+            viewMode: 'browse',
+            initialMediaRelativePath: null
+          }
+        }
+      );
     });
   });
 });

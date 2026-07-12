@@ -40,7 +40,7 @@ describe('BrowserLocation domain', () => {
       sourceRoot,
       absolutePath: '/Volumes/Photos/2026/旅行',
       rootPath: '/Volumes/Photos',
-      legacyViewMode: 'album',
+      pageViewMode: 'album',
       absoluteInitialImage: '/Volumes/Photos/2026/旅行/001.jpg'
     });
   });
@@ -120,7 +120,7 @@ describe('BrowserLocation domain', () => {
       .not.toBe(getBrowserLocationIdentity(locationB));
   });
 
-  test('encodes legacy and app locations as fixed tuples', () => {
+  test('rejects legacy locations and keeps app locations as fixed tuples', () => {
     const legacyA = {
       kind: 'legacyAbsolute',
       legacyAbsolutePath: '/aa',
@@ -134,10 +134,8 @@ describe('BrowserLocation domain', () => {
       legacyInitialMediaPath: '/aa/y'
     };
 
-    expect(isBrowserLocation(legacyA)).toBe(true);
-    expect(isBrowserLocation(legacyB)).toBe(true);
-    expect(getBrowserLocationIdentity(legacyA))
-      .not.toBe(getBrowserLocationIdentity(legacyB));
+    expect(isBrowserLocation(legacyA)).toBe(false);
+    expect(isBrowserLocation(legacyB)).toBe(false);
     expect(getBrowserLocationIdentity({ kind: 'landing' }))
       .toBe(JSON.stringify(['landing']));
     expect(getBrowserLocationIdentity({ kind: 'favorites' }))
@@ -180,26 +178,6 @@ describe('BrowserLocation domain', () => {
       }
     });
     expect(getParentBrowserLocation(root)).toBe(root);
-  });
-
-  test.each([
-    ['/Photos/2026/Trip', '/Photos/2026'],
-    ['C:\\Photos\\2026\\Trip', 'C:/Photos/2026'],
-    ['\\\\NAS\\Photos\\2026\\Trip', '//NAS/Photos/2026']
-  ])('keeps OS root semantics when navigating a legacy path parent: %s', (path, parentPath) => {
-    const location = {
-      kind: 'legacyAbsolute',
-      legacyAbsolutePath: path,
-      viewMode: 'album',
-      legacyInitialMediaPath: `${path}/cover.jpg`
-    };
-
-    expect(getParentBrowserLocation(location)).toEqual({
-      kind: 'legacyAbsolute',
-      legacyAbsolutePath: parentPath,
-      viewMode: 'folder',
-      legacyInitialMediaPath: null
-    });
   });
 
   test.each([
@@ -247,13 +225,13 @@ describe('BrowserLocation domain', () => {
       legacyAbsolutePath: '/Photos/Trip',
       viewMode: 'folder',
       legacyInitialMediaPath: null
-    })).toBe(true);
+    })).toBe(false);
     expect(isBrowserLocation({
       kind: 'legacyAbsolute',
       legacyAbsolutePath: '/Photos/Trip',
       viewMode: 'album',
       legacyInitialMediaPath: 'cover.jpg'
-    })).toBe(true);
+    })).toBe(false);
 
     expect(isBrowserLocation({ ...createDirectoryLocation(), rootPath: '/Volumes/Photos' }))
       .toBe(false);

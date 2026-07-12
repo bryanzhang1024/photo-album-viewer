@@ -57,7 +57,7 @@ describe('SourceRoot V1 IPC', () => {
     expect(CHANNELS.LOAD_SOURCE_ROOTS_V1).toBe('load-source-roots-v1');
     expect(CHANNELS.SAVE_SOURCE_ROOT_V1).toBe('save-source-root-v1');
     expect(createSourceRootService).toHaveBeenCalledWith({
-      registryPath: path.join('/mock/userData', 'library-sources.json')
+      registryPath: path.join('/mock/userData', 'library-sources-v3.json')
     });
     expect(electron.ipcMain._handlers.has(CHANNELS.LOAD_SOURCE_ROOTS_V1)).toBe(true);
     expect(electron.ipcMain._handlers.has(CHANNELS.SAVE_SOURCE_ROOT_V1)).toBe(true);
@@ -268,14 +268,8 @@ describe('SourceRoot V1 IPC', () => {
   test.each([
     ['CREATE_NEW_WINDOW', 'create-new-window'],
     ['CREATE_NEW_INSTANCE', 'create-new-instance']
-  ])('%s retains the legacy absolute string payload', async (_channelKey, channelName) => {
+  ])('%s rejects a legacy absolute string payload', async (_channelKey, channelName) => {
     const legacyPath = '/Photos/Legacy Trip';
-    const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockResolvedValue({
-      isDirectory: () => true
-    });
-    jest.spyOn(fs, 'writeFile').mockImplementation((filePath, data, encoding, callback) => {
-      callback(null);
-    });
     const resolveNavigationTarget = jest.fn();
     const { electron } = setupMainProcess({
       sourceRootService: { resolveNavigationTarget }
@@ -289,10 +283,9 @@ describe('SourceRoot V1 IPC', () => {
 
     const result = await electron.ipcMain.invoke(channelName, legacyPath);
 
-    expect(result).toMatchObject({ success: true, windowId: 702 });
+    expect(result).toEqual({ success: false, error: 'Invalid window launch target' });
     expect(resolveNavigationTarget).not.toHaveBeenCalled();
-    expect(WindowService.createWindow).toHaveBeenCalledWith(legacyPath);
-    expect(approvedRootStat).toHaveBeenCalledWith(legacyPath);
+    expect(WindowService.createWindow).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -351,7 +344,7 @@ describe('SourceRoot V1 IPC', () => {
       });
       expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup');
       expect(approvedRootsWrite).toHaveBeenCalledWith(
-        path.join('/mock/userData', 'approved-roots.json'),
+        path.join('/mock/userData', 'approved-roots-v3.json'),
         expect.stringContaining('/Photos/Startup'),
         'utf8',
         expect.any(Function)
@@ -367,7 +360,7 @@ describe('SourceRoot V1 IPC', () => {
     }
   });
 
-  test('startup --folder fallback still opens a legacy window when root registration fails', async () => {
+  test('startup --folder opens landing instead of a legacy target when registration fails', async () => {
     const originalArgv = process.argv;
     process.argv = ['electron', '.', '--folder=/Photos/Startup-Fallback'];
     mockMissingApprovedRootsFile();
@@ -395,7 +388,7 @@ describe('SourceRoot V1 IPC', () => {
         label: null
       });
       expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup-Fallback');
-      expect(WindowService.createWindow).toHaveBeenCalledWith('/Photos/Startup-Fallback');
+      expect(WindowService.createWindow).toHaveBeenCalledWith(null);
     } finally {
       process.argv = originalArgv;
     }
@@ -448,7 +441,7 @@ describe('SourceRoot V1 IPC', () => {
     expect(approvedRootStat).toHaveBeenCalledWith('/Photos/CLI');
   });
 
-  test('second-instance --folder falls back to the legacy target when SourceRoot save fails', async () => {
+  test('second-instance --folder does not open a legacy window when SourceRoot save fails', async () => {
     const appHandlers = new Map();
     const saveSourceRoot = jest.fn().mockRejectedValue(new Error('registry unavailable'));
     const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockResolvedValue({
@@ -486,11 +479,11 @@ describe('SourceRoot V1 IPC', () => {
     });
     expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Fallback');
     expect(approvedRootsWrite).toHaveBeenCalledWith(
-      path.join('/mock/userData', 'approved-roots.json'),
+      path.join('/mock/userData', 'approved-roots-v3.json'),
       expect.stringContaining('/Photos/Fallback'),
       'utf8',
       expect.any(Function)
     );
-    expect(WindowService.createWindow).toHaveBeenCalledWith('/Photos/Fallback');
+    expect(WindowService.createWindow).not.toHaveBeenCalled();
   });
 });

@@ -284,7 +284,7 @@ function buildRootUrl() {
   const params = new URLSearchParams({
     sourceId: SOURCE_ID,
     relativePath: '',
-    view: 'folder'
+    view: 'browse'
   });
   return `/browse?${params.toString()}`;
 }
@@ -323,7 +323,7 @@ function readCanonicalRoute() {
 }
 
 function readActiveSessionTarget() {
-  const session = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+  const session = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
   return session.tabs.find((tab) => tab.id === session.activeTabId).location.target;
 }
 
@@ -364,7 +364,7 @@ async function waitForHydratedHome() {
     expect(screen.getByText('共 3 个相簿, 1 张照片')).toBeInTheDocument();
   });
   await waitFor(() => {
-    expect(localStorage.getItem('browser_tabs_session_v2')).not.toBeNull();
+    expect(localStorage.getItem('browser_tabs_session_v3')).not.toBeNull();
   });
 }
 
@@ -429,7 +429,7 @@ describe('BrowserPage real random-navigation integration', () => {
     jest.restoreAllMocks();
   });
 
-  test('shows a BrowserPage Snackbar instead of using the legacy draw when a canonical source is missing', async () => {
+  test('disables random browsing when a canonical source is missing', async () => {
     ipcRenderer.invoke.mockImplementation((channel, ...args) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve({
@@ -450,18 +450,17 @@ describe('BrowserPage real random-navigation integration', () => {
 
     renderBrowser();
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).not.toBeNull();
+      expect(localStorage.getItem('browser_tabs_session_v3')).not.toBeNull();
       expect(screen.getByRole('button', { name: '视图选项' })).toBeInTheDocument();
     });
-    const initialRoute = readCanonicalRoute();
-
-    await clickRandomBrowse();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '当前文件夹缺少来源信息，无法随机浏览'
-    );
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
+    expect(await screen.findByRole('button', { name: '随机当前文件夹 (E)' })).toBeDisabled();
     expect(canonicalRequests).toEqual([]);
-    expect(readCanonicalRoute()).toEqual(initialRoute);
+    expect(readCanonicalRoute()).toEqual({
+      pathname: '/',
+      relativePath: null,
+      view: null
+    });
   });
 
   test('keeps one canonical round across real pages and preserves folder/hybrid view modes', async () => {
@@ -475,7 +474,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'A',
-        view: 'album'
+        view: 'photoSet'
       });
     });
     expect(screen.getByText('共 1 张照片')).toBeInTheDocument();
@@ -485,7 +484,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'B',
-        view: 'album'
+        view: 'photoSet'
       });
     });
 
@@ -494,7 +493,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'C',
-        view: 'folder'
+        view: 'browse'
       });
       expect(readActiveSessionTarget()).toMatchObject({
         relativePath: 'C',
@@ -508,7 +507,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: '',
-        view: 'folder'
+        view: 'browse'
       });
     });
 
@@ -517,7 +516,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'D',
-        view: 'album'
+        view: 'photoSet'
       });
       expect(readActiveSessionTarget()).toMatchObject({
         relativePath: 'D',
@@ -558,7 +557,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: '',
-        view: 'folder'
+        view: 'browse'
       });
     });
 
@@ -588,7 +587,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'B',
-        view: 'album'
+        view: 'photoSet'
       });
     });
 
@@ -599,7 +598,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'C',
-        view: 'folder'
+        view: 'browse'
       });
     });
 
@@ -610,7 +609,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'D',
-        view: 'album'
+        view: 'photoSet'
       });
     });
 
@@ -651,7 +650,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'D',
-        view: 'album'
+        view: 'photoSet'
       });
     });
 
@@ -664,7 +663,7 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(readCanonicalRoute()).toEqual({
         pathname: '/browse',
         relativePath: 'C',
-        view: 'folder'
+        view: 'browse'
       });
     });
 
@@ -692,11 +691,11 @@ describe('BrowserPage real random-navigation integration', () => {
       expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
     });
     await waitFor(() => {
-      const session = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const session = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
       expect(new Set(session.tabs.map((tab) => tab.id)).size).toBe(2);
       expect(session.tabs.map((tab) => tab.location.target.relativePath)).toEqual(['', '']);
     });
-    const closedTabId = JSON.parse(localStorage.getItem('browser_tabs_session_v2')).tabs[1].id;
+    const closedTabId = JSON.parse(localStorage.getItem('browser_tabs_session_v3')).tabs[1].id;
 
     await clickRandomBrowse();
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe('A'));
@@ -731,7 +730,7 @@ describe('BrowserPage real random-navigation integration', () => {
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe('A'));
 
     await waitFor(() => {
-      const session = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const session = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
       expect(session.tabs.map((tab) => tab.id)).not.toContain(closedTabId);
       expect(session.tabs[1].location.target.relativePath).toBe('A');
     });
@@ -747,7 +746,7 @@ describe('BrowserPage real random-navigation integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '标签页列表' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '保存当前标签组' }));
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_snapshot_v2')).not.toBeNull();
+      expect(localStorage.getItem('browser_tabs_snapshot_v3')).not.toBeNull();
       expect(screen.getByText('已保存 1 个标签页')).toBeInTheDocument();
     });
 

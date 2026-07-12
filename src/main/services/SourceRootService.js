@@ -10,7 +10,6 @@ const {
   validateSourceRootV1
 } = require('../../common/contracts/navigation-contract-v1');
 const {
-  findUniqueLongestSourceRoot,
   getPortableRelativePath,
   normalizeAbsolutePath,
   resolvePortableRelativePath
@@ -399,29 +398,10 @@ function createSourceRootService({
     };
   }
 
-  function matchLegacyAbsolutePath(absolutePath) {
-    if (corruptionError) throw corruptionError;
-    if (!initialized) {
-      throw createServiceError(
-        'SOURCE_ROOT_SERVICE_NOT_INITIALIZED',
-        'SourceRoot service must be initialized before matching paths'
-      );
-    }
-    const match = findUniqueLongestSourceRoot(sources, absolutePath);
-    if (match.status === 'resolved') {
-      return { ...match, source: cloneSource(match.source) };
-    }
-    if (match.status === 'ambiguous') {
-      return { ...match, sources: cloneSources(match.sources) };
-    }
-    return match;
-  }
-
   return {
     getSourceRoot,
     initialize,
     listSourceRoots,
-    matchLegacyAbsolutePath,
     resolveNavigationTarget,
     saveSourceRoot
   };

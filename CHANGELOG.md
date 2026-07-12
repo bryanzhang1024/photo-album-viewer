@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0] - 2026-07-12
+
+- 导航状态切换到 v3 命名空间：`library-sources-v3.json`、`approved-roots-v3.json`、`browser_tabs_session_v3` 与 `browser_tabs_snapshot_v3`；首次启动幂等清理旧来源、授权与 v1/v2 标签状态，同时保留收藏、偏好、照片和缩略图缓存。
+- `BrowserLocation` 仅保留 `directory`、`favorites` 与 `landing`；删除绝对路径 location、旧深链恢复、页面级路径迁移和新窗口字符串 payload，所有目录入口必须先注册或唯一匹配 `SourceRoot`。
+- canonical URL 直接使用 `browse | photoSet` 视图模式；来源注册失败、收藏无法匹配或来源离线时保持当前位置并提示重新打开来源，不再回退到绝对路径导航。
+- Home 与 Album 删除页面级随机袋 fallback；随机浏览仅由 canonical coordinator 使用 `DirectorySnapshot` 当前层直接子目录候选池执行，保持 folder=`browse`、photo-only/hybrid=`photoSet` 和一轮无放回语义。
+
 ## [2.8.0] - 2026-07-12
 
 - Home 与 Album 的“随机浏览”统一使用每个标签页独立的无放回队列；同一当前层级候选池在一轮耗尽前不重复，跨页面切换继续消费该标签页的剩余队列，且随机状态不写入 session 或 snapshot。

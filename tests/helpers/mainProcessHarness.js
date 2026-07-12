@@ -126,6 +126,9 @@ const setupMainProcess = ({
   jest.doMock('../../src/main/services/SourceRootService', () => ({
     createSourceRootService
   }));
+  jest.doMock('../../src/main/services/NavigationStateCutover', () => ({
+    resetLegacyNavigationFiles: jest.fn(() => Promise.resolve({ removed: [], failed: [] }))
+  }));
 
   require('../../src/main/main');
   return {

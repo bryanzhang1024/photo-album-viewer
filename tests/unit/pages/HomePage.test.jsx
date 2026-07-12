@@ -81,8 +81,6 @@ jest.mock('../../../src/renderer/hooks/useSorting', () =>
   }))
 );
 
-jest.mock('../../../src/renderer/hooks/useShuffleBag', () => jest.fn());
-
 jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
   __esModule: true,
   default: {
@@ -96,23 +94,10 @@ const reactRouter = require('react-router-dom');
 const { ScrollPositionContext } = require('../../../src/renderer/App');
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
 const { useSettings } = require('../../../src/renderer/contexts/SettingsContext');
-const useShuffleBag = require('../../../src/renderer/hooks/useShuffleBag');
 const HomePage = require('../../../src/renderer/pages/HomePage').default;
 const BreadcrumbNavigation = require('../../../src/renderer/components/BreadcrumbNavigation');
 const CHANNELS = require('../../../src/common/ipc-channels');
 const ipcRenderer = global.electronMock.ipcRenderer;
-
-let drawRandomAlbum;
-let resetRandomBag;
-
-beforeEach(() => {
-  drawRandomAlbum = jest.fn();
-  resetRandomBag = jest.fn();
-  useShuffleBag.mockReturnValue({
-    drawNext: drawRandomAlbum,
-    resetBag: resetRandomBag
-  });
-});
 
 const SOURCE_ID = 'src_11111111-1111-4111-8111-111111111111';
 
@@ -224,7 +209,6 @@ describe('HomePage refresh button', () => {
   test('routes the toolbar random action through the canonical coordinator without local navigation', async () => {
     const onRandomBrowse = jest.fn().mockResolvedValue(undefined);
     const onAlbumClick = jest.fn();
-    drawRandomAlbum.mockReturnValue({ path: '/photos/local', name: 'local' });
     ipcRenderer.invoke.mockResolvedValue({
       success: true,
       currentPath: '/photos',
@@ -269,7 +253,6 @@ describe('HomePage refresh button', () => {
       expect(onRandomBrowse).toHaveBeenCalledTimes(1);
     });
     expect(onRandomBrowse.mock.calls).toEqual([[]]);
-    expect(drawRandomAlbum).not.toHaveBeenCalled();
     expect(onAlbumClick).not.toHaveBeenCalled();
   });
 
@@ -310,7 +293,6 @@ describe('HomePage refresh button', () => {
     expect(onRandomScopeRefresh).toHaveBeenCalledTimes(1);
     expect(onRandomScopeRefresh.mock.invocationCallOrder[0])
       .toBeLessThan(ipcRenderer.invoke.mock.invocationCallOrder[0]);
-    expect(resetRandomBag).not.toHaveBeenCalled();
     expect(onRandomBrowse).not.toHaveBeenCalled();
   });
 
@@ -364,9 +346,8 @@ describe('HomePage refresh button', () => {
     expect(onRandomBrowse).not.toHaveBeenCalled();
   });
 
-  test('keeps the page-local random adapter when the canonical coordinator is absent', async () => {
+  test('disables random browsing when the canonical coordinator is absent', async () => {
     const onAlbumClick = jest.fn();
-    drawRandomAlbum.mockReturnValue({ path: '/photos/local', name: 'local' });
     ipcRenderer.invoke.mockResolvedValue({
       success: true,
       currentPath: '/photos',
@@ -405,9 +386,11 @@ describe('HomePage refresh button', () => {
 
     expect(await screen.findByText('local')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
+    const randomButton = screen.getByRole('button', { name: '随机当前文件夹 (E)' });
 
-    expect(onAlbumClick).toHaveBeenCalledWith('/photos/local', 'local');
+    expect(randomButton).toBeDisabled();
+    fireEvent.click(randomButton);
+    expect(onAlbumClick).not.toHaveBeenCalled();
   });
 
   test('leaves page random refresh and navigation callbacks untouched while the viewer owns E and R', async () => {
@@ -466,7 +449,6 @@ describe('HomePage refresh button', () => {
     expect(onRandomScopeRefresh).not.toHaveBeenCalled();
     expect(onAlbumClick).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
-    expect(resetRandomBag).not.toHaveBeenCalled();
     expect(imageCache.clearType).not.toHaveBeenCalled();
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
@@ -496,7 +478,7 @@ describe('HomePage refresh button', () => {
   });
 
   test.each(SOURCE_BOUNDARY_CASES)(
-    'renders %s breadcrumbs from the SourceRoot boundary while keeping legacy content scan',
+    'renders %s breadcrumbs from the SourceRoot boundary while keeping content scan',
     async (_name, sourceBoundary, currentPath, sourceBreadcrumbs) => {
       ipcRenderer.invoke.mockImplementation((channel, targetPath) => {
         if (channel === CHANNELS.SCAN_NAVIGATION_LEVEL) {

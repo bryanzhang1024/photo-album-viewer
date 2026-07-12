@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { createWindow, getMainWindow, windows } = require('./services/WindowService');
 const FileSystemService = require('./services/FileSystemService');
 const DirectorySnapshotService = require('./services/DirectorySnapshotService');
+const { resetLegacyNavigationFiles } = require('./services/NavigationStateCutover');
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
 const { createSourceRootService } = require('./services/SourceRootService');
@@ -28,12 +29,11 @@ const {
   validateSaveSourceRootRequestV1,
   validateSourceRootsEnvelopeV1
 } = require('../common/contracts/navigation-contract-v1');
-const { getRootPathFlavor } = require('../common/path-codec');
 
 FavoritesService.registerIpcHandlers();
 
 const sourceRootService = createSourceRootService({
-  registryPath: path.join(app.getPath('userData'), 'library-sources.json')
+  registryPath: path.join(app.getPath('userData'), 'library-sources-v3.json')
 });
 
 const readdir = promisify(fs.readdir);
@@ -65,7 +65,7 @@ const THUMBNAIL_PROTOCOL_PREFIX = 'thumbnail-protocol://';
 const LOCAL_IMAGE_PROTOCOL_PREFIX = 'local-image-protocol://';
 const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff']);
 const DELETE_IMAGE_EXTENSIONS = new Set(FileSystemService.SUPPORTED_FORMATS || ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
-const APPROVED_ROOTS_FILE = path.join(app.getPath('userData'), 'approved-roots.json');
+const APPROVED_ROOTS_FILE = path.join(app.getPath('userData'), 'approved-roots-v3.json');
 const approvedRoots = new Set();
 let approvedRootsLoaded = false;
 
@@ -229,7 +229,7 @@ function createRootNavigationTarget(source) {
 }
 
 async function createFolderLaunchTarget(folderPath) {
-  let launchTarget = folderPath;
+  let launchTarget = null;
   try {
     const { source } = await sourceRootService.saveSourceRoot({
       sourceId: null,
@@ -238,7 +238,7 @@ async function createFolderLaunchTarget(folderPath) {
     });
     launchTarget = createRootNavigationTarget(source);
   } catch (error) {
-    console.warn('[SourceRoot] 创建来源失败，回退到旧路径启动:', error?.message || error);
+    console.warn('[SourceRoot] 创建来源失败:', error?.message || error);
   }
   await registerApprovedRoot(folderPath);
   return launchTarget;
@@ -269,6 +269,11 @@ if (!gotTheLock) {
     const launchTarget = albumPath
       ? await createFolderLaunchTarget(albumPath)
       : null;
+
+    if (albumPath && !launchTarget) {
+      dialog.showErrorBox?.('打开来源失败', '无法建立照片来源，请检查目录是否可访问。');
+      return;
+    }
 
     // 创建新窗口
     const newWindow = createWindow(launchTarget);
@@ -320,6 +325,10 @@ const handleCommandLine = () => {
 };
 
 app.whenReady().then(async () => {
+  const cleanup = await resetLegacyNavigationFiles(app.getPath('userData'));
+  for (const { fileName, error } of cleanup.failed) {
+    console.warn(`[Navigation v3] 清理旧导航文件失败: ${fileName}`, error?.message || error);
+  }
   await loadApprovedRoots();
   await ThumbnailService.ensureCacheDir(); // 使用ThumbnailService
 
@@ -410,6 +419,9 @@ app.whenReady().then(async () => {
   const launchTarget = initialPath
     ? await createFolderLaunchTarget(initialPath)
     : null;
+  if (initialPath && !launchTarget) {
+    dialog.showErrorBox?.('打开来源失败', '无法建立照片来源，应用将打开空白主页。');
+  }
 
   createWindow(launchTarget);
   
@@ -1032,13 +1044,6 @@ function parseWindowLaunchPayload(payload, { allowEmpty = false } = {}) {
     throw invalidWindowLaunchTarget();
   }
 
-  if (typeof payload === 'string') {
-    if (getRootPathFlavor(payload) === null) {
-      throw invalidWindowLaunchTarget();
-    }
-    return { kind: 'legacy', launchTarget: payload, absolutePath: payload };
-  }
-
   if (typeof payload !== 'object' || Array.isArray(payload)) {
     throw invalidWindowLaunchTarget();
   }
@@ -1075,21 +1080,9 @@ async function resolveWindowLaunchPayload(payload, options) {
     return null;
   }
 
-  if (parsed.kind === 'canonical') {
-    const resolved = await sourceRootService.resolveNavigationTarget(parsed.launchTarget);
-    const isAllowed = await assertApprovedPath(resolved.absolutePath, { bootstrapWhenEmpty: true });
-    if (!isAllowed) {
-      throw new Error('访问路径不在已授权照片目录范围内');
-    }
-    return parsed.launchTarget;
-  }
-
-  const isAllowed = await assertApprovedPath(parsed.absolutePath, { bootstrapWhenEmpty: true });
+  const resolved = await sourceRootService.resolveNavigationTarget(parsed.launchTarget);
+  const isAllowed = await assertApprovedPath(resolved.absolutePath, { bootstrapWhenEmpty: true });
   if (!isAllowed) {
-    throw new Error('访问路径不在已授权照片目录范围内');
-  }
-  await registerApprovedRoot(parsed.absolutePath);
-  if (!isPathWithinApprovedRoots(parsed.absolutePath)) {
     throw new Error('访问路径不在已授权照片目录范围内');
   }
   return parsed.launchTarget;

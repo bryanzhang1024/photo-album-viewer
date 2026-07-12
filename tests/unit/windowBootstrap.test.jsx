@@ -42,15 +42,9 @@ function renderGeneratedHash(windowUrl) {
 }
 
 describe('window HashRouter bootstrap', () => {
-  test('exposes a generated legacy initialPath through useLocation.search', () => {
-    const legacyPath = '/Photos/旅行 100%';
-    const windowUrl = buildWindowUrl('http://localhost:3000/', legacyPath);
-
-    renderGeneratedHash(windowUrl);
-
-    const search = screen.getByTestId('location-search').textContent;
-    expect(search).toContain('initialPath=');
-    expect(new URLSearchParams(search).get('initialPath')).toBe(legacyPath);
+  test('rejects a legacy initialPath launch target', () => {
+    expect(() => buildWindowUrl('http://localhost:3000/', '/Photos/旅行 100%'))
+      .toThrow('Invalid window launch target');
   });
 
   test('exposes a generated canonical sourceId through useLocation.search', () => {

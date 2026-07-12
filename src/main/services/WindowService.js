@@ -5,7 +5,6 @@ const http = require('http');
 const {
   validateNavigationTargetV1
 } = require('../../common/contracts/navigation-contract-v1');
-const { getRootPathFlavor } = require('../../common/path-codec');
 
 let mainWindow;
 const windows = new Set();
@@ -15,21 +14,17 @@ function buildWindowUrl(startUrl, launchTarget = null) {
     return startUrl;
   }
 
-  const params = new URLSearchParams();
   if (typeof launchTarget === 'string') {
-    if (getRootPathFlavor(launchTarget) === null) {
-      throw new TypeError('Invalid window launch target');
-    }
-    params.set('initialPath', launchTarget);
-    return `${startUrl}#/browse?${params.toString()}`;
+    throw new TypeError('Invalid window launch target');
   }
 
   if (!validateNavigationTargetV1(launchTarget).valid) {
     throw new TypeError('Invalid window launch target');
   }
+  const params = new URLSearchParams();
   params.set('sourceId', launchTarget.sourceId);
   params.set('relativePath', launchTarget.relativePath);
-  if (launchTarget.viewMode === 'photoSet') params.set('view', 'album');
+  params.set('view', launchTarget.viewMode);
   if (launchTarget.initialMediaRelativePath) {
     params.set('image', launchTarget.initialMediaRelativePath);
   }
