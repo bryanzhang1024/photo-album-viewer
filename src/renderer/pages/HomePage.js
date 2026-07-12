@@ -51,6 +51,10 @@ function HomePage({
   onAlbumClick = null,
   onFolderClick = null,
   onOpenFavoritesInNewTab = null,
+  onRandomBrowse = null,
+  onRandomScopeRefresh = null,
+  randomBrowseLoading = false,
+  randomBrowseDisabled = false,
   sourceBoundary = null,
   sourceBreadcrumbs = null,
   urlMode = false,
@@ -471,11 +475,15 @@ function HomePage({
   const handleRefresh = useCallback(() => {
     const refreshTargetPath = currentPath || rootPath;
     if (refreshTargetPath) {
-      resetRandomBag();
+      if (onRandomBrowse) {
+        onRandomScopeRefresh?.();
+      } else {
+        resetRandomBag();
+      }
       imageCache.clearType('navigation');
       scanNavigationLevel(refreshTargetPath);
     }
-  }, [currentPath, rootPath, resetRandomBag, scanNavigationLevel]);
+  }, [currentPath, rootPath, onRandomBrowse, onRandomScopeRefresh, resetRandomBag, scanNavigationLevel]);
   
 
   
@@ -632,6 +640,13 @@ function HomePage({
   
   // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
   const handleRandomAlbum = useCallback(() => {
+    if (onRandomBrowse) {
+      Promise.resolve()
+        .then(() => onRandomBrowse())
+        .catch((error) => setError(error?.message || '随机浏览失败'));
+      return;
+    }
+
     const randomAlbum = drawRandomAlbum();
     if (!randomAlbum) {
       setError('没有可用的相簿进行随机选择');
@@ -645,7 +660,7 @@ function HomePage({
     } else {
       navigateToBrowsePath(navigate, randomAlbum.path, { viewMode: 'album' });
     }
-  }, [urlMode, onAlbumClick, drawRandomAlbum, navigate, saveScrollPosition]);
+  }, [onRandomBrowse, urlMode, onAlbumClick, drawRandomAlbum, navigate, saveScrollPosition]);
 
   // 处理导航面板的文件夹导航 - 真正的层级浏览
   const handleNavigationPanelNavigate = (folderPath) => {
@@ -783,6 +798,10 @@ function HomePage({
   // 添加键盘快捷键监听
   useEffect(() => {
     const handleKeyDown = (event) => {
+      if (viewerOpen) {
+        return;
+      }
+
       if (searchHasFocus) {
         return;
       }
@@ -818,9 +837,12 @@ function HomePage({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleGoUp, handleRandomAlbum, handleRefresh, searchHasFocus]);
+  }, [handleGoUp, handleRandomAlbum, handleRefresh, searchHasFocus, viewerOpen]);
 
   const canRefreshCurrentFolder = Boolean(currentPath || rootPath);
+  const randomDisabled = onRandomBrowse
+    ? randomBrowseDisabled || randomBrowseLoading
+    : albumNodes.length === 0;
   
     const renderHeader = () => (
       <>
@@ -852,7 +874,7 @@ function HomePage({
             localStorage.setItem('userDensity', value);
           }}
           onRandomAlbum={handleRandomAlbum}
-          randomDisabled={albumNodes.length === 0}
+          randomDisabled={randomDisabled}
           onRefresh={handleRefresh}
           refreshDisabled={!canRefreshCurrentFolder}
           refreshAriaLabel="刷新当前文件夹"
