@@ -14,6 +14,11 @@ const { resetLegacyNavigationFiles } = require('./services/NavigationStateCutove
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
 const { createSourceRootService } = require('./services/SourceRootService');
+const {
+  createNavigationTargetForSource,
+  createVirtualComputerRootResponse,
+  ensureComputerRootSource
+} = require('./services/ComputerRootNavigationService');
 const CHANNELS = require(path.join(__dirname, '..', 'common', 'ipc-channels.js'));
 const {
   createDirectoryErrorEnvelopeV1,
@@ -228,20 +233,38 @@ function createRootNavigationTarget(source) {
   };
 }
 
+let computerRootSource = null;
+
+async function getComputerRootSource() {
+  if (process.platform !== 'darwin') return null;
+  if (!computerRootSource) {
+    computerRootSource = await ensureComputerRootSource(sourceRootService);
+  }
+  return computerRootSource;
+}
+
 async function createFolderLaunchTarget(folderPath) {
   let launchTarget = null;
   try {
-    const { source } = await sourceRootService.saveSourceRoot({
-      sourceId: null,
-      rootPath: folderPath,
-      label: null
-    });
-    launchTarget = createRootNavigationTarget(source);
+    const source = await getComputerRootSource();
+    if (source) {
+      launchTarget = createNavigationTargetForSource(source, {
+        absolutePath: folderPath,
+        viewMode: 'browse'
+      });
+    } else {
+      const result = await sourceRootService.saveSourceRoot({
+        sourceId: null,
+        rootPath: folderPath,
+        label: null
+      });
+      launchTarget = createRootNavigationTarget(result.source);
+    }
   } catch (error) {
     console.warn('[SourceRoot] 创建来源失败:', error?.message || error);
   }
-  await registerApprovedRoot(folderPath);
-  return launchTarget;
+  const registered = await registerApprovedRoot(folderPath);
+  return registered ? launchTarget : null;
 }
 
 if (!gotTheLock) {
@@ -328,6 +351,11 @@ app.whenReady().then(async () => {
   const cleanup = await resetLegacyNavigationFiles(app.getPath('userData'));
   for (const { fileName, error } of cleanup.failed) {
     console.warn(`[Navigation v3] 清理旧导航文件失败: ${fileName}`, error?.message || error);
+  }
+  try {
+    await getComputerRootSource();
+  } catch (error) {
+    console.warn('[SourceRoot] 初始化电脑根目录失败:', error?.message || error);
   }
   await loadApprovedRoots();
   await ThumbnailService.ensureCacheDir(); // 使用ThumbnailService
@@ -456,8 +484,8 @@ ipcMain.handle(CHANNELS.SELECT_DIRECTORY, async () => {
     
     if (!result.canceled && result.filePaths.length > 0) {
       const selectedDirectory = result.filePaths[0];
-      await registerApprovedRoot(selectedDirectory);
-      return selectedDirectory;
+      const registered = await registerApprovedRoot(selectedDirectory);
+      return registered ? selectedDirectory : null;
     }
     return null;
   } catch (error) {
@@ -493,17 +521,21 @@ ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
     };
 
     console.log(`开始智能扫描: ${targetPath}`);
-    const response = await FileSystemService.scanNavigationLevel(targetPath, {
-      concurrencyLimit,
-      onProgress: (progress) => {
-        sendProgress({
-          done: false,
-          processed: progress.processed,
-          total: progress.total,
-          phase: progress.phase
-        });
+    const virtualRootResponse = createVirtualComputerRootResponse(targetPath);
+    const response = virtualRootResponse || await FileSystemService.scanNavigationLevel(
+      targetPath,
+      {
+        concurrencyLimit,
+        onProgress: (progress) => {
+          sendProgress({
+            done: false,
+            processed: progress.processed,
+            total: progress.total,
+            phase: progress.phase
+          });
+        }
       }
-    });
+    );
 
     sendProgress({
       done: true,
@@ -735,8 +767,12 @@ ipcMain.handle(CHANNELS.RESOLVE_DROPPED_FOLDERS, async (event, droppedPaths) => 
         continue;
       }
 
-      await registerApprovedRoot(normalizedPath);
-      folders.push(normalizedPath);
+      const registered = await registerApprovedRoot(normalizedPath);
+      if (registered) {
+        folders.push(normalizedPath);
+      } else {
+        rejected.push(normalizedPath);
+      }
     } catch (error) {
       rejected.push(normalizedPath);
     }
@@ -1087,6 +1123,21 @@ async function resolveWindowLaunchPayload(payload, options) {
   }
   return parsed.launchTarget;
 }
+
+ipcMain.handle(CHANNELS.VALIDATE_NAVIGATION_TARGET_V1, async (event, payload) => {
+  try {
+    const parsed = parseWindowLaunchPayload(payload);
+    const resolved = await sourceRootService.resolveNavigationTarget(parsed.launchTarget);
+    const stats = await stat(resolved.absolutePath);
+    if (!stats.isDirectory()) throw new Error('Navigation target is not a directory');
+    if (!(process.platform === 'darwin' && resolved.absolutePath === '/')) {
+      await readdir(resolved.absolutePath);
+    }
+    return { success: true };
+  } catch (_error) {
+    return { success: false, error: '目录不存在或不可访问' };
+  }
+});
 
 // 创建新窗口查看文件夹
 ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, payload) => {

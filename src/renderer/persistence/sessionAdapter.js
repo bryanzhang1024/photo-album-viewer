@@ -1,4 +1,7 @@
-import { isBrowserLocation } from '../domain/browserLocation';
+import {
+  isBrowserLocation,
+  rebaseBrowserLocationToSourceRoot
+} from '../domain/browserLocation';
 
 export const SESSION_V1_KEY = 'browser_tabs_session_v1';
 export const SESSION_V2_KEY = 'browser_tabs_session_v2';
@@ -84,6 +87,19 @@ export const clearLegacyNavigationStorage = (storage) => {
 export const loadTabsSession = ({ storage, snapshot = false }) => {
   const key = snapshot ? SNAPSHOT_V3_KEY : SESSION_V3_KEY;
   return toRuntimeV3Session(parseStoredJson(storage, key));
+};
+
+export const rebaseTabsSessionToSourceRoot = (session, sources, sourceRoot) => {
+  if (!session || !Array.isArray(session.tabs) || !sourceRoot) return null;
+  const tabs = [];
+
+  for (const tab of session.tabs) {
+    const location = rebaseBrowserLocationToSourceRoot(tab.location, sources, sourceRoot)
+      || tab.location;
+    tabs.push({ id: tab.id, location });
+  }
+
+  return { tabs, activeTabId: session.activeTabId };
 };
 
 const serializeBrowserLocation = (location) => {

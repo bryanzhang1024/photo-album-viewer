@@ -1,10 +1,13 @@
 import {
+  createDirectoryBrowserLocationFromAbsolutePath,
   createChildBrowserLocation,
+  findComputerRootSource,
   getBrowserLocationIdentity,
   getParentBrowserLocation,
   getSourceRootBreadcrumbs,
   isBrowserLocation,
-  materializeBrowserLocation
+  materializeBrowserLocation,
+  rebaseBrowserLocationToSourceRoot
 } from '../../src/renderer/domain/browserLocation';
 
 const SOURCE_ID = 'src_11111111-1111-4111-8111-111111111111';
@@ -31,6 +34,69 @@ const createDirectoryLocation = (overrides = {}) => ({
 });
 
 describe('BrowserLocation domain', () => {
+  test('finds the POSIX computer root only for macOS', () => {
+    const computerRoot = createSource({ label: '电脑', rootPath: '/' });
+    const sources = [createSource(), computerRoot];
+
+    expect(findComputerRootSource(sources, 'darwin')).toBe(computerRoot);
+    expect(findComputerRootSource(sources, 'linux')).toBeNull();
+    expect(findComputerRootSource(sources, 'win32')).toBeNull();
+  });
+
+  test.each([
+    ['/Volumes/1TB/Collection/600-Cos Weibo', 'Volumes/1TB/Collection/600-Cos Weibo'],
+    ['/Users/clover/图片收藏', 'Users/clover/图片收藏']
+  ])('creates a computer-root location for %s', (absolutePath, relativePath) => {
+    const computerRoot = createSource({ label: '电脑', rootPath: '/' });
+
+    expect(createDirectoryBrowserLocationFromAbsolutePath({
+      sourceRoot: computerRoot,
+      absolutePath,
+      viewMode: 'browse',
+      initialMediaAbsolutePath: null
+    })).toEqual({
+      kind: 'directory',
+      target: {
+        sourceId: SOURCE_ID,
+        relativePath,
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      }
+    });
+  });
+
+  test('keeps an initial image inside the selected photo set when rebasing', () => {
+    const oldSource = createSource();
+    const computerRoot = createSource({
+      sourceId: SECOND_SOURCE_ID,
+      label: '电脑',
+      rootPath: '/'
+    });
+    const location = createDirectoryLocation();
+
+    expect(rebaseBrowserLocationToSourceRoot(location, [oldSource, computerRoot], computerRoot))
+      .toEqual({
+        kind: 'directory',
+        target: {
+          sourceId: SECOND_SOURCE_ID,
+          relativePath: 'Volumes/Photos/2026/旅行',
+          viewMode: 'photoSet',
+          initialMediaRelativePath: 'Volumes/Photos/2026/旅行/001.jpg'
+        }
+      });
+  });
+
+  test('rejects an initial image outside the selected target directory', () => {
+    const computerRoot = createSource({ label: '电脑', rootPath: '/' });
+
+    expect(createDirectoryBrowserLocationFromAbsolutePath({
+      sourceRoot: computerRoot,
+      absolutePath: '/Volumes/Photos/旅行',
+      viewMode: 'photoSet',
+      initialMediaAbsolutePath: '/Volumes/Photos/其他/001.jpg'
+    })).toBeNull();
+  });
+
   test('materializes a canonical directory location from its registered source root', () => {
     const location = createDirectoryLocation();
     const sourceRoot = createSource();

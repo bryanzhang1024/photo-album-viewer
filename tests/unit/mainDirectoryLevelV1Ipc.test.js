@@ -384,4 +384,28 @@ describe('GET_DIRECTORY_LEVEL_V1 IPC', () => {
     );
     expect(scanDirectorySnapshot).not.toHaveBeenCalled();
   });
+
+  test('returns only the virtual Volumes node for the macOS filesystem root', async () => {
+    const scanNavigationLevel = jest.fn();
+    const { electron } = setupMainProcess({
+      fileSystemService: { scanNavigationLevel }
+    });
+    const handler = electron.ipcMain._handlers.get(CHANNELS.SCAN_NAVIGATION_LEVEL);
+    const event = { sender: { isDestroyed: jest.fn(() => false), send: jest.fn() } };
+
+    const result = await handler(event, '/');
+
+    expect(result).toMatchObject({
+      success: true,
+      currentPath: '/',
+      nodes: [{ name: 'Volumes', path: '/Volumes' }],
+      metadata: { totalNodes: 1 }
+    });
+    expect(result.nodes).toHaveLength(1);
+    expect(scanNavigationLevel).not.toHaveBeenCalled();
+    expect(event.sender.send).toHaveBeenCalledWith(
+      CHANNELS.SCAN_NAVIGATION_PROGRESS,
+      expect.objectContaining({ done: true, targetPath: '/', total: 1 })
+    );
+  });
 });

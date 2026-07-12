@@ -46,9 +46,15 @@ describe('preload IPC allowlist', () => {
     );
   });
 
+  test('exposes the runtime platform as read-only bootstrap data', () => {
+    const { api } = loadPreload();
+    expect(api.platform).toBe(process.platform);
+  });
+
   test.each([
     ['LOAD_SOURCE_ROOTS_V1', 'load-source-roots-v1'],
-    ['SAVE_SOURCE_ROOT_V1', 'save-source-root-v1']
+    ['SAVE_SOURCE_ROOT_V1', 'save-source-root-v1'],
+    ['VALIDATE_NAVIGATION_TARGET_V1', 'validate-navigation-target-v1']
   ])('keeps %s synchronized across common, fallback, and invoke allowlists', async (
     channelKey,
     channelName

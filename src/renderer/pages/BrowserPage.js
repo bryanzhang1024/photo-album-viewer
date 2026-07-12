@@ -37,14 +37,18 @@ import {
 } from '../../common/path-codec';
 import { sourceIdsEqualV1 } from '../../common/contracts/navigation-contract-v1';
 import {
+  createDirectoryBrowserLocationFromAbsolutePath,
+  findComputerRootSource,
   getBrowserLocationIdentity,
   getParentBrowserLocation,
   getSourceRootBreadcrumbs,
-  materializeBrowserLocation
+  materializeBrowserLocation,
+  rebaseBrowserLocationToSourceRoot
 } from '../domain/browserLocation';
 import {
   clearLegacyNavigationStorage,
   loadTabsSession,
+  rebaseTabsSessionToSourceRoot,
   saveTabsSession
 } from '../persistence/sessionAdapter';
 import { useRandomNavigationCoordinator } from '../hooks/useRandomNavigationCoordinator';
@@ -165,12 +169,27 @@ const createLocationFromAbsolutePath = (
   targetPath,
   viewMode = 'folder',
   initialImage = null,
-  sources = []
+  sources = [],
+  preferredSourceRoot = null
 ) => {
   const normalizedTargetPath = normalizeTargetPath(targetPath || '');
   if (!normalizedTargetPath) return { kind: 'landing' };
 
   const normalizedViewMode = normalizeViewMode(viewMode);
+  const preferredSourceLocation = preferredSourceRoot
+    ? createDirectoryBrowserLocationFromAbsolutePath({
+      sourceRoot: preferredSourceRoot,
+      absolutePath: normalizedTargetPath,
+      viewMode: normalizedViewMode === 'album' ? 'photoSet' : 'browse',
+      initialMediaAbsolutePath: initialImage
+        ? (isPortableRelativePath(initialImage)
+          ? resolvePortableRelativePath(normalizedTargetPath, initialImage)
+          : initialImage)
+        : null
+    })
+    : null;
+  if (preferredSourceLocation) return preferredSourceLocation;
+
   const match = findUniqueLongestSourceRoot(sources, normalizedTargetPath);
   if (match.status === 'resolved') {
     return {
@@ -242,6 +261,7 @@ const isExternalFileDrag = (event) => {
 function BrowserPage({ colorMode, scrollContext = null }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const runtimePlatform = ipcRenderer?.platform || null;
   const hydrationCompletedRef = useRef(false);
   const hydrationGenerationRef = useRef(0);
   const mountedRef = useRef(false);
@@ -297,6 +317,10 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     () => tabs.find((tab) => tab.id === activeTabId) || tabs[0] || initialTabRef.current,
     [activeTabId, tabs]
   );
+  const computerRootSource = useMemo(
+    () => findComputerRootSource(sources, runtimePlatform),
+    [runtimePlatform, sources]
+  );
   const displayState = activeTab;
   const activeSourceRoot = useMemo(() => {
     if (activeTab?.location?.kind !== 'directory') return null;
@@ -311,6 +335,12 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       activeTab.location.target.relativePath
     );
   }, [activeSourceRoot, activeTab]);
+  const isComputerRootView = Boolean(
+    computerRootSource
+    && activeTab?.location?.kind === 'directory'
+    && sourceIdsEqualV1(activeTab.location.target.sourceId, computerRootSource.sourceId)
+    && activeTab.location.target.relativePath === ''
+  );
   const activeTabScrollKey = useMemo(
     () => activeTabId || '__default__',
     [activeTabId]
@@ -405,8 +435,59 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     ipcRenderer,
     onError: setErrorMessage
   });
+  const randomBrowseAvailable = randomNavigation.available && !isComputerRootView;
+
+  const commitValidatedLocation = useCallback(async ({
+    browserLocation,
+    tabId = activeTabId,
+    replace = false
+  }) => {
+    if (browserLocation.kind !== 'directory' || !ipcRenderer) {
+      return commitTabLocation({ tabId, browserLocation, replace });
+    }
+
+    const operationToken = beginRootOperation();
+    try {
+      const result = await ipcRenderer.invoke(CHANNELS.VALIDATE_NAVIGATION_TARGET_V1, {
+        contractVersion: 1,
+        target: browserLocation.target
+      });
+      if (!isCurrentRootOperation(operationToken)) return null;
+      if (result?.success !== true) {
+        setErrorMessage(result?.error || '目录不存在或不可访问');
+        return null;
+      }
+      return commitTabLocation({
+        tabId,
+        browserLocation,
+        replace,
+        rootOperationToken: operationToken
+      });
+    } catch (error) {
+      if (!isCurrentRootOperation(operationToken)) return null;
+      console.error('验证导航目录失败:', error);
+      setErrorMessage('目录不存在或不可访问');
+      return null;
+    }
+  }, [activeTabId, beginRootOperation, commitTabLocation, isCurrentRootOperation]);
 
   const registerAbsoluteRoot = useCallback(async (absolutePath) => {
+    if (computerRootSource) {
+      const browserLocation = createLocationFromAbsolutePath(
+        absolutePath,
+        'folder',
+        null,
+        sourcesRef.current,
+        computerRootSource
+      );
+      return browserLocation ? {
+        browserLocation,
+        source: computerRootSource,
+        fallback: false
+      } : null;
+    }
+    if (runtimePlatform === 'darwin') return null;
+
     try {
       const response = await ipcRenderer?.invoke(CHANNELS.SAVE_SOURCE_ROOT_V1, {
         contractVersion: 1,
@@ -435,7 +516,7 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     }
 
     return null;
-  }, []);
+  }, [computerRootSource, runtimePlatform]);
 
   const applyRegisteredRoot = useCallback((registered) => {
     if (!registered?.source) return sourcesRef.current;
@@ -491,13 +572,36 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       if (!isCurrentHydration()) return;
       setRuntimeSources(loadedSources);
 
-      const restoredSession = loadTabsSession({
+      const storedSession = loadTabsSession({
         storage: localStorage
       });
-      const savedSnapshot = loadTabsSession({
+      const storedSnapshot = loadTabsSession({
         storage: localStorage,
         snapshot: true
       });
+      const hydrationComputerRoot = findComputerRootSource(loadedSources, runtimePlatform);
+      const restoredSession = hydrationComputerRoot && storedSession
+        ? rebaseTabsSessionToSourceRoot(
+          storedSession,
+          loadedSources,
+          hydrationComputerRoot
+        ) || storedSession
+        : storedSession;
+      const savedSnapshot = hydrationComputerRoot && storedSnapshot
+        ? rebaseTabsSessionToSourceRoot(
+          storedSnapshot,
+          loadedSources,
+          hydrationComputerRoot
+        ) || storedSnapshot
+        : storedSnapshot;
+      if (savedSnapshot && savedSnapshot !== storedSnapshot) {
+        saveTabsSession({
+          storage: localStorage,
+          tabs: savedSnapshot.tabs,
+          activeTabId: savedSnapshot.activeTabId,
+          snapshot: true
+        });
+      }
       setHasSavedTabsSnapshot(Boolean(savedSnapshot));
 
       const nextHydrationStatus = registrySucceeded
@@ -517,6 +621,11 @@ function BrowserPage({ colorMode, scrollContext = null }) {
           hydrationCompletedRef.current = true;
           return;
         }
+        if (getBrowserLocationIdentity(browserLocation)
+            !== getBrowserLocationIdentity(urlLocation)) {
+          pendingNavigationRef.current = createPendingNavigation(browserLocation);
+          navigateBrowserLocation(browserLocation, { replace: true });
+        }
         const matchingTab = findSessionTabMatchingLocation(restoredSession, browserLocation);
         if (matchingTab) {
           const runtimeTabs = materializeSessionTabs(restoredSession, sourcesRef.current);
@@ -532,7 +641,14 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       };
 
       if (isExplicitURLLocation(urlLocation)) {
-        applyExplicitURL(urlLocation);
+        const rebasedURLLocation = hydrationComputerRoot
+          ? rebaseBrowserLocationToSourceRoot(
+            urlLocation,
+            loadedSources,
+            hydrationComputerRoot
+          )
+          : urlLocation;
+        applyExplicitURL(rebasedURLLocation || urlLocation);
         return;
       }
 
@@ -568,7 +684,7 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     return () => {
       cancelled = true;
     };
-  }, [navigateBrowserLocation, setRuntimeSources, urlLocation]);
+  }, [navigateBrowserLocation, runtimePlatform, setRuntimeSources, urlLocation]);
 
   useEffect(() => {
     if (hydrationStatus === HYDRATION_PENDING) return;
@@ -621,7 +737,8 @@ function BrowserPage({ colorMode, scrollContext = null }) {
         targetPath,
         viewMode,
         initialImage,
-        sourcesRef.current
+        sourcesRef.current,
+        computerRootSource
       );
     }
 
@@ -648,7 +765,7 @@ function BrowserPage({ colorMode, scrollContext = null }) {
         initialMediaRelativePath
       }
     };
-  }, [activeTab]);
+  }, [activeTab, computerRootSource]);
 
   const navigateToPath = useCallback((
     targetPath,
@@ -661,23 +778,23 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       setErrorMessage('该目录未关联照片来源，请先重新打开来源目录');
       return;
     }
-    commitTabLocation({
+    return commitValidatedLocation({
       tabId: activeTabId,
       browserLocation,
       replace
     });
-  }, [activeTabId, commitTabLocation, createLocationForActivePath]);
+  }, [activeTabId, commitValidatedLocation, createLocationForActivePath]);
 
   const navigateToBreadcrumb = useCallback((targetPath) => {
-    navigateToPath(targetPath, 'folder');
+    return navigateToPath(targetPath, 'folder');
   }, [navigateToPath]);
 
   const handleAlbumClick = useCallback((albumPath, albumName = null, initialImage = null) => {
-    navigateToPath(albumPath, 'album', initialImage);
+    return navigateToPath(albumPath, 'album', initialImage);
   }, [navigateToPath]);
 
   const handleFolderClick = useCallback((folderPath) => {
-    navigateToPath(folderPath, 'folder');
+    return navigateToPath(folderPath, 'folder');
   }, [navigateToPath]);
 
   const handleGoBack = useCallback(() => {
@@ -687,11 +804,11 @@ function BrowserPage({ colorMode, scrollContext = null }) {
         === getBrowserLocationIdentity(activeTab.location)) {
       return;
     }
-    commitTabLocation({
+    return commitValidatedLocation({
       tabId: activeTabId,
       browserLocation: parentLocation
     });
-  }, [activeTab, activeTabId, commitTabLocation]);
+  }, [activeTab, activeTabId, commitValidatedLocation]);
 
   const openLocationInNewTab = useCallback((
     browserLocation,
@@ -721,14 +838,15 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       targetPath,
       viewMode,
       initialImage,
-      sourcesRef.current
+      sourcesRef.current,
+      computerRootSource
     );
     if (!browserLocation) {
       setErrorMessage('该目录未关联照片来源，请先重新打开来源目录');
       return;
     }
     openLocationInNewTab(browserLocation);
-  }, [activeTab, openLocationInNewTab]);
+  }, [activeTab, computerRootSource, openLocationInNewTab]);
 
   const openFavoritesInNewTab = useCallback(() => {
     openLocationInNewTab({ kind: 'favorites' });
@@ -1215,12 +1333,12 @@ function BrowserPage({ colorMode, scrollContext = null }) {
         onAlbumClick={handleAlbumClick}
         onGoBack={handleGoBack}
         onOpenFavoritesInNewTab={openFavoritesInNewTab}
-        onRandomBrowse={randomNavigation.available ? randomNavigation.handleRandomBrowse : null}
-        onRandomScopeRefresh={randomNavigation.available
+        onRandomBrowse={randomBrowseAvailable ? randomNavigation.handleRandomBrowse : null}
+        onRandomScopeRefresh={randomBrowseAvailable
           ? randomNavigation.invalidateActiveScope
           : null}
         randomBrowseLoading={randomNavigation.randomBrowseLoading}
-        randomBrowseDisabled={randomNavigation.randomBrowseDisabled}
+        randomBrowseDisabled={isComputerRootView || randomNavigation.randomBrowseDisabled}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
@@ -1250,12 +1368,12 @@ function BrowserPage({ colorMode, scrollContext = null }) {
         onAlbumClick={handleAlbumClick}
         onFolderClick={handleFolderClick}
         onOpenFavoritesInNewTab={openFavoritesInNewTab}
-        onRandomBrowse={randomNavigation.available ? randomNavigation.handleRandomBrowse : null}
-        onRandomScopeRefresh={randomNavigation.available
+        onRandomBrowse={randomBrowseAvailable ? randomNavigation.handleRandomBrowse : null}
+        onRandomScopeRefresh={randomBrowseAvailable
           ? randomNavigation.invalidateActiveScope
           : null}
         randomBrowseLoading={randomNavigation.randomBrowseLoading}
-        randomBrowseDisabled={randomNavigation.randomBrowseDisabled}
+        randomBrowseDisabled={isComputerRootView || randomNavigation.randomBrowseDisabled}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}

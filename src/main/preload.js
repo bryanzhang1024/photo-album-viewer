@@ -18,6 +18,7 @@ try {
     GET_DIRECTORY_LEVEL_V1: 'get-directory-level-v1',
     LOAD_SOURCE_ROOTS_V1: 'load-source-roots-v1',
     SAVE_SOURCE_ROOT_V1: 'save-source-root-v1',
+    VALIDATE_NAVIGATION_TARGET_V1: 'validate-navigation-target-v1',
     RESOLVE_DROPPED_FOLDERS: 'resolve-dropped-folders',
     GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',
     GET_THUMBNAIL: 'get-thumbnail',
@@ -47,6 +48,7 @@ const INVOKE_CHANNELS = new Set([
   CHANNELS.GET_DIRECTORY_LEVEL_V1,
   CHANNELS.LOAD_SOURCE_ROOTS_V1,
   CHANNELS.SAVE_SOURCE_ROOT_V1,
+  CHANNELS.VALIDATE_NAVIGATION_TARGET_V1,
   CHANNELS.RESOLVE_DROPPED_FOLDERS,
   CHANNELS.GET_IMAGE_THUMBNAIL,
   CHANNELS.GET_THUMBNAIL,
@@ -86,6 +88,7 @@ function ensureListenChannel(channel) {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  platform: process.platform,
   invoke(channel, ...args) {
     ensureInvokeChannel(channel);
     return ipcRenderer.invoke(channel, ...args);

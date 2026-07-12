@@ -1,8 +1,10 @@
 import {
+  getPortableRelativePath,
   joinPortableRelativePath,
   resolvePortableRelativePath,
   splitPortableRelativePath
 } from '../../common/path-codec';
+import { createNavigationTargetFromAbsolutePath } from '../../common/navigation-target';
 import {
   normalizeSourceIdV1,
   sourceIdsEqualV1,
@@ -69,6 +71,38 @@ export const materializeBrowserLocation = (location, sources) => {
         location.target.initialMediaRelativePath
       )
   };
+};
+
+export const findComputerRootSource = (sources, platform) => {
+  if (platform !== 'darwin' || !Array.isArray(sources)) return null;
+  return sources.find((source) => source?.rootPath === '/') || null;
+};
+
+export const createDirectoryBrowserLocationFromAbsolutePath = ({
+  sourceRoot,
+  absolutePath,
+  viewMode = 'browse',
+  initialMediaAbsolutePath = null
+}) => {
+  const target = createNavigationTargetFromAbsolutePath(sourceRoot, {
+    absolutePath,
+    viewMode,
+    initialMediaAbsolutePath
+  });
+  return target ? { kind: 'directory', target } : null;
+};
+
+export const rebaseBrowserLocationToSourceRoot = (location, sources, sourceRoot) => {
+  if (location?.kind !== 'directory') return location;
+  const materialized = materializeBrowserLocation(location, sources);
+  if (!materialized) return null;
+
+  return createDirectoryBrowserLocationFromAbsolutePath({
+    sourceRoot,
+    absolutePath: materialized.absolutePath,
+    viewMode: location.target.viewMode,
+    initialMediaAbsolutePath: materialized.absoluteInitialImage
+  });
 };
 
 export const createChildBrowserLocation = (location, childName) => {

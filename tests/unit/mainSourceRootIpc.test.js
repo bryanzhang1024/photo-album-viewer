@@ -314,7 +314,7 @@ describe('SourceRoot V1 IPC', () => {
     expect(WindowService.createWindow).not.toHaveBeenCalled();
   });
 
-  test('startup --folder registers the explicit root before opening a canonical window', async () => {
+  test('startup --folder opens from the existing macOS computer root', async () => {
     const originalArgv = process.argv;
     process.argv = ['electron', '.', '--folder', '/Photos/Startup'];
     mockMissingApprovedRootsFile();
@@ -322,12 +322,13 @@ describe('SourceRoot V1 IPC', () => {
       isDirectory: () => true
     });
     const approvedRootsWrite = mockApprovedRootsWrite();
-    const source = createSourceRootV1({ rootPath: '/Photos/Startup' });
-    const saveSourceRoot = jest.fn().mockResolvedValue({ source, created: true });
+    const source = createSourceRootV1({ label: '电脑', rootPath: '/' });
+    const listSourceRoots = jest.fn().mockResolvedValue([source]);
+    const saveSourceRoot = jest.fn();
 
     try {
       setupMainProcess({
-        sourceRootService: { saveSourceRoot },
+        sourceRootService: { listSourceRoots, saveSourceRoot },
         configureElectron(electron) {
           electron.app.whenReady.mockReturnValue(Promise.resolve());
         }
@@ -337,11 +338,8 @@ describe('SourceRoot V1 IPC', () => {
 
       await flushMainReady();
 
-      expect(saveSourceRoot).toHaveBeenCalledWith({
-        sourceId: null,
-        rootPath: '/Photos/Startup',
-        label: null
-      });
+      expect(listSourceRoots).toHaveBeenCalled();
+      expect(saveSourceRoot).not.toHaveBeenCalled();
       expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup');
       expect(approvedRootsWrite).toHaveBeenCalledWith(
         path.join('/mock/userData', 'approved-roots-v3.json'),
@@ -351,7 +349,7 @@ describe('SourceRoot V1 IPC', () => {
       );
       expect(WindowService.createWindow).toHaveBeenCalledWith({
         sourceId: source.sourceId,
-        relativePath: '',
+        relativePath: 'Photos/Startup',
         viewMode: 'browse',
         initialMediaRelativePath: null
       });
@@ -384,8 +382,8 @@ describe('SourceRoot V1 IPC', () => {
 
       expect(saveSourceRoot).toHaveBeenCalledWith({
         sourceId: null,
-        rootPath: '/Photos/Startup-Fallback',
-        label: null
+        rootPath: '/',
+        label: '电脑'
       });
       expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup-Fallback');
       expect(WindowService.createWindow).toHaveBeenCalledWith(null);
@@ -394,9 +392,168 @@ describe('SourceRoot V1 IPC', () => {
     }
   });
 
-  test('second-instance --folder attempts root registration without blocking canonical window', async () => {
+  test('startup --folder rejects an unavailable path even when the computer root exists', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['electron', '.', '--folder', '/Volumes/Offline/Photos'];
+    mockMissingApprovedRootsFile();
+    const source = createSourceRootV1({ label: '电脑', rootPath: '/' });
+    const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockRejectedValue(
+      Object.assign(new Error('offline'), { code: 'ENOENT' })
+    );
+
+    try {
+      setupMainProcess({
+        sourceRootService: {
+          listSourceRoots: jest.fn().mockResolvedValue([source])
+        },
+        configureElectron(electron) {
+          electron.app.whenReady.mockReturnValue(Promise.resolve());
+        }
+      });
+      const WindowService = require('../../src/main/services/WindowService');
+      WindowService.createWindow.mockReturnValue({ id: 706 });
+
+      await flushMainReady();
+
+      expect(approvedRootStat).toHaveBeenCalledWith('/Volumes/Offline/Photos');
+      expect(WindowService.createWindow).toHaveBeenCalledWith(null);
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
+
+  test('folder picker does not return a directory that cannot be validated', async () => {
+    const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockRejectedValue(
+      Object.assign(new Error('unavailable'), { code: 'EACCES' })
+    );
+    const { electron } = setupMainProcess();
+    electron.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/Volumes/Unavailable']
+    });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.SELECT_DIRECTORY);
+
+    expect(result).toBeNull();
+    expect(approvedRootStat).toHaveBeenCalledWith('/Volumes/Unavailable');
+  });
+
+  test('validates a canonical navigation target before renderer commit', async () => {
+    const target = createNavigationTargetV1();
+    const resolveNavigationTarget = jest.fn().mockResolvedValue({
+      source: createSourceRootV1(),
+      target,
+      absolutePath: '/Photos/2026/旅行',
+      initialMediaAbsolutePath: null
+    });
+    const directoryStat = jest.spyOn(fs, 'stat').mockImplementation((targetPath, callback) => {
+      callback(null, { isDirectory: () => true });
+    });
+    const directoryRead = jest.spyOn(fs, 'readdir').mockImplementation((targetPath, callback) => {
+      callback(null, []);
+    });
+    const { electron } = setupMainProcess({
+      sourceRootService: { resolveNavigationTarget }
+    });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.VALIDATE_NAVIGATION_TARGET_V1, {
+      contractVersion: 1,
+      target
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(directoryStat).toHaveBeenCalledWith('/Photos/2026/旅行', expect.any(Function));
+    expect(directoryRead).toHaveBeenCalledWith('/Photos/2026/旅行', expect.any(Function));
+  });
+
+  test('rejects a directory that exists but cannot be listed', async () => {
+    const target = createNavigationTargetV1();
+    jest.spyOn(fs, 'stat').mockImplementation((targetPath, callback) => {
+      callback(null, { isDirectory: () => true });
+    });
+    jest.spyOn(fs, 'readdir').mockImplementation((targetPath, callback) => {
+      callback(Object.assign(new Error(`forbidden ${targetPath}`), { code: 'EACCES' }));
+    });
+    const { electron } = setupMainProcess({
+      sourceRootService: {
+        resolveNavigationTarget: jest.fn().mockResolvedValue({
+          source: createSourceRootV1(),
+          target,
+          absolutePath: '/Photos/Private',
+          initialMediaAbsolutePath: null
+        })
+      }
+    });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.VALIDATE_NAVIGATION_TARGET_V1, {
+      contractVersion: 1,
+      target
+    });
+
+    expect(result).toEqual({ success: false, error: '目录不存在或不可访问' });
+    expect(JSON.stringify(result)).not.toContain('/Photos/Private');
+  });
+
+  test('does not list the physical root when validating the macOS virtual root', async () => {
+    const target = createNavigationTargetV1({ relativePath: '' });
+    jest.spyOn(fs, 'stat').mockImplementation((targetPath, callback) => {
+      callback(null, { isDirectory: () => true });
+    });
+    const directoryRead = jest.spyOn(fs, 'readdir');
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    try {
+      const { electron } = setupMainProcess({
+        sourceRootService: {
+          resolveNavigationTarget: jest.fn().mockResolvedValue({
+            source: createSourceRootV1({ rootPath: '/', label: '电脑' }),
+            target,
+            absolutePath: '/',
+            initialMediaAbsolutePath: null
+          })
+        }
+      });
+
+      const result = await electron.ipcMain.invoke(CHANNELS.VALIDATE_NAVIGATION_TARGET_V1, {
+        contractVersion: 1,
+        target
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(directoryRead).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  test('returns a sanitized failure when a navigation target is unavailable', async () => {
+    const target = createNavigationTargetV1();
+    jest.spyOn(fs, 'stat').mockImplementation((targetPath, callback) => {
+      callback(Object.assign(new Error(`missing ${targetPath}`), { code: 'ENOENT' }));
+    });
+    const { electron } = setupMainProcess({
+      sourceRootService: {
+        resolveNavigationTarget: jest.fn().mockResolvedValue({
+          source: createSourceRootV1(),
+          target,
+          absolutePath: '/Photos/Missing',
+          initialMediaAbsolutePath: null
+        })
+      }
+    });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.VALIDATE_NAVIGATION_TARGET_V1, {
+      contractVersion: 1,
+      target
+    });
+
+    expect(result).toEqual({ success: false, error: '目录不存在或不可访问' });
+    expect(JSON.stringify(result)).not.toContain('/Photos/Missing');
+  });
+
+  test('second-instance --folder rejects a path that cannot be validated', async () => {
     const appHandlers = new Map();
-    const source = createSourceRootV1({ rootPath: '/Photos/CLI' });
+    const source = createSourceRootV1({ label: '电脑', rootPath: '/' });
     const saveSourceRoot = jest.fn().mockResolvedValue({ source, created: true });
     const registrationError = Object.assign(new Error('registration unavailable'), {
       code: 'EACCES'
@@ -429,15 +586,10 @@ describe('SourceRoot V1 IPC', () => {
 
     expect(saveSourceRoot).toHaveBeenCalledWith({
       sourceId: null,
-      rootPath: '/Photos/CLI',
-      label: null
+      rootPath: '/',
+      label: '电脑'
     });
-    expect(WindowService.createWindow).toHaveBeenCalledWith({
-      sourceId: source.sourceId,
-      relativePath: '',
-      viewMode: 'browse',
-      initialMediaRelativePath: null
-    });
+    expect(WindowService.createWindow).not.toHaveBeenCalled();
     expect(approvedRootStat).toHaveBeenCalledWith('/Photos/CLI');
   });
 
@@ -474,8 +626,8 @@ describe('SourceRoot V1 IPC', () => {
 
     expect(saveSourceRoot).toHaveBeenCalledWith({
       sourceId: null,
-      rootPath: '/Photos/Fallback',
-      label: null
+      rootPath: '/',
+      label: '电脑'
     });
     expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Fallback');
     expect(approvedRootsWrite).toHaveBeenCalledWith(

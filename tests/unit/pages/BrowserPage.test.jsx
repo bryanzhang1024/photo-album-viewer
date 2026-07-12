@@ -126,6 +126,13 @@ const createSource = (overrides = {}) => ({
   ...overrides
 });
 
+const createComputerRootSource = (overrides = {}) => createSource({
+  sourceId: SECOND_SOURCE_ID,
+  label: '电脑',
+  rootPath: '/',
+  ...overrides
+});
+
 const createLoadSourcesResponse = (sources = []) => ({
   contractVersion: 1,
   ok: true,
@@ -199,9 +206,13 @@ describe('BrowserPage', () => {
       clearAllRandomState: mockClearAllRandomState
     }));
     window.electronAPI.getPathForFile = jest.fn((file) => file?.mockPath || '');
+    window.electronAPI.platform = undefined;
     ipcRenderer.invoke.mockImplementation((channel) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
       }
       return Promise.resolve(undefined);
     });
@@ -328,6 +339,9 @@ describe('BrowserPage', () => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve(createLoadSourcesResponse([source]));
       }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
       return Promise.resolve(undefined);
     });
     setupRouterMocks({ pathname: '/', search: '' });
@@ -392,6 +406,9 @@ describe('BrowserPage', () => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve(createLoadSourcesResponse([source]));
       }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
       return Promise.resolve(undefined);
     });
     setupRouterMocks({ pathname: '/', search: '' });
@@ -450,6 +467,9 @@ describe('BrowserPage', () => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve(createLoadSourcesResponse([source]));
       }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
       return Promise.resolve(undefined);
     });
     const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
@@ -463,8 +483,8 @@ describe('BrowserPage', () => {
     });
 
     const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
-    act(() => {
-      homeProps.onFolderClick('/Volumes/NAS/Photos/2026/旅行');
+    await act(async () => {
+      await homeProps.onFolderClick('/Volumes/NAS/Photos/2026/旅行');
     });
     expect(navigateMock).toHaveBeenLastCalledWith(
       navigationUtils.buildNavigationTargetUrl({
@@ -526,6 +546,9 @@ describe('BrowserPage', () => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve(createLoadSourcesResponse(sources));
       }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
       return Promise.resolve(undefined);
     });
     setupRouterMocks({
@@ -553,6 +576,9 @@ describe('BrowserPage', () => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve(createLoadSourcesResponse([source]));
       }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
       return Promise.resolve(undefined);
     });
 
@@ -564,8 +590,8 @@ describe('BrowserPage', () => {
     });
 
     let homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
-    act(() => {
-      homeProps.onFolderClick('/Volumes/NAS/Photos/2026/旅行');
+    await act(async () => {
+      await homeProps.onFolderClick('/Volumes/NAS/Photos/2026/旅行');
     });
     expect(navigateMock).toHaveBeenLastCalledWith(
       navigationUtils.buildNavigationTargetUrl({
@@ -578,8 +604,8 @@ describe('BrowserPage', () => {
     );
 
     homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
-    act(() => {
-      homeProps.onAlbumClick(
+    await act(async () => {
+      await homeProps.onAlbumClick(
         '/Volumes/NAS/Photos/2026/旅行/相册',
         '相册',
         '/Volumes/NAS/Photos/2026/旅行/相册/cover.jpg'
@@ -596,8 +622,8 @@ describe('BrowserPage', () => {
     );
 
     const albumProps = AlbumPage.mock.calls[AlbumPage.mock.calls.length - 1][0];
-    act(() => {
-      albumProps.onBreadcrumbNavigate('/Volumes/NAS/Photos/2026');
+    await act(async () => {
+      await albumProps.onBreadcrumbNavigate('/Volumes/NAS/Photos/2026');
     });
     expect(navigateMock).toHaveBeenLastCalledWith(
       navigationUtils.buildNavigationTargetUrl({
@@ -611,10 +637,89 @@ describe('BrowserPage', () => {
 
     const callCount = navigateMock.mock.calls.length;
     homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
-    act(() => {
-      homeProps.onFolderClick('/Volumes/NAS/Photos-Archive/outside');
+    await act(async () => {
+      await homeProps.onFolderClick('/Volumes/NAS/Photos-Archive/outside');
     });
     expect(navigateMock).toHaveBeenCalledTimes(callCount);
+  });
+
+  test('keeps the current tab when canonical directory validation fails', async () => {
+    const source = createSource();
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=2026&view=browse`
+    });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([source]));
+      }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: false, error: '目录不存在或不可访问' });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(HomePage.mock.calls[HomePage.mock.calls.length - 1][0].currentPath)
+        .toBe('/Volumes/NAS/Photos/2026');
+    });
+    navigateMock.mockClear();
+
+    const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+    act(() => {
+      homeProps.onFolderClick('/Volumes/NAS/Photos/2026/Missing');
+    });
+
+    expect(await screen.findByText('目录不存在或不可访问')).toBeInTheDocument();
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+      CHANNELS.VALIDATE_NAVIGATION_TARGET_V1,
+      {
+        contractVersion: 1,
+        target: {
+          sourceId: SOURCE_ID,
+          relativePath: '2026/Missing',
+          viewMode: 'browse',
+          initialMediaRelativePath: null
+        }
+      }
+    );
+    expect(navigateMock).not.toHaveBeenCalled();
+    const saved = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
+    expect(saved.tabs.find((tab) => tab.id === saved.activeTabId).location.target.relativePath)
+      .toBe('2026');
+  });
+
+  test('keeps the current tab when directory validation returns a malformed response', async () => {
+    const source = createSource();
+    const navigateMock = setupRouterMocks({
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=2026&view=browse`
+    });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([source]));
+      }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({});
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => {
+      expect(HomePage.mock.calls[HomePage.mock.calls.length - 1][0].currentPath)
+        .toBe('/Volumes/NAS/Photos/2026');
+    });
+    navigateMock.mockClear();
+
+    const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+    await act(async () => {
+      await homeProps.onFolderClick('/Volumes/NAS/Photos/2026/Unreadable');
+    });
+
+    expect(await screen.findByText('目录不存在或不可访问')).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   test('treats back from a canonical source root as a no-op', async () => {
@@ -691,6 +796,161 @@ describe('BrowserPage', () => {
         }),
         {}
       );
+    });
+  });
+
+  test('opens a selected macOS directory under the existing computer root', async () => {
+    window.electronAPI.platform = 'darwin';
+    const computerRoot = createComputerRootSource();
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([computerRoot]));
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) {
+        return Promise.resolve('/Volumes/1TB/Collection/600-Cos Weibo');
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenLastCalledWith(
+        navigationUtils.buildNavigationTargetUrl({
+          sourceId: SECOND_SOURCE_ID,
+          relativePath: 'Volumes/1TB/Collection/600-Cos Weibo',
+          viewMode: 'browse',
+          initialMediaRelativePath: null
+        }),
+        {}
+      );
+    });
+    expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(
+      CHANNELS.SAVE_SOURCE_ROOT_V1,
+      expect.anything()
+    );
+  });
+
+  test('rebases a stored macOS session to the computer root during hydration', async () => {
+    window.electronAPI.platform = 'darwin';
+    const oldSource = createSource();
+    const computerRoot = createComputerRootSource();
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
+      tabs: [{ id: 'stored-tab', location: createCanonicalLocation() }]
+    })));
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([oldSource, computerRoot]));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
+      expect(saved.tabs[0].location.target).toEqual({
+        sourceId: SECOND_SOURCE_ID,
+        relativePath: 'Volumes/NAS/Photos/2026/旅行',
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      });
+    });
+    expect(navigateMock).toHaveBeenCalledWith(
+      navigationUtils.buildNavigationTargetUrl({
+        sourceId: SECOND_SOURCE_ID,
+        relativePath: 'Volumes/NAS/Photos/2026/旅行',
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      }),
+      { replace: true }
+    );
+  });
+
+  test('replaces an old macOS canonical URL with its computer-root target', async () => {
+    window.electronAPI.platform = 'darwin';
+    const oldSource = createSource();
+    const computerRoot = createComputerRootSource();
+    const oldUrl = navigationUtils.buildNavigationTargetUrl(createCanonicalLocation().target);
+    const [pathname, search] = oldUrl.split('?');
+    const navigateMock = setupRouterMocks({ pathname, search: `?${search}` });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([oldSource, computerRoot]));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        navigationUtils.buildNavigationTargetUrl({
+          sourceId: SECOND_SOURCE_ID,
+          relativePath: 'Volumes/NAS/Photos/2026/旅行',
+          viewMode: 'browse',
+          initialMediaRelativePath: null
+        }),
+        { replace: true }
+      );
+    });
+  });
+
+  test('rewrites a saved macOS tab snapshot to the computer root during hydration', async () => {
+    window.electronAPI.platform = 'darwin';
+    const oldSource = createSource();
+    const computerRoot = createComputerRootSource();
+    localStorage.setItem('browser_tabs_snapshot_v3', JSON.stringify(createV3Session({
+      tabs: [{ id: 'snapshot-tab', location: createCanonicalLocation() }]
+    })));
+    setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([oldSource, computerRoot]));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const snapshot = JSON.parse(localStorage.getItem('browser_tabs_snapshot_v3'));
+      expect(snapshot.tabs[0].location.target).toEqual({
+        sourceId: SECOND_SOURCE_ID,
+        relativePath: 'Volumes/NAS/Photos/2026/旅行',
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      });
+    });
+  });
+
+  test('disables random browsing at the macOS computer root', async () => {
+    window.electronAPI.platform = 'darwin';
+    const computerRoot = createComputerRootSource();
+    setupRouterMocks({
+      pathname: '/browse',
+      search: `?sourceId=${SECOND_SOURCE_ID}&relativePath=&view=browse`
+    });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([computerRoot]));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+      expect(homeProps.sourceBreadcrumbs).toEqual([{ name: '电脑', path: '/' }]);
+      expect(homeProps.onRandomBrowse).toBeNull();
+      expect(homeProps.randomBrowseDisabled).toBe(true);
     });
   });
 
@@ -911,6 +1171,9 @@ describe('BrowserPage', () => {
       }
       if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Slow');
       if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) return deferredSave.promise;
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
       return Promise.resolve(undefined);
     });
 
@@ -926,8 +1189,8 @@ describe('BrowserPage', () => {
     });
 
     const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
-    act(() => {
-      homeProps.onFolderClick('/Volumes/NAS/Photos/Ordinary');
+    await act(async () => {
+      await homeProps.onFolderClick('/Volumes/NAS/Photos/Ordinary');
     });
     const ordinaryUrl = navigationUtils.buildNavigationTargetUrl({
       sourceId: SOURCE_ID,
@@ -1411,11 +1674,15 @@ describe('BrowserPage', () => {
       pathname: '/browse',
       search: `?sourceId=${SOURCE_ID}&relativePath=trip&view=browse`
     });
-    ipcRenderer.invoke.mockImplementation((channel) => (
-      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
-        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
-        : Promise.resolve(undefined)
-    ));
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([createSource()]));
+      }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
+      return Promise.resolve(undefined);
+    });
 
     render(<BrowserPage colorMode="light" />);
     await waitFor(() => {
@@ -1435,11 +1702,15 @@ describe('BrowserPage', () => {
       pathname: '/browse',
       search: `?sourceId=${SOURCE_ID}&relativePath=wedding&view=photoSet`
     });
-    ipcRenderer.invoke.mockImplementation((channel) => (
-      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
-        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
-        : Promise.resolve(undefined)
-    ));
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([createSource()]));
+      }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
+      return Promise.resolve(undefined);
+    });
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
@@ -1557,11 +1828,15 @@ describe('BrowserPage', () => {
       pathname: '/browse',
       search: `?sourceId=${SOURCE_ID}&relativePath=old&view=photoSet`
     });
-    ipcRenderer.invoke.mockImplementation((channel) => (
-      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
-        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
-        : Promise.resolve(undefined)
-    ));
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([createSource()]));
+      }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
+      return Promise.resolve(undefined);
+    });
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
@@ -1573,17 +1848,19 @@ describe('BrowserPage', () => {
 
     fireEvent.click(screen.getByText('模拟随机相簿'));
 
-    expect(navigateMock).toHaveBeenCalledWith(
-      navigationUtils.buildNavigationTargetUrl({
-        sourceId: SOURCE_ID,
-        relativePath: 'random',
-        viewMode: 'photoSet',
-        initialMediaRelativePath: null
-      }),
-      {}
-    );
-    expect(screen.getByRole('tab', { name: /random/i })).toBeInTheDocument();
-    expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Volumes/NAS/Photos/random');
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        navigationUtils.buildNavigationTargetUrl({
+          sourceId: SOURCE_ID,
+          relativePath: 'random',
+          viewMode: 'photoSet',
+          initialMediaRelativePath: null
+        }),
+        {}
+      );
+      expect(screen.getByRole('tab', { name: /random/i })).toBeInTheDocument();
+      expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Volumes/NAS/Photos/random');
+    });
 
     fireEvent.click(screen.getByText('模拟刷新当前相簿'));
     expect(mockAlbumRefreshTargets).toEqual(['/Volumes/NAS/Photos/random']);

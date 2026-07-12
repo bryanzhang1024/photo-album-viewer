@@ -9,11 +9,22 @@ import {
   clearLegacyNavigationStorage,
   createTabsSessionPayload,
   loadTabsSession,
+  rebaseTabsSessionToSourceRoot,
   saveTabsSession
 } from '../../src/renderer/persistence/sessionAdapter';
 
 const NOW = 1783785600000;
 const SOURCE_ID = 'src_11111111-1111-4111-8111-111111111111';
+const COMPUTER_SOURCE_ID = 'src_22222222-2222-4222-8222-222222222222';
+
+const createSource = (overrides = {}) => ({
+  schemaVersion: 1,
+  sourceId: SOURCE_ID,
+  label: '家庭照片',
+  rootPath: '/Volumes/Photos',
+  sourceGeneration: 1,
+  ...overrides
+});
 
 const createDirectoryLocation = (overrides = {}) => ({
   kind: 'directory',
@@ -47,6 +58,67 @@ const createStorage = (initial = {}) => {
 };
 
 describe('browser tabs session v3 adapter', () => {
+  test('rebases directory tabs to the computer root without changing tab identity', () => {
+    const session = {
+      tabs: [
+        { id: 'tab-v3', location: createDirectoryLocation() },
+        { id: 'favorites', location: { kind: 'favorites' } }
+      ],
+      activeTabId: 'tab-v3'
+    };
+    const source = createSource();
+    const computerRoot = createSource({
+      sourceId: COMPUTER_SOURCE_ID,
+      label: '电脑',
+      rootPath: '/'
+    });
+
+    expect(rebaseTabsSessionToSourceRoot(session, [source, computerRoot], computerRoot))
+      .toEqual({
+        tabs: [
+          {
+            id: 'tab-v3',
+            location: createDirectoryLocation({
+              sourceId: COMPUTER_SOURCE_ID,
+              relativePath: 'Volumes/Photos/2026/旅行',
+              initialMediaRelativePath: 'Volumes/Photos/2026/旅行/001.jpg'
+            })
+          },
+          { id: 'favorites', location: { kind: 'favorites' } }
+        ],
+        activeTabId: 'tab-v3'
+      });
+  });
+
+  test('rebases resolvable tabs while preserving an unresolved tab for existing fallback', () => {
+    const session = {
+      tabs: [
+        { id: 'missing-tab', location: createDirectoryLocation() },
+        {
+          id: 'ready-tab',
+          location: createDirectoryLocation({ sourceId: COMPUTER_SOURCE_ID })
+        }
+      ],
+      activeTabId: 'ready-tab'
+    };
+    const computerRoot = createSource({
+      sourceId: COMPUTER_SOURCE_ID,
+      label: '电脑',
+      rootPath: '/'
+    });
+
+    expect(rebaseTabsSessionToSourceRoot(session, [computerRoot], computerRoot)).toEqual({
+      tabs: [
+        { id: 'missing-tab', location: createDirectoryLocation() },
+        {
+          id: 'ready-tab',
+          location: createDirectoryLocation({ sourceId: COMPUTER_SOURCE_ID })
+        }
+      ],
+      activeTabId: 'ready-tab'
+    });
+  });
+
   test('loads only the v3 session key and ignores legacy session bytes', () => {
     const payload = createPayload();
     const storage = createStorage({

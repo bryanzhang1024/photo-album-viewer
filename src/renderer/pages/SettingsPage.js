@@ -28,6 +28,10 @@ import { useSettings } from '../contexts/SettingsContext';
 import { clearAllCache } from '../utils/cacheUtils';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
+import {
+  createDirectoryBrowserLocationFromAbsolutePath,
+  findComputerRootSource
+} from '../domain/browserLocation';
 
 const ipcRenderer = window.electronAPI || null;
 
@@ -67,6 +71,24 @@ function SettingsPage({ colorMode }) {
   };
 
   const registerDirectory = async (rootPath) => {
+    if (ipcRenderer.platform === 'darwin') {
+      const loaded = await ipcRenderer.invoke(CHANNELS.LOAD_SOURCE_ROOTS_V1, {
+        contractVersion: 1
+      });
+      const computerRoot = loaded?.ok
+        ? findComputerRootSource(loaded.data?.sources, ipcRenderer.platform)
+        : null;
+      const location = computerRoot
+        ? createDirectoryBrowserLocationFromAbsolutePath({
+          sourceRoot: computerRoot,
+          absolutePath: rootPath,
+          viewMode: 'browse'
+        })
+        : null;
+      if (!location) throw new Error('电脑根目录不可用');
+      return { source: computerRoot, target: location.target };
+    }
+
     const response = await ipcRenderer.invoke(CHANNELS.SAVE_SOURCE_ROOT_V1, {
       contractVersion: 1,
       sourceId: null,
@@ -77,7 +99,15 @@ function SettingsPage({ colorMode }) {
     if (!source) {
       throw new Error(response?.error?.message || '无法建立照片来源');
     }
-    return source;
+    return {
+      source,
+      target: {
+        sourceId: source.sourceId,
+        relativePath: '',
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      }
+    };
   };
 
   const handleSelectDirectory = async () => {
@@ -86,7 +116,11 @@ function SettingsPage({ colorMode }) {
       const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
       if (selectedDir) {
         await registerDirectory(selectedDir);
-        setSuccessMessage('照片来源已注册。可在主界面重新打开该来源。');
+        setSuccessMessage(
+          ipcRenderer.platform === 'darwin'
+            ? '已选择文件夹。可在主界面从“电脑”重新导航到该位置。'
+            : '照片来源已注册。可在主界面重新打开该来源。'
+        );
       }
     } catch (err) {
       setError('选择文件夹时出错: ' + err.message);
@@ -98,15 +132,10 @@ function SettingsPage({ colorMode }) {
     try {
       const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
       if (selectedDir) {
-        const source = await registerDirectory(selectedDir);
+        const resolved = await registerDirectory(selectedDir);
         const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, {
           contractVersion: 1,
-          target: {
-            sourceId: source.sourceId,
-            relativePath: '',
-            viewMode: 'browse',
-            initialMediaRelativePath: null
-          }
+          target: resolved.target
         });
         if (result.success) {
           setSuccessMessage('已在新窗口打开所选文件夹。');
@@ -196,7 +225,7 @@ function SettingsPage({ colorMode }) {
             </Button>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            3.0 仅使用已注册的照片来源。日常浏览建议在主界面标签栏使用“打开文件夹”，可选择在当前标签、新标签或新窗口打开。
+            3.1 在 macOS 上从“电脑 / Volumes”自由导航。日常浏览建议在主界面标签栏使用“打开文件夹”，可选择在当前标签、新标签或新窗口打开。
           </Typography>
         </Paper>
 
