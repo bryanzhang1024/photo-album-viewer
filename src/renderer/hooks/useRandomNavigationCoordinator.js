@@ -21,6 +21,7 @@ const NO_OTHER_CANDIDATE_MESSAGE = '当前文件夹没有其他可随机浏览�
 const STALE_TARGET_MESSAGE = '随机目标已变化，请刷新后重试';
 const MISSING_SOURCE_MESSAGE = '当前文件夹缺少来源信息，无法随机浏览';
 const MISMATCHED_SOURCE_MESSAGE = '当前文件夹的来源信息不匹配，无法随机浏览';
+const UNAVAILABLE_SERVICE_MESSAGE = '随机浏览服务不可用，请重启应用后重试';
 
 function getTabSourceIdentity(tab) {
   const sourceId = tab?.location?.kind === 'directory'
@@ -103,7 +104,6 @@ export function useRandomNavigationCoordinator({
   const available = Boolean(
     activeTabId
     && activeContext
-    && ipcRenderer?.invoke
   );
   const activeLocationIdentity = getBrowserLocationIdentity(activeTab?.location);
   const observedActiveIdentityRef = useRef({
@@ -205,6 +205,10 @@ export function useRandomNavigationCoordinator({
   const handleRandomBrowse = useCallback(async () => {
     if (!available || loadingOwnersByTabRef.current.has(activeTabId)) return false;
 
+    if (typeof ipcRenderer?.invoke !== 'function') {
+      onError?.(UNAVAILABLE_SERVICE_MESSAGE);
+      return false;
+    }
     if (!activeSourceRoot) {
       onError?.(MISSING_SOURCE_MESSAGE);
       return false;

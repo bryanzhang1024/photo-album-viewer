@@ -248,6 +248,34 @@ describe('useRandomNavigationCoordinator normal draws', () => {
     }
   );
 
+  test.each([
+    ['the IPC bridge is missing', null],
+    ['invoke is not callable', { invoke: 'unavailable' }]
+  ])(
+    'keeps canonical random browsing available when %s and reports the service error without side effects',
+    async (_label, ipcRenderer) => {
+      const options = createOptions({ ipcRenderer });
+      const observedLoadingStates = [];
+      const { result } = renderHook(() => {
+        const coordinator = useRandomNavigationCoordinator(options);
+        observedLoadingStates.push(coordinator.randomBrowseLoading);
+        return coordinator;
+      });
+
+      expect(result.current).toMatchObject({
+        available: true,
+        randomBrowseLoading: false,
+        randomBrowseDisabled: false
+      });
+      expect(await draw(result)).toBe(false);
+
+      expect(observedLoadingStates).not.toContain(true);
+      expect(options.commitTabLocation).not.toHaveBeenCalled();
+      expect(options.onError).toHaveBeenCalledTimes(1);
+      expect(options.onError).toHaveBeenCalledWith('随机浏览服务不可用，请重启应用后重试');
+    }
+  );
+
   test('keeps an independent no-replacement queue for each tab at the same scope', async () => {
     const tabA = createTab('tab-a');
     const tabB = createTab('tab-b');
