@@ -91,8 +91,6 @@ jest.mock('../../../src/renderer/hooks/useNeighboringAlbums', () =>
   }))
 );
 
-jest.mock('../../../src/renderer/hooks/useShuffleBag', () => jest.fn());
-
 jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
   __esModule: true,
   default: {
@@ -107,15 +105,11 @@ const { ScrollPositionContext } = require('../../../src/renderer/App');
 const useAlbumImages = require('../../../src/renderer/hooks/useAlbumImages');
 const useBreadcrumbs = require('../../../src/renderer/hooks/useBreadcrumbs');
 const useNeighboringAlbums = require('../../../src/renderer/hooks/useNeighboringAlbums');
-const useShuffleBag = require('../../../src/renderer/hooks/useShuffleBag');
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
 const BreadcrumbNavigation = require('../../../src/renderer/components/BreadcrumbNavigation');
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage').default;
 const CHANNELS = require('../../../src/common/ipc-channels');
 const ipcRenderer = global.electronMock.ipcRenderer;
-
-let drawRandomSiblingAlbum;
-let resetRandomBag;
 
 const createDefaultNeighboringAlbumsFixture = () => ({
   neighboringAlbums: { prev: null, next: null, total: 0, currentIndex: 0 },
@@ -124,12 +118,6 @@ const createDefaultNeighboringAlbumsFixture = () => ({
 });
 
 beforeEach(() => {
-  drawRandomSiblingAlbum = jest.fn();
-  resetRandomBag = jest.fn();
-  useShuffleBag.mockReturnValue({
-    drawNext: drawRandomSiblingAlbum,
-    resetBag: resetRandomBag
-  });
   useNeighboringAlbums.mockReturnValue(createDefaultNeighboringAlbumsFixture());
 });
 
@@ -276,7 +264,6 @@ describe('AlbumPage refresh button', () => {
   test('routes the toolbar random action through the canonical coordinator without local navigation', async () => {
     const onRandomBrowse = jest.fn().mockResolvedValue(undefined);
     const onAlbumClick = jest.fn();
-    drawRandomSiblingAlbum.mockReturnValue({ path: '/albums/local', name: 'local' });
 
     render(
       <ScrollPositionContext.Provider
@@ -305,7 +292,6 @@ describe('AlbumPage refresh button', () => {
       expect(onRandomBrowse).toHaveBeenCalledTimes(1);
     });
     expect(onRandomBrowse.mock.calls).toEqual([[]]);
-    expect(drawRandomSiblingAlbum).not.toHaveBeenCalled();
     expect(onAlbumClick).not.toHaveBeenCalled();
   });
 
@@ -347,7 +333,6 @@ describe('AlbumPage refresh button', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(onRandomBrowse).not.toHaveBeenCalled();
     expect(onRandomScopeRefresh).not.toHaveBeenCalled();
-    expect(resetRandomBag).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -384,9 +369,8 @@ describe('AlbumPage refresh button', () => {
     expect(onRandomBrowse).not.toHaveBeenCalled();
   });
 
-  test('keeps the page-local random adapter when the canonical coordinator is absent', async () => {
+  test('disables random browsing when the canonical coordinator is absent', async () => {
     const onAlbumClick = jest.fn();
-    drawRandomSiblingAlbum.mockReturnValue({ path: '/albums/local', name: 'local' });
     useNeighboringAlbums.mockReturnValue({
       neighboringAlbums: {
         prev: null,
@@ -422,12 +406,14 @@ describe('AlbumPage refresh button', () => {
       );
     });
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
+    const randomButton = screen.getByRole('button', { name: '随机当前文件夹 (E)' });
 
-    expect(onAlbumClick).toHaveBeenCalledWith('/albums/local', 'local', null);
+    expect(randomButton).toBeDisabled();
+    fireEvent.click(randomButton);
+    expect(onAlbumClick).not.toHaveBeenCalled();
   });
 
-  test('disables the legacy random action when the current album is the only photo set', async () => {
+  test('keeps random browsing disabled without a canonical coordinator for a single photo set', async () => {
     useNeighboringAlbums.mockReturnValue({
       neighboringAlbums: {
         prev: null,
@@ -522,30 +508,6 @@ describe('AlbumPage refresh button', () => {
     expect(onAlbumClick).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
     expect(onGoBack).not.toHaveBeenCalled();
-    expect(resetRandomBag).not.toHaveBeenCalled();
-  });
-
-  test('loads the legacy root key without decoding initialPath percent twice', async () => {
-    const initialPath = '/photos/100%done';
-    const storageKey = `lastRootPath_${btoa(initialPath).replace(/[+/=]/g, '')}`;
-    window.history.pushState({}, '', '/?initialPath=%2Fphotos%2F100%25done');
-    localStorage.setItem(storageKey, '/photos');
-
-    render(
-      <ScrollPositionContext.Provider
-        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
-      >
-        <AlbumPage
-          colorMode={{ mode: 'light' }}
-          albumPath={initialPath}
-          urlMode={true}
-        />
-      </ScrollPositionContext.Provider>
-    );
-
-    await waitFor(() => {
-      expect(useBreadcrumbs).toHaveBeenCalledWith(initialPath, '/photos', null);
-    });
   });
 
   test.each(SOURCE_BOUNDARY_CASES)(

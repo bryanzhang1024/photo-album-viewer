@@ -66,14 +66,27 @@ function SettingsPage({ colorMode }) {
     updateSetting(key, event.target.value);
   };
 
+  const registerDirectory = async (rootPath) => {
+    const response = await ipcRenderer.invoke(CHANNELS.SAVE_SOURCE_ROOT_V1, {
+      contractVersion: 1,
+      sourceId: null,
+      rootPath,
+      label: null
+    });
+    const source = response?.ok ? response.data?.source : null;
+    if (!source) {
+      throw new Error(response?.error?.message || '无法建立照片来源');
+    }
+    return source;
+  };
+
   const handleSelectDirectory = async () => {
     if (!ipcRenderer) return;
     try {
       const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
       if (selectedDir) {
-        // 仅更新默认目录，不触发导航，避免打断标签页会话
-        localStorage.setItem('lastRootPath_default', selectedDir);
-        setSuccessMessage('默认启动目录已更新。浏览文件夹请在主界面标签栏使用“打开文件夹”。');
+        await registerDirectory(selectedDir);
+        setSuccessMessage('照片来源已注册。可在主界面重新打开该来源。');
       }
     } catch (err) {
       setError('选择文件夹时出错: ' + err.message);
@@ -85,7 +98,16 @@ function SettingsPage({ colorMode }) {
     try {
       const selectedDir = await ipcRenderer.invoke(CHANNELS.SELECT_DIRECTORY);
       if (selectedDir) {
-        const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, selectedDir);
+        const source = await registerDirectory(selectedDir);
+        const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, {
+          contractVersion: 1,
+          target: {
+            sourceId: source.sourceId,
+            relativePath: '',
+            viewMode: 'browse',
+            initialMediaRelativePath: null
+          }
+        });
         if (result.success) {
           setSuccessMessage('已在新窗口打开所选文件夹。');
         } else {
@@ -163,7 +185,7 @@ function SettingsPage({ colorMode }) {
               startIcon={<FolderOpenIcon />}
               onClick={handleSelectDirectory}
             >
-              设置默认目录
+              注册照片来源
             </Button>
             <Button
               variant="outlined"
@@ -174,7 +196,7 @@ function SettingsPage({ colorMode }) {
             </Button>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            这里用于设置默认启动目录。日常浏览建议在主界面标签栏使用“打开文件夹”，可选择在当前标签、新标签或新窗口打开。
+            3.0 仅使用已注册的照片来源。日常浏览建议在主界面标签栏使用“打开文件夹”，可选择在当前标签、新标签或新窗口打开。
           </Typography>
         </Paper>
 

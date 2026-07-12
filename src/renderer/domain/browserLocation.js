@@ -1,14 +1,11 @@
 import {
-  isPortableRelativePath,
   joinPortableRelativePath,
-  normalizeAbsolutePath,
   resolvePortableRelativePath,
   splitPortableRelativePath
 } from '../../common/path-codec';
 import {
   normalizeSourceIdV1,
   sourceIdsEqualV1,
-  toLegacyViewMode,
   validateNavigationTargetV1
 } from '../../common/contracts/navigation-contract-v1';
 
@@ -20,15 +17,6 @@ const hasExactFields = (value, fields) => {
   ));
 };
 
-const isAbsolutePath = (value) => {
-  try {
-    normalizeAbsolutePath(value);
-    return true;
-  } catch (_error) {
-    return false;
-  }
-};
-
 export const isBrowserLocation = (location) => {
   if (location?.kind === 'landing' || location?.kind === 'favorites') {
     return hasExactFields(location, ['kind']);
@@ -37,22 +25,6 @@ export const isBrowserLocation = (location) => {
   if (location?.kind === 'directory') {
     return hasExactFields(location, ['kind', 'target'])
       && validateNavigationTargetV1(location.target).valid;
-  }
-
-  if (location?.kind === 'legacyAbsolute') {
-    return hasExactFields(location, [
-      'kind',
-      'legacyAbsolutePath',
-      'viewMode',
-      'legacyInitialMediaPath'
-    ])
-      && isAbsolutePath(location.legacyAbsolutePath)
-      && (location.viewMode === 'folder' || location.viewMode === 'album')
-      && (location.legacyInitialMediaPath === null
-        || (typeof location.legacyInitialMediaPath === 'string'
-          && location.legacyInitialMediaPath.length > 0
-          && (isAbsolutePath(location.legacyInitialMediaPath)
-            || isPortableRelativePath(location.legacyInitialMediaPath))));
   }
 
   return false;
@@ -67,15 +39,6 @@ export const getBrowserLocationIdentity = (location) => {
       target.relativePath,
       target.viewMode,
       target.initialMediaRelativePath
-    ]);
-  }
-
-  if (location.kind === 'legacyAbsolute') {
-    return JSON.stringify([
-      'legacyAbsolute',
-      location.legacyAbsolutePath,
-      location.viewMode,
-      location.legacyInitialMediaPath
     ]);
   }
 
@@ -98,7 +61,7 @@ export const materializeBrowserLocation = (location, sources) => {
       location.target.relativePath
     ),
     rootPath: sourceRoot.rootPath,
-    legacyViewMode: toLegacyViewMode(location.target.viewMode),
+    pageViewMode: location.target.viewMode === 'photoSet' ? 'album' : 'folder',
     absoluteInitialImage: location.target.initialMediaRelativePath === null
       ? null
       : resolvePortableRelativePath(
@@ -122,24 +85,6 @@ export const createChildBrowserLocation = (location, childName) => {
   };
 };
 
-const getLegacyParentPath = (absolutePath) => {
-  const normalized = normalizeAbsolutePath(absolutePath).absolutePath;
-
-  if (normalized === '/' || /^[A-Za-z]:\/$/.test(normalized)) return normalized;
-
-  if (normalized.startsWith('//')) {
-    const segments = normalized.slice(2).split('/');
-    return segments.length <= 2 ? normalized : `//${segments.slice(0, -1).join('/')}`;
-  }
-
-  const lastSeparator = normalized.lastIndexOf('/');
-  if (lastSeparator === 0) return '/';
-  if (lastSeparator === 2 && /^[A-Za-z]:/.test(normalized)) {
-    return `${normalized.slice(0, 2)}/`;
-  }
-  return normalized.slice(0, lastSeparator);
-};
-
 export const getParentBrowserLocation = (location) => {
   if (location?.kind === 'directory') {
     const segments = splitPortableRelativePath(location.target.relativePath);
@@ -153,22 +98,6 @@ export const getParentBrowserLocation = (location) => {
         viewMode: 'browse',
         initialMediaRelativePath: null
       }
-    };
-  }
-
-  if (location?.kind === 'legacyAbsolute') {
-    const legacyAbsolutePath = getLegacyParentPath(location.legacyAbsolutePath);
-    if (legacyAbsolutePath === location.legacyAbsolutePath
-      && location.viewMode === 'folder'
-      && location.legacyInitialMediaPath === null) {
-      return location;
-    }
-
-    return {
-      kind: 'legacyAbsolute',
-      legacyAbsolutePath,
-      viewMode: 'folder',
-      legacyInitialMediaPath: null
     };
   }
 

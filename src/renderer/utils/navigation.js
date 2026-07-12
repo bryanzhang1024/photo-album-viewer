@@ -1,10 +1,4 @@
-import {
-  toCanonicalViewMode,
-  toLegacyViewMode,
-  validateNavigationTargetV1
-} from '../../common/contracts/navigation-contract-v1';
-
-const LAST_PATH_KEY = 'lastPath';
+import { validateNavigationTargetV1 } from '../../common/contracts/navigation-contract-v1';
 
 export const normalizeTargetPath = (rawPath = '') => {
   if (!rawPath) return '';
@@ -25,23 +19,6 @@ export const normalizeTargetPath = (rawPath = '') => {
   return normalized;
 };
 
-export const buildBrowseUrl = (targetPath, viewMode = 'folder', initialImage = null) => {
-  const normalizedPath = normalizeTargetPath(targetPath);
-  const basePath = normalizedPath ? `/browse/${encodeURIComponent(normalizedPath)}` : '/browse';
-  const params = new URLSearchParams();
-
-  if (viewMode && viewMode !== 'folder') {
-    params.set('view', viewMode);
-  }
-
-  if (initialImage) {
-    params.set('image', encodeURIComponent(initialImage));
-  }
-
-  const queryString = params.toString();
-  return queryString ? `${basePath}?${queryString}` : basePath;
-};
-
 export const buildNavigationTargetUrl = (target) => {
   if (!validateNavigationTargetV1(target).valid) {
     throw new TypeError('Invalid NavigationTarget');
@@ -50,21 +27,13 @@ export const buildNavigationTargetUrl = (target) => {
   const params = new URLSearchParams();
   params.set('sourceId', target.sourceId);
   params.set('relativePath', target.relativePath);
-  params.set('view', toLegacyViewMode(target.viewMode) || 'folder');
+  params.set('view', target.viewMode);
 
   if (target.initialMediaRelativePath !== null) {
     params.set('image', target.initialMediaRelativePath);
   }
 
   return `/browse?${params.toString()}`;
-};
-
-const safelyDecodeLegacyValue = (value) => {
-  try {
-    return decodeURIComponent(value);
-  } catch (_error) {
-    return value;
-  }
 };
 
 export const parseBrowseLocation = (pathname, search = '') => {
@@ -74,13 +43,13 @@ export const parseBrowseLocation = (pathname, search = '') => {
   const params = new URLSearchParams(search);
   if (pathname === '/browse') {
     if (params.has('sourceId') && params.has('relativePath')) {
-      const legacyViewMode = params.has('view') ? params.get('view') : 'folder';
-      if (legacyViewMode !== 'folder' && legacyViewMode !== 'album') return null;
+      const viewMode = params.has('view') ? params.get('view') : 'browse';
+      if (viewMode !== 'browse' && viewMode !== 'photoSet') return null;
 
       const target = {
         sourceId: params.get('sourceId'),
         relativePath: params.get('relativePath'),
-        viewMode: toCanonicalViewMode(legacyViewMode),
+        viewMode,
         initialMediaRelativePath: params.has('image') ? params.get('image') : null
       };
       if (!validateNavigationTargetV1(target).valid) return null;
@@ -91,74 +60,6 @@ export const parseBrowseLocation = (pathname, search = '') => {
     return { kind: 'landing' };
   }
 
-  if (!pathname.startsWith('/browse/')) return null;
-
-  const encodedAbsolutePath = pathname.slice('/browse/'.length);
-  const legacyAbsolutePath = normalizeTargetPath(
-    safelyDecodeLegacyValue(encodedAbsolutePath)
-  );
-  if (!legacyAbsolutePath) return { kind: 'landing' };
-
-  const encodedInitialImage = params.get('image');
-  return {
-    kind: 'legacyAbsolute',
-    legacyAbsolutePath,
-    viewMode: params.get('view') === 'album' ? 'album' : 'folder',
-    legacyInitialMediaPath: encodedInitialImage
-      ? safelyDecodeLegacyValue(encodedInitialImage)
-      : null
-  };
-};
-
-export const navigateToBrowsePath = (
-  navigate,
-  targetPath,
-  { viewMode = 'folder', initialImage = null, replace = false, state } = {}
-) => {
-  const url = buildBrowseUrl(targetPath, viewMode, initialImage);
-  const options = {};
-
-  if (replace) {
-    options.replace = true;
-  }
-
-  if (state !== undefined) {
-    options.state = state;
-  }
-
-  navigate(url, options);
-};
-
-export const getLastPath = () => localStorage.getItem(LAST_PATH_KEY) || '';
-
-export const clearLastPath = () => localStorage.removeItem(LAST_PATH_KEY);
-
-export const setLastPath = (path) => {
-  const normalized = normalizeTargetPath(path);
-
-  if (normalized) {
-    localStorage.setItem(LAST_PATH_KEY, normalized);
-  } else {
-    clearLastPath();
-  }
-};
-
-export const withLastPathTracking = (navigateFn) => {
-  if (!navigateFn) {
-    throw new Error('navigateFn is required');
-  }
-
-  return (
-    targetPath,
-    { viewMode = 'folder', initialImage = null, replace = false, state } = {}
-  ) => {
-    setLastPath(targetPath);
-
-    navigateToBrowsePath(navigateFn, targetPath, {
-      viewMode,
-      initialImage,
-      replace,
-      state
-    });
-  };
+  if (pathname.startsWith('/browse/')) return { kind: 'landing' };
+  return null;
 };

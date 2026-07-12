@@ -83,13 +83,19 @@ describe('WindowService', () => {
       httpImpl
     });
 
-    const win = WindowService.createWindow('/albums/dev');
+    const win = WindowService.createWindow(createNavigationTargetV1({
+      relativePath: '',
+      viewMode: 'browse',
+      initialMediaRelativePath: null
+    }));
     // Allow any pending microtasks (should be none after synchronous callback)
     await Promise.resolve();
 
     expect(electron.BrowserWindow).toHaveBeenCalledTimes(1);
     expect(win.loadURL).toHaveBeenCalledWith(
-      'http://localhost:3000/#/browse?initialPath=%2Falbums%2Fdev'
+      'http://localhost:3000/#/browse'
+      + '?sourceId=src_11111111-1111-4111-8111-111111111111'
+      + '&relativePath=&view=browse'
     );
     expect(WindowService.getMainWindow()).toBe(win);
     expect(WindowService.windows.has(win)).toBe(true);
@@ -122,7 +128,7 @@ describe('WindowService', () => {
     expect(WindowService.buildWindowUrl('file:///Applications/Photo/index.html', target)).toBe(
       'file:///Applications/Photo/index.html#/browse'
       + '?sourceId=src_11111111-1111-4111-8111-111111111111'
-      + '&relativePath=2026%2FTrip&view=album'
+      + '&relativePath=2026%2FTrip&view=photoSet'
     );
   });
 
@@ -131,20 +137,14 @@ describe('WindowService', () => {
     '/照片/旅行 100%',
     'C:\\Photos\\Trip 100%',
     '\\\\NAS\\Photos\\旅行%'
-  ])('encodes and decodes one legacy %s cycle inside the hash', (legacyPath) => {
+  ])('rejects an absolute legacy launch target: %s', (legacyPath) => {
     const { WindowService } = setupWindowService({ isDev: false });
-    const expectedParams = new URLSearchParams({ initialPath: legacyPath });
 
-    const windowUrl = WindowService.buildWindowUrl('http://localhost:3000/', legacyPath);
-    const hashQuery = new URL(windowUrl).hash.split('?')[1];
-
-    expect(windowUrl).toBe(
-      `http://localhost:3000/#/browse?${expectedParams.toString()}`
-    );
-    expect(new URLSearchParams(hashQuery).get('initialPath')).toBe(legacyPath);
+    expect(() => WindowService.buildWindowUrl('http://localhost:3000/', legacyPath))
+      .toThrow('Invalid window launch target');
   });
 
-  test('encodes canonical fields once and emits only legacy view words', () => {
+  test('encodes canonical fields once and emits canonical view modes', () => {
     const { WindowService } = setupWindowService({ isDev: false });
     const target = createNavigationTargetV1({
       relativePath: '2026/旅行 100%',
@@ -155,12 +155,11 @@ describe('WindowService', () => {
     const params = new URLSearchParams(new URL(windowUrl).hash.split('?')[1]);
 
     expect(windowUrl).toContain('#/browse?sourceId=');
-    expect(windowUrl).toContain('&view=album&image=');
+    expect(windowUrl).toContain('&view=photoSet&image=');
     expect(params.get('sourceId')).toBe(target.sourceId);
     expect(params.get('relativePath')).toBe(target.relativePath);
-    expect(params.get('view')).toBe('album');
+    expect(params.get('view')).toBe('photoSet');
     expect(params.get('image')).toBe(target.initialMediaRelativePath);
-    expect(windowUrl).not.toContain('photoSet');
   });
 
   test('round-trips a mixed-case canonical window target into its lowercase registry source', () => {

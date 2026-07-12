@@ -33,7 +33,6 @@ import useGridThumbnailPrefetch, {
   extractAlbumImageRowPaths,
   extractFavoriteAlbumRowPaths
 } from '../hooks/useGridThumbnailPrefetch';
-import { navigateToBrowsePath } from '../utils/navigation';
 import CHANNELS from '../../common/ipc-channels';
 
 const ipcRenderer = window.electronAPI || null;
@@ -162,34 +161,19 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
       ? 'photoSet'
       : (favoriteItem.kind || (favoriteItem.type === 'folder' ? 'folder' : 'photoSet'));
 
-    if (urlMode && onNavigate) {
-      if (kind === 'folder') {
-        onNavigate(albumPath, 'folder');
-        return;
-      }
-
-      if (!favoriteItem.kind && ipcRenderer) {
-        const countResult = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGE_COUNT, albumPath);
-        onNavigate(albumPath, countResult?.count > 0 ? 'album' : 'folder');
-        return;
-      }
-
-      onNavigate(albumPath, 'album');
-      return;
-    }
-
+    if (!onNavigate) return;
     if (kind === 'folder') {
-      navigateToBrowsePath(navigate, albumPath, { viewMode: 'folder' });
+      onNavigate(albumPath, 'folder');
       return;
     }
 
     if (!favoriteItem.kind && ipcRenderer) {
       const countResult = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGE_COUNT, albumPath);
-      navigateToBrowsePath(navigate, albumPath, { viewMode: countResult?.count > 0 ? 'album' : 'folder' });
+      onNavigate(albumPath, countResult?.count > 0 ? 'album' : 'folder');
       return;
     }
 
-    navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
+    onNavigate(albumPath, 'album');
   };
 
   // 处理图片点击
@@ -215,11 +199,7 @@ function FavoritesPage({ urlMode = false, onNavigate = null, tabsHeaderContent =
   // 处理导航到相册
   const handleNavigateToAlbum = (albumPath) => {
     saveScrollPosition();
-    if (urlMode && onNavigate) {
-      onNavigate(albumPath, 'album');
-      return;
-    }
-    navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
+    onNavigate?.(albumPath, 'album');
   };
 
   // 关闭查看器

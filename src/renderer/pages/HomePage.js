@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
-import { getBasename, getDirname, getRelativePath, getBreadcrumbPaths, isValidPath } from '../utils/pathUtils';
+import { getBasename, getDirname, getRelativePath, getBreadcrumbPaths } from '../utils/pathUtils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, 
@@ -25,13 +25,11 @@ import { useSettings } from '../contexts/SettingsContext';
 import imageCache from '../utils/ImageCacheManager';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
-import useShuffleBag from '../hooks/useShuffleBag';
 import { getFolderSortScopeKey, compareByFolderSort } from '../utils/sortPreference';
 import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
 import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
-import { navigateToBrowsePath } from '../utils/navigation';
 import {
   canViewAsPhotoSet,
   getPrimaryKind,
@@ -64,7 +62,7 @@ function HomePage({
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const [rootPath, setRootPath] = useState('');
+  const rootPath = sourceBoundary?.rootPath || '';
   const [navigationState, setNavigationState] = useState(() => ({
     path: '',
     nodes: [],
@@ -86,8 +84,6 @@ function HomePage({
   const activeScanPathRef = useRef('');
   const scanGenerationRef = useRef(0);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
-  const [urlPathProcessed, setUrlPathProcessed] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false); // 导航锁，防止重复操作
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHasFocus, setSearchHasFocus] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -181,34 +177,6 @@ function HomePage({
     });
   }, [directImages, normalizedSearchQuery]);
   
-  // 为当前窗口生成唯一的存储键
-  const getWindowStorageKey = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const initialPath = searchParams.get('initialPath');
-    if (initialPath) {
-      // 如果有URL参数，使用该路径的哈希值作为标识
-      try {
-        const pathHash = btoa(initialPath).replace(/[+/=]/g, '');
-        return `lastRootPath_${pathHash}`;
-      } catch (e) {
-        // 如果btoa失败（如中文字符），使用简单哈希
-        let hash = 0;
-        const str = initialPath;
-        for (let i = 0; i < str.length; i++) {
-          const char = str.charCodeAt(i);
-          hash = ((hash << 5) - hash) + char;
-          hash = hash & hash; // 转换为32位整数
-        }
-        return `lastRootPath_${Math.abs(hash)}`;
-      }
-    } else {
-      // 否则使用默认键
-      return 'lastRootPath_default';
-    }
-  };
-
-  const [windowStorageKey] = useState(getWindowStorageKey());
-
   // 获取滚动位置上下文
   const scrollContext = useContext(ScrollPositionContext);
   const scrollPositionKey = useMemo(
@@ -365,84 +333,49 @@ function HomePage({
     }
   }, [updateNavigationState]);
 
-  // 处理导航点击 - 支持URL模式
-  const handleNavigate = async (targetPath) => {
-    if (targetPath === currentPath || isNavigating) return; // 避免重复导航和并发操作
-
-    // 进入下一级前先保存当前列表滚动位置，便于返回恢复
-    saveScrollPosition();
-
-    // URL模式：使用传入的回调函数
-    if (urlMode && onNavigate) {
-      onNavigate(targetPath, 'folder');
-      return;
-    }
-
-    // 传统模式：内部处理
-    // 验证路径有效性
-    if (!isValidPath(targetPath)) {
-      console.warn(`路径验证失败: ${targetPath}`);
-      // 对于导航操作，即使路径验证失败也尝试继续，让主进程处理
-      console.log(`继续尝试导航到: ${targetPath}`);
-    }
-
-    console.log(`导航到: ${targetPath}`);
-    setIsNavigating(true);
-    try {
-      await scanNavigationLevel(targetPath);
-    } catch (error) {
-      console.error('导航失败:', error);
-      setError(`导航失败: ${error.message || '未知错误'}`);
-    } finally {
-      setIsNavigating(false);
-    }
-  };
-
   // 处理节点点击 - 支持文件夹和相册 - 使用 useCallback 缓存
   const handleNodeClick = useCallback(async (node) => {
     const primaryView = getPrimaryView(node);
 
     if (primaryView === 'folder') {
-      if (urlMode && onFolderClick) {
+      if (onFolderClick) {
         saveScrollPosition();
         onFolderClick(node.path);
         return;
       }
-      await handleNavigate(node.path);
+      setError('该目录未关联照片来源，请重新打开来源');
       return;
     }
 
     saveScrollPosition();
-    if (urlMode && onAlbumClick) {
+    if (onAlbumClick) {
       onAlbumClick(node.path, node.name);
     } else {
-      navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
+      setError('该目录未关联照片来源，请重新打开来源');
     }
-  }, [urlMode, onFolderClick, onAlbumClick, handleNavigate, navigate, saveScrollPosition]);
+  }, [onFolderClick, onAlbumClick, saveScrollPosition]);
 
   const handleNodeOpenPhotoSet = useCallback(async (node) => {
     if (!node?.path) return;
 
     saveScrollPosition();
-    if (urlMode && onAlbumClick) {
+    if (onAlbumClick) {
       onAlbumClick(node.path, node.name);
       return;
     }
-
-    navigateToBrowsePath(navigate, node.path, { viewMode: 'album' });
-  }, [urlMode, onAlbumClick, navigate, saveScrollPosition]);
+    setError('该目录未关联照片来源，请重新打开来源');
+  }, [onAlbumClick, saveScrollPosition]);
 
   const handleNodeBrowseChildren = useCallback(async (node) => {
     if (!node?.path) return;
 
     saveScrollPosition();
-    if (urlMode && onFolderClick) {
+    if (onFolderClick) {
       onFolderClick(node.path);
       return;
     }
-
-    await handleNavigate(node.path);
-  }, [urlMode, onFolderClick, handleNavigate, saveScrollPosition]);
+    setError('该目录未关联照片来源，请重新打开来源');
+  }, [onFolderClick, saveScrollPosition]);
 
   const handleDirectImageClick = useCallback((index) => {
     saveScrollPosition();
@@ -457,33 +390,22 @@ function HomePage({
   // 处理浮动导航面板的相册点击
   const handleFloatingPanelAlbumClick = useCallback((albumPath, albumName) => {
     saveScrollPosition();
-    if (urlMode && onAlbumClick) {
+    if (onAlbumClick) {
       onAlbumClick(albumPath, albumName);
     } else {
-      navigateToBrowsePath(navigate, albumPath, { viewMode: 'album' });
+      setError('该目录未关联照片来源，请重新打开来源');
     }
-  }, [urlMode, onAlbumClick, navigate, saveScrollPosition]);
+  }, [onAlbumClick, saveScrollPosition]);
   
-  const randomScopeKey = folderSortScopeKey;
-  const { drawNext: drawRandomAlbum, resetBag: resetRandomBag } = useShuffleBag(
-    albumNodes,
-    randomScopeKey,
-    { getKey: (node) => node.path }
-  );
-
   // 重新扫描
   const handleRefresh = useCallback(() => {
     const refreshTargetPath = currentPath || rootPath;
     if (refreshTargetPath) {
-      if (onRandomBrowse) {
-        onRandomScopeRefresh?.();
-      } else {
-        resetRandomBag();
-      }
+      if (onRandomBrowse) onRandomScopeRefresh?.();
       imageCache.clearType('navigation');
       scanNavigationLevel(refreshTargetPath);
     }
-  }, [currentPath, rootPath, onRandomBrowse, onRandomScopeRefresh, resetRandomBag, scanNavigationLevel]);
+  }, [currentPath, rootPath, onRandomBrowse, onRandomScopeRefresh, scanNavigationLevel]);
   
 
   
@@ -638,54 +560,20 @@ function HomePage({
   }, [currentPath, directImages, toggleAlbumFavorite]);
   
   
-  // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
+  // 随机浏览只由 canonical coordinator 处理。
   const handleRandomAlbum = useCallback(() => {
-    if (onRandomBrowse) {
-      Promise.resolve()
-        .then(() => onRandomBrowse())
-        .catch((error) => setError(error?.message || '随机浏览失败'));
-      return;
-    }
-
-    const randomAlbum = drawRandomAlbum();
-    if (!randomAlbum) {
-      setError('没有可用的相簿进行随机选择');
-      return;
-    }
-
-    saveScrollPosition();
-
-    if (urlMode && onAlbumClick) {
-      onAlbumClick(randomAlbum.path, randomAlbum.name);
-    } else {
-      navigateToBrowsePath(navigate, randomAlbum.path, { viewMode: 'album' });
-    }
-  }, [onRandomBrowse, urlMode, onAlbumClick, drawRandomAlbum, navigate, saveScrollPosition]);
-
-  // 处理导航面板的文件夹导航 - 真正的层级浏览
-  const handleNavigationPanelNavigate = (folderPath) => {
-    // 保存当前滚动位置
-    saveScrollPosition();
-
-    // 导航逻辑：使用统一的currentPath
-    if (folderPath && folderPath !== currentPath) {
-      scanNavigationLevel(folderPath);
-      console.log('导航到:', folderPath, '根路径:', rootPath);
-    }
-  };
-
-  // 返回根目录
-  const handleReturnToRoot = () => {
-    saveScrollPosition();
-    scanNavigationLevel(rootPath);
-  };
+    if (!onRandomBrowse) return;
+    Promise.resolve()
+      .then(() => onRandomBrowse())
+      .catch((error) => setError(error?.message || '随机浏览失败'));
+  }, [onRandomBrowse]);
 
   // 返回上级目录
   const handleGoUp = async () => {
     const isAtNavigationRoot = sourceBoundary
       ? sourceBoundary.relativePath === ''
       : currentPath === rootPath;
-    if (!currentPath || isAtNavigationRoot || isNavigating) return;
+    if (!currentPath || isAtNavigationRoot) return;
 
     // 获取当前路径的上级目录
     const parentPath = getDirname(currentPath);
@@ -694,32 +582,22 @@ function HomePage({
     if (parentPath && parentPath !== currentPath) {
       saveScrollPosition();
 
-      if (urlMode && onNavigate) {
+      if (onNavigate) {
         onNavigate(parentPath, 'folder');
         return;
       }
-
-      setIsNavigating(true);
-      try {
-        await scanNavigationLevel(parentPath);
-      } catch (error) {
-        console.error('返回上级失败:', error);
-        setError(`返回上级失败: ${error.message}`);
-      } finally {
-        setIsNavigating(false);
-      }
+      setError('该目录未关联照片来源，请重新打开来源');
     }
   };
 
   const handleBreadcrumbNavigate = useCallback((targetPath) => {
-    if (urlMode && onBreadcrumbNavigate) {
+    if (onBreadcrumbNavigate) {
       saveScrollPosition();
       onBreadcrumbNavigate(targetPath);
       return;
     }
-
-    handleNavigate(targetPath);
-  }, [urlMode, onBreadcrumbNavigate, handleNavigate, saveScrollPosition]);
+    setError('该目录未关联照片来源，请重新打开来源');
+  }, [onBreadcrumbNavigate, saveScrollPosition]);
 
   // URL模式初始化 - 处理来自BrowserPage的props
   useEffect(() => {
@@ -733,67 +611,6 @@ function HomePage({
       return;
     }
   }, [urlMode, urlCurrentPath, scanNavigationLevel, updateNavigationState]);
-
-  // 处理从AlbumPage返回的导航请求 (仅非URL模式)
-  useEffect(() => {
-    if (urlMode) return; // URL模式下不处理这个逻辑
-    if (location.state?.navigateToPath) {
-      const targetPath = location.state.navigateToPath;
-      console.log(`从相册页面返回，导航到: ${targetPath}`);
-
-      // 异步处理：设置根路径，等待完成后扫描目标路径
-      const parentPath = getDirname(targetPath);
-      setRootPath(parentPath);
-
-      // 使用setTimeout确保状态更新后再执行导航
-      setTimeout(async () => {
-        try {
-          await scanNavigationLevel(targetPath);
-          // 只有在导航成功后才清除state
-          navigate(location.pathname, { replace: true, state: null });
-        } catch (error) {
-          console.error('从相册返回导航失败:', error);
-          setError(`导航失败: ${error.message}`);
-        }
-      }, 100);
-      return;
-    }
-  }, [location.state, urlMode, navigate, scanNavigationLevel]);
-
-  // 从localStorage中读取上次的路径，并处理URL参数 (仅非URL模式)
-  useEffect(() => {
-    if (urlMode) return; // URL模式下不处理localStorage逻辑
-    if (urlPathProcessed) {
-      console.log('URL参数已处理，跳过重复处理');
-      return;
-    }
-
-    const searchParams = new URLSearchParams(window.location.search);
-    const initialPath = searchParams.get('initialPath');
-    
-    console.log('URL参数检查:', { search: location.search, initialPath, urlPathProcessed, fullUrl: window.location.href });
-    
-    if (initialPath) {
-      // 如果有URL参数，使用指定路径 - 优先处理
-      const decodedPath = initialPath;
-      console.log('使用URL参数路径:', decodedPath);
-      console.log('窗口存储键:', windowStorageKey);
-      setRootPath(decodedPath);
-      localStorage.setItem(windowStorageKey, decodedPath);
-      scanNavigationLevel(decodedPath);
-      setUrlPathProcessed(true);
-    } else if (!urlPathProcessed) {
-      // 否则使用localStorage中的路径（仅当URL参数未处理时）
-      const savedPath = localStorage.getItem(windowStorageKey);
-      if (savedPath) {
-        console.log('使用localStorage路径:', savedPath);
-        console.log('窗口存储键:', windowStorageKey);
-        setRootPath(savedPath);
-        scanNavigationLevel(savedPath);
-      }
-      setUrlPathProcessed(true);
-    }
-  }, [location.search, urlMode, urlPathProcessed, windowStorageKey, scanNavigationLevel]);
 
   // 添加键盘快捷键监听
   useEffect(() => {
@@ -840,9 +657,7 @@ function HomePage({
   }, [handleGoUp, handleRandomAlbum, handleRefresh, searchHasFocus, viewerOpen]);
 
   const canRefreshCurrentFolder = Boolean(currentPath || rootPath);
-  const randomDisabled = onRandomBrowse
-    ? randomBrowseDisabled || randomBrowseLoading
-    : albumNodes.length === 0;
+  const randomDisabled = !onRandomBrowse || randomBrowseDisabled || randomBrowseLoading;
   
     const renderHeader = () => (
       <>

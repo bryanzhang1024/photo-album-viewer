@@ -287,30 +287,20 @@ describe('SourceRootService', () => {
     expect(randomUUID).toHaveBeenCalledTimes(2);
   });
 
-  test('allows nested roots while resolving the unique longest legacy match', async () => {
+  test('allows nested canonical source roots', async () => {
     const fakeFs = createFakeFs({ directories: ['/Photos', '/Photos/Family'] });
     const service = loadService(fakeFs, {
       randomUUID: sequenceRandomUUID(SECOND_UUID, THIRD_UUID)
     });
     await service.initialize();
-    const parent = await service.saveSourceRoot({
+    await service.saveSourceRoot({
       sourceId: null, rootPath: '/Photos', label: '照片'
     });
-    const nested = await service.saveSourceRoot({
+    await service.saveSourceRoot({
       sourceId: null, rootPath: '/Photos/Family', label: '家庭'
     });
 
     await expect(service.listSourceRoots()).resolves.toHaveLength(2);
-    expect(service.matchLegacyAbsolutePath('/Photos/Family/Trip')).toEqual({
-      status: 'resolved',
-      source: nested.source,
-      relativePath: 'Trip'
-    });
-    expect(service.matchLegacyAbsolutePath('/Photos/Other')).toEqual({
-      status: 'resolved',
-      source: parent.source,
-      relativePath: 'Other'
-    });
   });
 
   test('relinks with a stable id and generation while label-only updates do not bump it', async () => {

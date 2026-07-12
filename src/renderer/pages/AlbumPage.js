@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -18,18 +18,16 @@ import { Virtuoso } from 'react-virtuoso';
 import { ScrollPositionContext } from '../App';
 import { useFavorites } from '../contexts/FavoritesContext';
 import imageCache from '../utils/ImageCacheManager';
-import { getBreadcrumbPaths, getBasename, getDirname, isValidPath, safeDecodeURIPath } from '../utils/pathUtils';
+import { getBreadcrumbPaths, getBasename, getDirname, isValidPath } from '../utils/pathUtils';
 import CHANNELS from '../../common/ipc-channels';
 import useSorting from '../hooks/useSorting';
 import useAlbumImages from '../hooks/useAlbumImages';
 import useGridThumbnailPrefetch, { extractAlbumImageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import useBreadcrumbs from '../hooks/useBreadcrumbs';
 import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
-import useShuffleBag from '../hooks/useShuffleBag';
 import PageLayout from '../components/PageLayout';
 import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
-import { navigateToBrowsePath } from '../utils/navigation';
 import {
   buildNodeFromScanResponse,
   getPrimaryView
@@ -58,7 +56,6 @@ function AlbumPage({
   tabsHeaderContent = null,
   tabScrollKey = null
 }) {
-  const { albumPath } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -72,7 +69,7 @@ function AlbumPage({
   });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
-  const [rootPath, setRootPath] = useState('');
+  const rootPath = sourceBoundary?.rootPath || '';
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
@@ -102,12 +99,8 @@ function AlbumPage({
       onNavigate(targetPath, 'folder', null, options.replace ?? false);
       return;
     }
-
-    navigateToBrowsePath(navigate, targetPath, {
-      viewMode: 'folder',
-      replace: options.replace ?? false
-    });
-  }, [onNavigate, navigate, saveScrollPosition]);
+    setError('该目录未关联照片来源，请重新打开来源');
+  }, [onNavigate, saveScrollPosition]);
 
   const navigateToAlbumPath = useCallback((targetPath, albumName = null, initialImage = null, options = {}) => {
     saveScrollPosition();
@@ -117,20 +110,11 @@ function AlbumPage({
       return;
     }
 
-    navigateToBrowsePath(navigate, targetPath, {
-      viewMode: 'album',
-      initialImage,
-      replace: options.replace ?? false
-    });
-  }, [onAlbumClick, navigate, saveScrollPosition]);
+    setError('该目录未关联照片来源，请重新打开来源');
+  }, [onAlbumClick, saveScrollPosition]);
 
-  // 解码路径 - 统一的路径解析逻辑
-  const decodedAlbumPath = useMemo(() => {
-    if (urlMode && urlAlbumPath !== null) return urlAlbumPath;
-    if (location.state?.albumPath) return location.state.albumPath;
-    return albumPath ? safeDecodeURIPath(albumPath) : '';
-  }, [urlMode, urlAlbumPath, albumPath, location.state]);
-  const breadcrumbRootPath = sourceBoundary?.rootPath || rootPath;
+  const decodedAlbumPath = urlAlbumPath || '';
+  const breadcrumbRootPath = rootPath;
   const albumSortFields = useMemo(() => ['name', 'size', 'lastModified'], []);
   const albumLegacySortKeys = useMemo(
     () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
@@ -173,22 +157,9 @@ function AlbumPage({
     sourceBreadcrumbs
   );
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
-  const legacyRandomCandidates = useMemo(
-    () => siblingAlbums.filter((album) => album.path !== decodedAlbumPath),
-    [siblingAlbums, decodedAlbumPath]
-  );
-  const { drawNext: drawRandomSiblingAlbum, resetBag: resetRandomBag } = useShuffleBag(
-    siblingAlbums,
-    decodedAlbumPath || '__album__',
-    { getKey: (album) => album.path, excludeKey: decodedAlbumPath }
-  );
-
   const handleRefreshAlbum = useCallback(() => {
-    if (!onRandomBrowse) {
-      resetRandomBag();
-    }
     refresh();
-  }, [onRandomBrowse, resetRandomBag, refresh]);
+  }, [refresh]);
 
   useEffect(() => {
     setSearchQuery('');
@@ -223,22 +194,10 @@ function AlbumPage({
   // 获取收藏上下文
   const { favorites, isAlbumFavorited, toggleAlbumFavorite } = useFavorites();
 
-  // 从URL参数中获取初始图片路径
+  // 初始图片只接受 BrowserPage 传入的 canonical target 投影。
   useEffect(() => {
-    if (urlMode && urlInitialImage) {
-      // URL模式：使用传入的初始图片路径
-      initialImagePath.current = urlInitialImage;
-    } else {
-      // 传统模式：从URL参数获取
-      const searchParams = new URLSearchParams(location.search);
-      const imagePath = searchParams.get('image');
-      if (imagePath) {
-        initialImagePath.current = decodeURIComponent(imagePath);
-      } else {
-        initialImagePath.current = null;
-      }
-    }
-  }, [urlMode, urlInitialImage, location.search]);
+    initialImagePath.current = urlInitialImage || null;
+  }, [urlInitialImage]);
 
   // 加载相簿图片、相邻相簿信息和面包屑数据
   useEffect(() => {
@@ -259,9 +218,6 @@ function AlbumPage({
 
       if (cancelled) return;
       await loadBreadcrumbs();
-
-      if (cancelled) return;
-      await loadRootPath();
 
       if (cancelled) return;
       await loadChildFolderCount(decodedAlbumPath);
@@ -325,43 +281,6 @@ function AlbumPage({
       setUserDensity(savedDensity);
     }
   }, []);
-
-  // 加载根路径信息
-  const loadRootPath = async () => {
-    try {
-      // 获取根路径
-      const getWindowStorageKey = () => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const initialPath = searchParams.get('initialPath');
-        if (initialPath) {
-          try {
-            const pathHash = btoa(initialPath).replace(/[+/=]/g, '');
-            return `lastRootPath_${pathHash}`;
-          } catch (e) {
-            let hash = 0;
-            const str = initialPath;
-            for (let i = 0; i < str.length; i++) {
-              const char = str.charCodeAt(i);
-              hash = ((hash << 5) - hash) + char;
-              hash = hash & hash;
-            }
-            return `lastRootPath_${Math.abs(hash)}`;
-          }
-        } else {
-          return 'lastRootPath_default';
-        }
-      };
-
-      const windowStorageKey = getWindowStorageKey();
-      const rootPathValue = localStorage.getItem(windowStorageKey);
-
-      if (rootPathValue) {
-        setRootPath(rootPathValue);
-      }
-    } catch (err) {
-      console.error('加载根路径失败:', err);
-    }
-  };
 
   // 预加载父目录 - 性能优化
   const preloadParentDirectory = async () => {
@@ -630,23 +549,13 @@ function AlbumPage({
     }
   }, [isNavigating, urlMode, onBreadcrumbNavigate, decodedAlbumPath, rootPath, resolveTargetView, navigateToFolderPath, navigateToAlbumPath]);
 
-  // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
+  // 随机浏览只由 canonical coordinator 处理。
   const handleRandomAlbum = useCallback(() => {
-    if (onRandomBrowse) {
-      Promise.resolve()
-        .then(() => onRandomBrowse())
-        .catch((error) => setError(error?.message || '随机浏览失败'));
-      return;
-    }
-
-    const randomAlbum = drawRandomSiblingAlbum();
-    if (!randomAlbum) {
-      setError('没有其他相簿可供随机选择');
-      return;
-    }
-
-    navigateToAlbumPath(randomAlbum.path, randomAlbum.name);
-  }, [onRandomBrowse, drawRandomSiblingAlbum, navigateToAlbumPath]);
+    if (!onRandomBrowse) return;
+    Promise.resolve()
+      .then(() => onRandomBrowse())
+      .catch((error) => setError(error?.message || '随机浏览失败'));
+  }, [onRandomBrowse]);
 
   // 添加键盘事件监听
   useEffect(() => {
@@ -734,9 +643,7 @@ function AlbumPage({
     handleNavigateToAdjacentAlbum
   ]);
 
-  const randomDisabled = onRandomBrowse
-    ? randomBrowseDisabled || randomBrowseLoading
-    : legacyRandomCandidates.length === 0;
+  const randomDisabled = !onRandomBrowse || randomBrowseDisabled || randomBrowseLoading;
 
   const renderHeader = () => (
     <>

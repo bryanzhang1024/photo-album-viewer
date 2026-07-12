@@ -67,7 +67,7 @@ jest.mock('../../../src/renderer/pages/AlbumPage', () =>
       <div data-testid="mock-album-path">{props.albumPath}</div>
       <button
         type="button"
-        onClick={() => props.onAlbumClick?.('/albums/random', 'random', null)}
+        onClick={() => props.onAlbumClick?.('/Volumes/NAS/Photos/random', 'random', null)}
       >
         模拟随机相簿
       </button>
@@ -88,22 +88,19 @@ jest.mock('../../../src/renderer/pages/AlbumPage', () =>
 );
 
 jest.mock('../../../src/renderer/pages/FavoritesPage', () =>
-  jest.fn((props) => <div data-testid="favorites-page">{props.tabsHeaderContent}</div>)
+  jest.fn((props) => (
+    <div data-testid="favorites-page">
+      {props.tabsHeaderContent}
+      <button type="button" onClick={() => props.onNavigate?.('/Missing/Favorite', 'album')}>
+        模拟打开失联收藏
+      </button>
+    </div>
+  ))
 );
 
 jest.mock('../../../src/renderer/hooks/useRandomNavigationCoordinator', () => ({
   useRandomNavigationCoordinator: jest.fn()
 }));
-
-jest.mock('../../../src/renderer/utils/navigation', () => {
-  const actual = jest.requireActual('../../../src/renderer/utils/navigation');
-  return {
-    ...actual,
-    withLastPathTracking: jest.fn((navigate) => navigate),
-    getLastPath: jest.fn(() => ''),
-    setLastPath: jest.fn()
-  };
-});
 
 const HomePage = require('../../../src/renderer/pages/HomePage');
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage');
@@ -115,7 +112,6 @@ const {
 } = require('../../../src/renderer/hooks/useRandomNavigationCoordinator');
 const reactRouter = require('react-router-dom');
 const CHANNELS = require('../../../src/common/ipc-channels');
-const browserTabsSessionV1 = require('../../fixtures/legacy/browser-tabs-session-v1.json');
 const ipcRenderer = global.electronMock.ipcRenderer;
 
 const SOURCE_ID = 'src_11111111-1111-4111-8111-111111111111';
@@ -163,8 +159,8 @@ const createCanonicalLocation = (overrides = {}) => ({
   }
 });
 
-const createV2Session = ({ tabs, activeTabId = tabs[0].id }) => ({
-  schemaVersion: 2,
+const createV3Session = ({ tabs, activeTabId = tabs[0].id }) => ({
+  schemaVersion: 3,
   tabs,
   activeTabId,
   savedAt: 1783785600000
@@ -194,7 +190,6 @@ describe('BrowserPage', () => {
     jest.clearAllMocks();
     localStorage.clear();
     mockAlbumRefreshTargets.length = 0;
-    navigationUtils.getLastPath.mockReturnValue('');
     useRandomNavigationCoordinator.mockImplementation(({ activeTab }) => ({
       available: activeTab?.location?.kind === 'directory',
       randomBrowseLoading: true,
@@ -212,48 +207,82 @@ describe('BrowserPage', () => {
     });
   });
 
-  test('waits for SourceRoot hydration before migrating v1 or persisting v2', async () => {
-    const source = createSource();
-    const deferredLoad = createDeferred();
-    const v1Raw = JSON.stringify({
-      tabs: [{
-        id: 'tab-v1',
-        targetPath: '/Volumes/NAS/Photos/2026/旅行',
-        viewMode: 'album',
-        initialImage: '/Volumes/NAS/Photos/2026/旅行/001.jpg'
-      }],
-      activeTabId: 'tab-v1'
-    });
-    localStorage.setItem('browser_tabs_session_v1', v1Raw);
-    const getItemSpy = jest.spyOn(localStorage, 'getItem');
-
-    ipcRenderer.invoke.mockImplementation((channel) => {
-      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) return deferredLoad.promise;
-      return Promise.resolve(undefined);
-    });
+  test('starts from landing after clearing legacy navigation state only', async () => {
+    localStorage.setItem('browser_tabs_session_v1', '{"legacy":1}');
+    localStorage.setItem('browser_tabs_session_v2', '{"schemaVersion":2}');
+    localStorage.setItem('browser_tabs_snapshot_v1', 'legacy-snapshot');
+    localStorage.setItem('lastPath', '/Old/Photos');
+    localStorage.setItem('lastRootPath_default', '/Old/Root');
+    localStorage.setItem('themeMode', 'dark');
     setupRouterMocks({ pathname: '/', search: '' });
 
     render(<BrowserPage colorMode="dark" />);
 
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith(
-      CHANNELS.LOAD_SOURCE_ROOTS_V1,
-      { contractVersion: 1 }
-    );
-    expect(getItemSpy).not.toHaveBeenCalledWith('browser_tabs_session_v1');
-    expect(localStorage.getItem('browser_tabs_session_v2')).toBeNull();
-
-    await act(async () => {
-      deferredLoad.resolve(createLoadSourcesResponse([source]));
-      await deferredLoad.promise;
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
+    expect(screen.getByTestId('home-page')).toBeInTheDocument();
+    expect(localStorage.getItem('browser_tabs_session_v1')).toBeNull();
+    expect(localStorage.getItem('browser_tabs_session_v2')).toBeNull();
+    expect(localStorage.getItem('browser_tabs_snapshot_v1')).toBeNull();
+    expect(localStorage.getItem('lastPath')).toBeNull();
+    expect(localStorage.getItem('lastRootPath_default')).toBeNull();
+    expect(localStorage.getItem('themeMode')).toBe('dark');
+  });
+
+  test('redirects a canonical deep link with a missing SourceRoot to landing with guidance', async () => {
+    const url = navigationUtils.buildNavigationTargetUrl(createCanonicalLocation().target);
+    const [pathname, search] = url.split('?');
+    const navigateMock = setupRouterMocks({ pathname, search: `?${search}` });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    expect(await screen.findByText('照片来源不可用，请重新打开来源目录')).toBeInTheDocument();
+    expect(screen.getByTestId('home-page')).toBeInTheDocument();
+    expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  test('restores a v3 session with a missing SourceRoot as landing with guidance', async () => {
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
+      tabs: [{ id: 'tab-missing-source', location: createCanonicalLocation() }]
+    })));
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    expect(await screen.findByText('照片来源不可用，请重新打开来源目录')).toBeInTheDocument();
+    expect(screen.getByTestId('home-page')).toBeInTheDocument();
+    expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  test('keeps the active tab unchanged when SourceRoot registration fails', async () => {
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Photos');
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve({ contractVersion: 1, ok: false, error: { message: 'failed' } });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy());
+    navigateMock.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
+    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('mock-album-path'))
-        .toHaveTextContent('/Volumes/NAS/Photos/2026/旅行');
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(screen.getByText('无法建立照片来源，请检查目录是否可访问')).toBeInTheDocument();
     });
-    expect(localStorage.getItem('browser_tabs_session_v1')).toBe(v1Raw);
-    getItemSpy.mockRestore();
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(
+      CHANNELS.CREATE_NEW_INSTANCE,
+      expect.anything()
+    );
   });
 
   test('finishes SourceRoot hydration under React StrictMode remount effects', async () => {
@@ -270,51 +299,13 @@ describe('BrowserPage', () => {
         CHANNELS.LOAD_SOURCE_ROOTS_V1,
         { contractVersion: 1 }
       );
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
   });
 
-  test('keeps legacy v1 tabs running without writing v2 when registry loading fails', async () => {
-    const v1Raw = JSON.stringify({
-      tabs: [{
-        id: 'tab-legacy',
-        targetPath: '/Offline/旅行',
-        viewMode: 'album',
-        initialImage: '/Offline/旅行/001.jpg'
-      }],
-      activeTabId: 'tab-legacy'
-    });
-    localStorage.setItem('browser_tabs_session_v1', v1Raw);
-    ipcRenderer.invoke.mockImplementation((channel) => {
-      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
-        return Promise.resolve({
-          contractVersion: 1,
-          ok: false,
-          data: null,
-          error: {
-            code: 'SOURCE_ROOT_IO_ERROR',
-            message: 'offline',
-            retryable: true,
-            details: null
-          }
-        });
-      }
-      return Promise.resolve(undefined);
-    });
-    setupRouterMocks({ pathname: '/', search: '' });
-
-    render(<BrowserPage colorMode="dark" />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Offline/旅行');
-    });
-    expect(localStorage.getItem('browser_tabs_session_v2')).toBeNull();
-    expect(localStorage.getItem('browser_tabs_session_v1')).toBe(v1Raw);
-  });
-
-  test('materializes canonical v2 folder and album locations into legacy page props', async () => {
+  test('materializes canonical directory locations into page props', async () => {
     const source = createSource();
-    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
       tabs: [
         {
           id: 'tab-folder-v2',
@@ -378,7 +369,7 @@ describe('BrowserPage', () => {
 
   test('passes one canonical random coordinator contract to HomePage and AlbumPage', async () => {
     const source = createSource();
-    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
       tabs: [
         {
           id: 'tab-folder-random',
@@ -443,53 +434,10 @@ describe('BrowserPage', () => {
     }));
   });
 
-  test('passes null random handlers to legacy HomePage and AlbumPage locations', async () => {
-    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
-      tabs: [
-        {
-          id: 'tab-legacy-folder',
-          location: {
-            kind: 'legacyAbsolute',
-            legacyAbsolutePath: '/Legacy/Folder',
-            viewMode: 'folder',
-            legacyInitialMediaPath: null
-          }
-        },
-        {
-          id: 'tab-legacy-album',
-          location: {
-            kind: 'legacyAbsolute',
-            legacyAbsolutePath: '/Legacy/Album',
-            viewMode: 'album',
-            legacyInitialMediaPath: null
-          }
-        }
-      ],
-      activeTabId: 'tab-legacy-folder'
-    })));
-    setupRouterMocks({ pathname: '/', search: '' });
-
-    render(<BrowserPage colorMode="dark" />);
-
-    await waitFor(() => {
-      const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
-      expect(homeProps.onRandomBrowse).toBeNull();
-      expect(homeProps.onRandomScopeRefresh).toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('tab', { name: /Album/i }));
-
-    await waitFor(() => {
-      const albumProps = AlbumPage.mock.calls[AlbumPage.mock.calls.length - 1][0];
-      expect(albumProps.onRandomBrowse).toBeNull();
-      expect(albumProps.onRandomScopeRefresh).toBeNull();
-    });
-  });
-
   test('restores a mixed-case v2 source id against the lowercase registry source', async () => {
     const source = createSource();
     const mixedCaseSourceId = SOURCE_ID.toUpperCase();
-    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
       tabs: [{
         id: 'tab-mixed-source',
         location: createCanonicalLocation({
@@ -543,7 +491,7 @@ describe('BrowserPage', () => {
       search: `?${new URLSearchParams({
         sourceId: mixedCaseSourceId,
         relativePath: '2026/旅行',
-        view: 'folder'
+        view: 'browse'
       }).toString()}`
     });
 
@@ -553,79 +501,10 @@ describe('BrowserPage', () => {
       const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
       expect(homeProps.currentPath).toBe('/Volumes/NAS/Photos/2026/旅行');
       expect(homeProps.sourceBoundary?.sourceId).toBe(SOURCE_ID);
-      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
       const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
       expect(activeTab.location.target.sourceId).toBe(mixedCaseSourceId);
     });
-  });
-
-  test('migrates a unique v1 root, keeps unresolved tabs open, and preserves v1 raw bytes', async () => {
-    const source = createSource();
-    const sessionRaw = `  ${JSON.stringify({
-      tabs: [
-        {
-          id: 'tab-resolved',
-          targetPath: '/Volumes/NAS/Photos/2026/旅行',
-          viewMode: 'folder',
-          initialImage: null
-        },
-        {
-          id: 'tab-unresolved',
-          targetPath: '/Other/旅行',
-          viewMode: 'album',
-          initialImage: '/Other/旅行/cover.jpg'
-        }
-      ],
-      activeTabId: 'tab-unresolved'
-    }, null, 2)}\n`;
-    const snapshotRaw = `\n${JSON.stringify({
-      tabs: [{
-        id: 'snapshot-v1',
-        targetPath: '/Volumes/NAS/Photos/快照',
-        viewMode: 'folder',
-        initialImage: null
-      }],
-      activeTabId: 'snapshot-v1'
-    })}`;
-    localStorage.setItem('browser_tabs_session_v1', sessionRaw);
-    localStorage.setItem('browser_tabs_snapshot_v1', snapshotRaw);
-    ipcRenderer.invoke.mockImplementation((channel) => {
-      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
-        return Promise.resolve(createLoadSourcesResponse([source]));
-      }
-      return Promise.resolve(undefined);
-    });
-    setupRouterMocks({ pathname: '/', search: '' });
-
-    render(<BrowserPage colorMode="dark" />);
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
-      expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Other/旅行');
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
-
-    const saved = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
-    expect(saved.tabs).toEqual([
-      {
-        id: 'tab-resolved',
-        location: createCanonicalLocation({
-          relativePath: '2026/旅行',
-          viewMode: 'browse'
-        })
-      },
-      {
-        id: 'tab-unresolved',
-        location: {
-          kind: 'legacyAbsolute',
-          legacyAbsolutePath: '/Other/旅行',
-          viewMode: 'album',
-          legacyInitialMediaPath: '/Other/旅行/cover.jpg'
-        }
-      }
-    ]);
-    expect(localStorage.getItem('browser_tabs_session_v1')).toBe(sessionRaw);
-    expect(localStorage.getItem('browser_tabs_snapshot_v1')).toBe(snapshotRaw);
   });
 
   test('keeps tabs with different source identities even when paths materialize equally', async () => {
@@ -633,7 +512,7 @@ describe('BrowserPage', () => {
       createSource(),
       createSource({ sourceId: SECOND_SOURCE_ID, label: '备份照片' })
     ];
-    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
       tabs: [
         { id: 'tab-primary', location: createCanonicalLocation() },
         {
@@ -651,7 +530,7 @@ describe('BrowserPage', () => {
     });
     setupRouterMocks({
       pathname: '/browse',
-      search: `?sourceId=${SECOND_SOURCE_ID}&relativePath=2026%2F%E6%97%85%E8%A1%8C&view=folder`
+      search: `?sourceId=${SECOND_SOURCE_ID}&relativePath=2026%2F%E6%97%85%E8%A1%8C&view=browse`
     });
 
     render(<BrowserPage colorMode="dark" />);
@@ -668,7 +547,7 @@ describe('BrowserPage', () => {
     const source = createSource();
     const navigateMock = setupRouterMocks({
       pathname: '/browse',
-      search: `?sourceId=${SOURCE_ID}&relativePath=2026&view=folder`
+      search: `?sourceId=${SOURCE_ID}&relativePath=2026&view=browse`
     });
     ipcRenderer.invoke.mockImplementation((channel) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
@@ -742,7 +621,7 @@ describe('BrowserPage', () => {
     const source = createSource();
     const navigateMock = setupRouterMocks({
       pathname: '/browse',
-      search: `?sourceId=${SOURCE_ID}&relativePath=&view=album`
+      search: `?sourceId=${SOURCE_ID}&relativePath=&view=photoSet`
     });
     ipcRenderer.invoke.mockImplementation((channel) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
@@ -854,101 +733,29 @@ describe('BrowserPage', () => {
     });
   });
 
-  test('opens an unregistered legacy root in a new window with the absolute path fallback', async () => {
-    setupRouterMocks({ pathname: '/', search: '' });
+  test('does not open a new window when selected directory registration fails', async () => {
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
     ipcRenderer.invoke.mockImplementation((channel) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
         return Promise.resolve(createLoadSourcesResponse());
       }
-      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Photos');
+      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Selected/Unavailable');
       if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
-        return Promise.resolve({ contractVersion: 1, ok: false, error: 'save failed' });
+        return Promise.resolve({ contractVersion: 1, ok: false, error: { message: 'failed' } });
       }
-      if (channel === CHANNELS.CREATE_NEW_INSTANCE) return Promise.resolve({ success: true });
       return Promise.resolve(undefined);
     });
 
     render(<BrowserPage colorMode="dark" />);
-    await waitFor(() => {
-      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
-        CHANNELS.LOAD_SOURCE_ROOTS_V1,
-        { contractVersion: 1 }
-      );
-    });
+    await waitFor(() => expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy());
+    navigateMock.mockClear();
 
     fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
     fireEvent.click(screen.getByText('在新窗口打开文件夹'));
 
-    await waitFor(() => {
-      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
-        CHANNELS.CREATE_NEW_INSTANCE,
-        '/Selected/Photos'
-      );
-    });
-  });
-
-  test('keeps the selected root as an explicit legacy location when source registration throws', async () => {
-    const ancestorSource = createSource({ rootPath: '/Photos' });
-    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
-    ipcRenderer.invoke.mockImplementation((channel) => {
-      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
-        return Promise.resolve(createLoadSourcesResponse([ancestorSource]));
-      }
-      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Photos/Nested');
-      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
-        return Promise.reject(new Error('disk unavailable'));
-      }
-      return Promise.resolve(undefined);
-    });
-
-    render(<BrowserPage colorMode="dark" />);
-    await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
-    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
-
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenLastCalledWith('/Photos/Nested', {
-        viewMode: 'folder',
-        initialImage: null,
-        replace: false
-      });
-      expect(screen.getByText('来源注册失败，已使用兼容模式打开')).toBeInTheDocument();
-    });
-  });
-
-  test('keeps the selected root as an explicit legacy location when source registration returns ok false', async () => {
-    const ancestorSource = createSource({ rootPath: '/Photos' });
-    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
-    ipcRenderer.invoke.mockImplementation((channel) => {
-      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
-        return Promise.resolve(createLoadSourcesResponse([ancestorSource]));
-      }
-      if (channel === CHANNELS.SELECT_DIRECTORY) return Promise.resolve('/Photos/Nested');
-      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
-        return Promise.resolve({ contractVersion: 1, ok: false, error: 'save failed' });
-      }
-      return Promise.resolve(undefined);
-    });
-
-    render(<BrowserPage colorMode="dark" />);
-    await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
-    fireEvent.click(screen.getByText('在当前标签打开文件夹'));
-
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenLastCalledWith('/Photos/Nested', {
-        viewMode: 'folder',
-        initialImage: null,
-        replace: false
-      });
-      expect(screen.getByText('来源注册失败，已使用兼容模式打开')).toBeInTheDocument();
-    });
+    expect(await screen.findByText('无法建立照片来源，请检查目录是否可访问')).toBeInTheDocument();
+    expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(CHANNELS.CREATE_NEW_INSTANCE, expect.anything());
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   test('uses the returned canonical source when registration reports created false', async () => {
@@ -972,7 +779,7 @@ describe('BrowserPage', () => {
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
@@ -1007,7 +814,7 @@ describe('BrowserPage', () => {
 
     const { unmount } = render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
@@ -1053,7 +860,7 @@ describe('BrowserPage', () => {
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
@@ -1096,7 +903,7 @@ describe('BrowserPage', () => {
     });
     const navigateMock = setupRouterMocks({
       pathname: '/browse',
-      search: `?sourceId=${SOURCE_ID}&relativePath=&view=folder`
+      search: `?sourceId=${SOURCE_ID}&relativePath=&view=browse`
     });
     ipcRenderer.invoke.mockImplementation((channel) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
@@ -1109,7 +916,7 @@ describe('BrowserPage', () => {
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
@@ -1150,7 +957,7 @@ describe('BrowserPage', () => {
     let selectionCount = 0;
     const navigateMock = setupRouterMocks({
       pathname: '/browse',
-      search: `?sourceId=${SOURCE_ID}&relativePath=&view=folder`
+      search: `?sourceId=${SOURCE_ID}&relativePath=&view=browse`
     });
     ipcRenderer.invoke.mockImplementation((channel, payload) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
@@ -1172,7 +979,7 @@ describe('BrowserPage', () => {
 
     const { rerender } = render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '打开文件夹' }));
@@ -1198,13 +1005,13 @@ describe('BrowserPage', () => {
 
     reactRouter.useLocation.mockReturnValue({
       pathname: '/browse',
-      search: `?sourceId=${SOURCE_ID}&relativePath=External&view=folder`,
+      search: `?sourceId=${SOURCE_ID}&relativePath=External&view=browse`,
       state: null
     });
     rerender(<BrowserPage colorMode="dark" />);
 
     await waitFor(() => {
-      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
       const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
       expect(activeTab.location).toEqual(createCanonicalLocation({ relativePath: 'External' }));
       expect(screen.getByRole('tab', { name: /External/i })).toHaveAttribute('aria-selected', 'true');
@@ -1215,7 +1022,7 @@ describe('BrowserPage', () => {
       await deferredSave.promise;
     });
 
-    const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+    const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
     const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
     expect(activeTab.location).toEqual(createCanonicalLocation({ relativePath: 'External' }));
     expect(navigateMock).toHaveBeenCalledTimes(1);
@@ -1289,6 +1096,37 @@ describe('BrowserPage', () => {
     expect(screen.getByRole('tab', { name: /family/i })).toHaveAttribute('aria-selected', 'true');
   });
 
+  test('keeps the active tab unchanged when a dropped directory cannot be registered', async () => {
+    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel, payload) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse());
+      }
+      if (channel === CHANNELS.RESOLVE_DROPPED_FOLDERS) {
+        return Promise.resolve({ folders: payload, rejected: [] });
+      }
+      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
+        return Promise.resolve({ contractVersion: 1, ok: false, error: { message: 'failed' } });
+      }
+      return Promise.resolve(undefined);
+    });
+
+    render(<BrowserPage colorMode="dark" />);
+    await waitFor(() => expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy());
+    navigateMock.mockClear();
+
+    fireEvent.drop(document, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [{ name: 'unavailable', mockPath: '/photos/unavailable' }]
+      }
+    });
+
+    expect(await screen.findByText('无法建立照片来源：/photos/unavailable')).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab', { name: /主页/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
   test('ignores a dropped folder registration that resolves after unmount', async () => {
     const deferredSave = createDeferred();
     const droppedSource = createSource({ rootPath: '/Dropped/Slow', label: 'Slow' });
@@ -1306,7 +1144,7 @@ describe('BrowserPage', () => {
 
     const { unmount } = render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.drop(document, {
@@ -1354,7 +1192,7 @@ describe('BrowserPage', () => {
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.drop(document, {
@@ -1396,107 +1234,6 @@ describe('BrowserPage', () => {
     expect(screen.getByRole('tab', { name: /Second/i })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('registers an already-decoded legacy initialPath without decoding percent twice', async () => {
-    const initialSource = createSource({
-      rootPath: '/photos/100%done',
-      label: '100%done'
-    });
-    const navigateMock = setupRouterMocks({
-      pathname: '/',
-      search: '?initialPath=%2Fphotos%2F100%25done'
-    });
-    ipcRenderer.invoke.mockImplementation((channel) => {
-      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
-        return Promise.resolve(createLoadSourcesResponse());
-      }
-      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) {
-        return Promise.resolve(createSaveSourceResponse(initialSource));
-      }
-      return Promise.resolve(undefined);
-    });
-
-    render(<BrowserPage colorMode="dark" />);
-
-    await waitFor(() => {
-      expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.SAVE_SOURCE_ROOT_V1, {
-        contractVersion: 1,
-        sourceId: null,
-        rootPath: '/photos/100%done',
-        label: null
-      });
-      expect(navigateMock).toHaveBeenLastCalledWith(
-        navigationUtils.buildNavigationTargetUrl({
-          sourceId: SOURCE_ID,
-          relativePath: '',
-          viewMode: 'browse',
-          initialMediaRelativePath: null
-        }),
-        { replace: true }
-      );
-    });
-  });
-
-  test('lets a newer canonical URL finish hydration while an initialPath registration is pending', async () => {
-    const loadedSource = createSource();
-    const delayedSource = createSource({
-      sourceId: SECOND_SOURCE_ID,
-      rootPath: '/Slow/Root',
-      label: 'Slow Root'
-    });
-    const deferredSave = createDeferred();
-    const navigateMock = setupRouterMocks({
-      pathname: '/',
-      search: '?initialPath=%2FSlow%2FRoot'
-    });
-    ipcRenderer.invoke.mockImplementation((channel) => {
-      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
-        return Promise.resolve(createLoadSourcesResponse([loadedSource]));
-      }
-      if (channel === CHANNELS.SAVE_SOURCE_ROOT_V1) return deferredSave.promise;
-      return Promise.resolve(undefined);
-    });
-
-    const { rerender } = render(<BrowserPage colorMode="dark" />);
-    await waitFor(() => {
-      expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.SAVE_SOURCE_ROOT_V1, {
-        contractVersion: 1,
-        sourceId: null,
-        rootPath: '/Slow/Root',
-        label: null
-      });
-    });
-
-    reactRouter.useLocation.mockReturnValue({
-      pathname: '/browse',
-      search: `?sourceId=${SOURCE_ID}&relativePath=2027&view=album`,
-      state: null
-    });
-    rerender(<BrowserPage colorMode="dark" />);
-
-    await waitFor(() => {
-      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
-      const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
-      expect(activeTab.location).toEqual(createCanonicalLocation({
-        relativePath: '2027',
-        viewMode: 'photoSet'
-      }));
-      expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Volumes/NAS/Photos/2027');
-    });
-
-    await act(async () => {
-      deferredSave.resolve(createSaveSourceResponse(delayedSource));
-      await deferredSave.promise;
-    });
-
-    const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
-    const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
-    expect(activeTab.location).toEqual(createCanonicalLocation({
-      relativePath: '2027',
-      viewMode: 'photoSet'
-    }));
-    expect(navigateMock).not.toHaveBeenCalled();
-  });
-
   test('lets canonical URL intent win over an unrelated stored session', async () => {
     const sources = [
       createSource(),
@@ -1506,7 +1243,7 @@ describe('BrowserPage', () => {
         rootPath: '/Volumes/Second'
       })
     ];
-    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
       tabs: [{ id: 'stored-tab', location: createCanonicalLocation() }]
     })));
     ipcRenderer.invoke.mockImplementation((channel) => {
@@ -1517,7 +1254,7 @@ describe('BrowserPage', () => {
     });
     setupRouterMocks({
       pathname: '/browse',
-      search: `?sourceId=${SECOND_SOURCE_ID}&relativePath=2027%2FTrip&view=folder`
+      search: `?sourceId=${SECOND_SOURCE_ID}&relativePath=2027%2FTrip&view=browse`
     });
 
     render(<BrowserPage colorMode="dark" />);
@@ -1547,7 +1284,7 @@ describe('BrowserPage', () => {
       viewMode: 'photoSet',
       initialMediaRelativePath: 'aa:browse:aa/xx/y'
     };
-    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
       tabs: [{ id: 'tab-collision-a', location: sessionLocationA }]
     })));
     ipcRenderer.invoke.mockImplementation((channel) => {
@@ -1561,7 +1298,7 @@ describe('BrowserPage', () => {
       search: `?${new URLSearchParams({
         sourceId: explicitTargetB.sourceId,
         relativePath: explicitTargetB.relativePath,
-        view: 'album',
+        view: 'photoSet',
         image: explicitTargetB.initialMediaRelativePath
       }).toString()}`
     });
@@ -1571,7 +1308,7 @@ describe('BrowserPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('mock-album-path'))
         .toHaveTextContent('/Volumes/NAS/Photos/aa:browse:aa/xx');
-      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v2'));
+      const savedSession = JSON.parse(localStorage.getItem('browser_tabs_session_v3'));
       const activeTab = savedSession.tabs.find((tab) => tab.id === savedSession.activeTabId);
       expect(activeTab.location).toEqual({ kind: 'directory', target: explicitTargetB });
     });
@@ -1583,7 +1320,7 @@ describe('BrowserPage', () => {
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     expect(screen.getByTestId('home-page')).toBeInTheDocument();
@@ -1597,42 +1334,15 @@ describe('BrowserPage', () => {
     expect(AlbumPage).not.toHaveBeenCalled();
   });
 
-  test('renders AlbumPage when viewMode=album in URL', async () => {
+  test('renders FavoritesPage for the canonical favorites URL', async () => {
     setupRouterMocks({
-      pathname: '/browse/%2Fphotos',
-      search: '?view=album&image=cover.jpg'
+      pathname: '/favorites',
+      search: ''
     });
 
     render(<BrowserPage colorMode="light" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
-
-    expect(screen.getByTestId('album-page')).toBeInTheDocument();
-    expect(AlbumPage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        albumPath: '/photos',
-        initialImage: '/photos/cover.jpg',
-        urlMode: true
-      }),
-      {}
-    );
-    expect(HomePage).not.toHaveBeenCalled();
-    expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(
-      CHANNELS.SAVE_SOURCE_ROOT_V1,
-      expect.anything()
-    );
-  });
-
-  test('renders FavoritesPage when viewMode=favorites in URL', async () => {
-    setupRouterMocks({
-      pathname: '/browse',
-      search: '?view=favorites'
-    });
-
-    render(<BrowserPage colorMode="light" />);
-    await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     expect(screen.getByTestId('favorites-page')).toBeInTheDocument();
@@ -1646,110 +1356,10 @@ describe('BrowserPage', () => {
     expect(AlbumPage).not.toHaveBeenCalled();
   });
 
-  test('restores last path when no target specified', async () => {
-    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
-
-    navigationUtils.getLastPath.mockReturnValue('/previous/path');
-
-    render(<BrowserPage colorMode="light" />);
-
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/previous/path', {
-        initialImage: null,
-        replace: true,
-        viewMode: 'folder'
-      });
-    });
-    expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(
-      CHANNELS.SAVE_SOURCE_ROOT_V1,
-      expect.anything()
-    );
-  });
-
-  test('restores tabs session with album view mode', async () => {
-    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
-
-    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
-      tabs: [
-        {
-          id: 'tab_album_1',
-          targetPath: '/albums/wedding',
-          viewMode: 'album',
-          initialImage: 'cover.jpg'
-        }
-      ],
-      activeTabId: 'tab_album_1'
-    }));
-
-    render(<BrowserPage colorMode="dark" />);
-
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/albums/wedding', {
-        viewMode: 'album',
-        initialImage: '/albums/wedding/cover.jpg',
-        replace: true
-      });
-    });
-  });
-
-  test('restores full tabs when current URL matches a saved tab', async () => {
-    const navigateMock = setupRouterMocks({
-      pathname: '/browse/%2Falbums%2Fwedding',
-      search: '?view=album&image=cover.jpg'
-    });
-
-    localStorage.setItem(
-      'browser_tabs_session_v1',
-      JSON.stringify(browserTabsSessionV1)
-    );
-
-    render(<BrowserPage colorMode="dark" />);
-
-    expect(await screen.findByRole('tab', { name: /trip/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /wedding/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /wedding/i })).toHaveAttribute('aria-selected', 'true');
-    expect(navigateMock).not.toHaveBeenCalled();
-  });
-
-  test('keeps deep link as single tab when URL does not match saved session tabs', async () => {
-    const navigateMock = setupRouterMocks({
-      pathname: '/browse/%2Fnew%2Fpath',
-      search: '?view=folder'
-    });
-
-    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
-      tabs: [
-        {
-          id: 'tab-old',
-          targetPath: '/albums/wedding',
-          viewMode: 'album',
-          initialImage: null
-        },
-        {
-          id: 'tab-other',
-          targetPath: '/albums/trip',
-          viewMode: 'folder',
-          initialImage: null
-        }
-      ],
-      activeTabId: 'tab-old'
-    }));
-
-    render(<BrowserPage colorMode="dark" />);
-    await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
-
-    expect(screen.getByRole('tab', { name: /path/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /wedding/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /trip/i })).not.toBeInTheDocument();
-    expect(navigateMock).not.toHaveBeenCalled();
-  });
-
   test('keeps favorites deep link as single tab when URL does not match saved session tabs', async () => {
     const navigateMock = setupRouterMocks({
-      pathname: '/browse',
-      search: '?view=favorites'
+      pathname: '/favorites',
+      search: ''
     });
 
     localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
@@ -1766,7 +1376,7 @@ describe('BrowserPage', () => {
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     expect(screen.getByRole('tab', { name: /我的收藏/i })).toBeInTheDocument();
@@ -1774,48 +1384,42 @@ describe('BrowserPage', () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  test('tracks last path for non-root navigation', async () => {
-    setupRouterMocks({
-      pathname: '/browse/%2Fphotos',
-      search: ''
+  test('keeps the favorites tab unchanged when an absolute favorite matches no SourceRoot', async () => {
+    const navigateMock = setupRouterMocks({ pathname: '/favorites', search: '' });
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([
+          createSource({ rootPath: '/Volumes/NAS/Photos' })
+        ]));
+      }
+      return Promise.resolve(undefined);
     });
 
     render(<BrowserPage colorMode="dark" />);
-    await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
+    await waitFor(() => expect(screen.getByTestId('favorites-page')).toBeInTheDocument());
+    navigateMock.mockClear();
 
-    expect(navigationUtils.setLastPath).toHaveBeenCalledWith('/photos');
-  });
+    fireEvent.click(screen.getByText('模拟打开失联收藏'));
 
-  test('falls back to default root directory when no tabs session and no last path', async () => {
-    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
-    localStorage.setItem('lastRootPath_default', '/photos/default-root');
-
-    render(<BrowserPage colorMode="light" />);
-
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/photos/default-root', {
-        initialImage: null,
-        replace: true,
-        viewMode: 'folder'
-      });
-    });
-    expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(
-      CHANNELS.SAVE_SOURCE_ROOT_V1,
-      expect.anything()
-    );
+    expect(await screen.findByText('该目录未关联照片来源，请先重新打开来源目录')).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab', { name: /我的收藏/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('opens favorites from home in a new active tab without replacing current tab', async () => {
     const navigateMock = setupRouterMocks({
-      pathname: '/browse/%2Falbums%2Ftrip',
-      search: '?view=folder'
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=trip&view=browse`
     });
+    ipcRenderer.invoke.mockImplementation((channel) => (
+      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
+        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
+        : Promise.resolve(undefined)
+    ));
 
     render(<BrowserPage colorMode="light" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByText('模拟打开收藏'));
@@ -1823,22 +1427,23 @@ describe('BrowserPage', () => {
     expect(screen.getByRole('tab', { name: /trip/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /trip/i })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('tab', { name: /我的收藏/i })).toHaveAttribute('aria-selected', 'true');
-    expect(navigateMock).toHaveBeenLastCalledWith('', {
-      viewMode: 'favorites',
-      initialImage: null,
-      replace: false
-    });
+    expect(navigateMock).toHaveBeenLastCalledWith('/favorites', {});
   });
 
   test('opens favorites from album in a new active tab without replacing current tab', async () => {
     const navigateMock = setupRouterMocks({
-      pathname: '/browse/%2Falbums%2Fwedding',
-      search: '?view=album'
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=wedding&view=photoSet`
     });
+    ipcRenderer.invoke.mockImplementation((channel) => (
+      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
+        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
+        : Promise.resolve(undefined)
+    ));
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByText('模拟打开收藏'));
@@ -1846,118 +1451,45 @@ describe('BrowserPage', () => {
     expect(screen.getByRole('tab', { name: /wedding/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /wedding/i })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('tab', { name: /我的收藏/i })).toHaveAttribute('aria-selected', 'true');
-    expect(navigateMock).toHaveBeenLastCalledWith('', {
-      viewMode: 'favorites',
-      initialImage: null,
-      replace: false
-    });
+    expect(navigateMock).toHaveBeenLastCalledWith('/favorites', {});
   });
 
   test('saves current tabs snapshot from tabs menu without touching the v1 key', async () => {
     setupRouterMocks({
-      pathname: '/browse/%2Falbums%2Ftrip',
-      search: '?view=folder'
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=trip&view=browse`
     });
+    ipcRenderer.invoke.mockImplementation((channel) => (
+      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
+        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
+        : Promise.resolve(undefined)
+    ));
 
     render(<BrowserPage colorMode="light" />);
 
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByLabelText('标签页列表'));
     fireEvent.click(screen.getByText('保存当前标签组'));
 
-    const savedRaw = localStorage.getItem('browser_tabs_snapshot_v2');
+    const savedRaw = localStorage.getItem('browser_tabs_snapshot_v3');
     expect(savedRaw).toBeTruthy();
 
     const savedSnapshot = JSON.parse(savedRaw);
-    expect(savedSnapshot.schemaVersion).toBe(2);
+    expect(savedSnapshot.schemaVersion).toBe(3);
     expect(savedSnapshot.tabs[0].location).toEqual({
-      kind: 'legacyAbsolute',
-      legacyAbsolutePath: '/albums/trip',
-      viewMode: 'folder',
-      legacyInitialMediaPath: null
+      kind: 'directory',
+      target: {
+        sourceId: SOURCE_ID,
+        relativePath: 'trip',
+        viewMode: 'browse',
+        initialMediaRelativePath: null
+      }
     });
     expect(savedSnapshot.activeTabId).toBeTruthy();
     expect(localStorage.getItem('browser_tabs_snapshot_v1')).toBeNull();
-  });
-
-  test('restores saved v1 tabs snapshot without changing its raw string', async () => {
-    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
-
-    const snapshotRaw = JSON.stringify({
-      tabs: [
-        {
-          id: 'tab-album-restore',
-          targetPath: '/albums/wedding',
-          viewMode: 'album',
-          initialImage: 'cover.jpg'
-        }
-      ],
-      activeTabId: 'tab-album-restore'
-    });
-    localStorage.setItem('browser_tabs_snapshot_v1', snapshotRaw);
-
-    render(<BrowserPage colorMode="dark" />);
-
-    await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByLabelText('标签页列表'));
-    fireEvent.click(screen.getByText('恢复已保存标签组'));
-
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/albums/wedding', {
-        viewMode: 'album',
-        initialImage: '/albums/wedding/cover.jpg',
-        replace: true
-      });
-    });
-    expect(mockClearAllRandomState).toHaveBeenCalledTimes(1);
-    expect(mockClearAllRandomState.mock.invocationCallOrder[0]).toBeLessThan(
-      AlbumPage.mock.invocationCallOrder[0]
-    );
-    expect(localStorage.getItem('browser_tabs_snapshot_v1')).toBe(snapshotRaw);
-  });
-
-  test('opens every dropped Finder folder in a new tab and activates the last one', async () => {
-    const navigateMock = setupRouterMocks({ pathname: '/', search: '' });
-    ipcRenderer.invoke.mockImplementation((channel, paths) => {
-      if (channel === CHANNELS.RESOLVE_DROPPED_FOLDERS) {
-        return Promise.resolve({
-          folders: paths,
-          rejected: []
-        });
-      }
-      return Promise.resolve();
-    });
-
-    render(<BrowserPage colorMode="dark" />);
-
-    fireEvent.drop(document, {
-      dataTransfer: {
-        types: ['Files'],
-        files: [
-          { name: 'trip', mockPath: '/photos/trip' },
-          { name: 'family', mockPath: '/photos/family' }
-        ]
-      }
-    });
-
-    await screen.findByRole('tab', { name: /trip/i });
-    expect(screen.getByRole('tab', { name: /family/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /family/i })).toHaveAttribute('aria-selected', 'true');
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith(
-      CHANNELS.RESOLVE_DROPPED_FOLDERS,
-      ['/photos/trip', '/photos/family']
-    );
-    expect(navigateMock).toHaveBeenLastCalledWith('/photos/family', {
-      viewMode: 'folder',
-      initialImage: null,
-      replace: false
-    });
   });
 
   test('shows an error and keeps tabs unchanged when dropped items are not folders', async () => {
@@ -1983,39 +1515,6 @@ describe('BrowserPage', () => {
 
     expect(await screen.findByText('只支持拖入文件夹')).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /image\.jpg/i })).not.toBeInTheDocument();
-  });
-
-  test('redirects legacy route with album path to new browse url', () => {
-    const navigateMock = setupRouterMocks({
-      pathname: '/album',
-      search: '?image=image.jpg',
-      params: { albumPath: 'old%2Falbum' },
-      state: { from: 'legacy' }
-    });
-
-    render(<BrowserPage colorMode="dark" redirectFromOldRoute />);
-
-    expect(navigateMock).toHaveBeenCalledWith('old/album', {
-      initialImage: 'image.jpg',
-      replace: true,
-      state: { from: 'legacy' },
-      viewMode: 'album'
-    });
-  });
-
-  test('redirects legacy route without album path back to root', () => {
-    const navigateMock = setupRouterMocks({
-      pathname: '/album',
-      search: '',
-      params: {}
-    });
-
-    render(<BrowserPage colorMode="dark" redirectFromOldRoute />);
-
-    expect(navigateMock).toHaveBeenCalledWith('/', {
-      replace: true,
-      state: null
-    });
   });
 
   test('reorderTabsById moves dragged tab before target tab', () => {
@@ -2053,60 +1552,47 @@ describe('BrowserPage', () => {
     expect(reordered.map((tab) => tab.id)).toEqual(['tab-b', 'tab-c', 'tab-a', 'tab-d']);
   });
 
-  test('go back from Windows drive subpath navigates to drive root', async () => {
-    const navigateMock = setupRouterMocks({
-      pathname: '/browse/C%3A%2Fphotos',
-      search: '?view=album'
-    });
-
-    render(<BrowserPage colorMode="dark" />);
-    await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
-    });
-    const latestAlbumProps = AlbumPage.mock.calls[AlbumPage.mock.calls.length - 1][0];
-    act(() => {
-      latestAlbumProps.onGoBack();
-    });
-
-    expect(navigateMock).toHaveBeenCalledWith('C:/', {
-      viewMode: 'folder',
-      initialImage: null,
-      replace: false
-    });
-  });
-
   test('keeps album content in sync with tab state after random navigation before url catches up', async () => {
     const navigateMock = setupRouterMocks({
-      pathname: '/browse/%2Falbums%2Fold',
-      search: '?view=album'
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=old&view=photoSet`
     });
+    ipcRenderer.invoke.mockImplementation((channel) => (
+      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
+        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
+        : Promise.resolve(undefined)
+    ));
 
     render(<BrowserPage colorMode="dark" />);
     await waitFor(() => {
-      expect(localStorage.getItem('browser_tabs_session_v2')).toBeTruthy();
+      expect(localStorage.getItem('browser_tabs_session_v3')).toBeTruthy();
     });
 
     expect(screen.getByRole('tab', { name: /old/i })).toBeInTheDocument();
-    expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/albums/old');
+    expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Volumes/NAS/Photos/old');
 
     fireEvent.click(screen.getByText('模拟随机相簿'));
 
-    expect(navigateMock).toHaveBeenCalledWith('/albums/random', {
-      viewMode: 'album',
-      initialImage: null,
-      replace: false
-    });
+    expect(navigateMock).toHaveBeenCalledWith(
+      navigationUtils.buildNavigationTargetUrl({
+        sourceId: SOURCE_ID,
+        relativePath: 'random',
+        viewMode: 'photoSet',
+        initialMediaRelativePath: null
+      }),
+      {}
+    );
     expect(screen.getByRole('tab', { name: /random/i })).toBeInTheDocument();
-    expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/albums/random');
+    expect(screen.getByTestId('mock-album-path')).toHaveTextContent('/Volumes/NAS/Photos/random');
 
     fireEvent.click(screen.getByText('模拟刷新当前相簿'));
-    expect(mockAlbumRefreshTargets).toEqual(['/albums/random']);
+    expect(mockAlbumRefreshTargets).toEqual(['/Volumes/NAS/Photos/random']);
   });
 
   test('preserves independent scroll positions when switching between same-path tabs', async () => {
     const routerState = {
-      pathname: '/browse/%2Falbums%2Fshared',
-      search: '?view=folder',
+      pathname: '/browse',
+      search: `?sourceId=${SOURCE_ID}&relativePath=shared&view=browse`,
       state: null
     };
     const navigateMock = jest.fn();
@@ -2123,23 +1609,24 @@ describe('BrowserPage', () => {
     reactRouter.useNavigate.mockReturnValue(navigateMock);
     reactRouter.useParams.mockReturnValue({});
 
-    localStorage.setItem('browser_tabs_session_v1', JSON.stringify({
+    localStorage.setItem('browser_tabs_session_v3', JSON.stringify(createV3Session({
       tabs: [
         {
           id: 'tab-a',
-          targetPath: '/albums/shared',
-          viewMode: 'folder',
-          initialImage: null
+          location: createCanonicalLocation({ relativePath: 'shared' })
         },
         {
           id: 'tab-b',
-          targetPath: '/albums/shared',
-          viewMode: 'folder',
-          initialImage: null
+          location: createCanonicalLocation({ relativePath: 'shared' })
         }
       ],
       activeTabId: 'tab-a'
-    }));
+    })));
+    ipcRenderer.invoke.mockImplementation((channel) => (
+      channel === CHANNELS.LOAD_SOURCE_ROOTS_V1
+        ? Promise.resolve(createLoadSourcesResponse([createSource()]))
+        : Promise.resolve(undefined)
+    ));
 
     render(
       <ScrollPositionContext.Provider value={scrollContextValue}>

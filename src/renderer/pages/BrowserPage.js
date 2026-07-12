@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Tabs,
@@ -27,10 +27,7 @@ import CHANNELS from '../../common/ipc-channels';
 import {
   buildNavigationTargetUrl,
   parseBrowseLocation,
-  normalizeTargetPath,
-  withLastPathTracking,
-  getLastPath,
-  setLastPath
+  normalizeTargetPath
 } from '../utils/navigation';
 import {
   findUniqueLongestSourceRoot,
@@ -46,12 +43,12 @@ import {
   materializeBrowserLocation
 } from '../domain/browserLocation';
 import {
+  clearLegacyNavigationStorage,
   loadTabsSession,
   saveTabsSession
 } from '../persistence/sessionAdapter';
 import { useRandomNavigationCoordinator } from '../hooks/useRandomNavigationCoordinator';
 
-const DEFAULT_ROOT_PATH_KEY = 'lastRootPath_default';
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const DRAG_INSERT_BEFORE = 'before';
 const DRAG_INSERT_AFTER = 'after';
@@ -64,16 +61,7 @@ const createPendingNavigation = (browserLocation, rootOperationToken = null) => 
   rootOperationToken
 });
 
-const getDefaultRootPath = () => normalizeTargetPath(localStorage.getItem(DEFAULT_ROOT_PATH_KEY) || '');
-
 const parseURLLocation = (pathname, search) => {
-  const searchParams = new URLSearchParams(search);
-  if (pathname === '/browse'
-      && searchParams.get('view') === 'favorites'
-      && !searchParams.has('sourceId')) {
-    return { kind: 'favorites' };
-  }
-
   return parseBrowseLocation(pathname, search) || { kind: 'landing' };
 };
 
@@ -98,38 +86,11 @@ const normalizeViewMode = (viewMode) => {
   return 'folder';
 };
 
-const getTabTitle = (targetPath, viewMode = 'folder') => {
-  if (normalizeViewMode(viewMode) === 'favorites') {
-    return '我的收藏';
-  }
-  return getPathDisplayName(targetPath);
-};
-
-const getLegacyInitialImageProjection = (location) => {
-  const initialImage = location.legacyInitialMediaPath;
-  if (!initialImage) return null;
-  if (!isPortableRelativePath(initialImage)) return normalizeTargetPath(initialImage);
-
-  try {
-    return resolvePortableRelativePath(location.legacyAbsolutePath, initialImage);
-  } catch (_error) {
-    return null;
-  }
-};
-
 const materializeRuntimeTab = ({ id, location }, sources) => {
   if (location.kind === 'directory') {
     const materialized = materializeBrowserLocation(location, sources);
     if (!materialized) {
-      return {
-        id,
-        location,
-        targetPath: '',
-        viewMode: location.target.viewMode === 'photoSet' ? 'album' : 'folder',
-        initialImage: null,
-        title: getPathDisplayName(location.target.relativePath),
-        sourceBoundary: null
-      };
+      return materializeRuntimeTab({ id, location: { kind: 'landing' } }, sources);
     }
 
     const relativePath = location.target.relativePath;
@@ -137,7 +98,7 @@ const materializeRuntimeTab = ({ id, location }, sources) => {
       id,
       location,
       targetPath: materialized.absolutePath,
-      viewMode: materialized.legacyViewMode,
+      viewMode: materialized.pageViewMode,
       initialImage: materialized.absoluteInitialImage,
       title: relativePath
         ? getPathDisplayName(materialized.absolutePath)
@@ -148,19 +109,6 @@ const materializeRuntimeTab = ({ id, location }, sources) => {
         rootPath: materialized.sourceRoot.rootPath,
         relativePath
       }
-    };
-  }
-
-  if (location.kind === 'legacyAbsolute') {
-    const targetPath = normalizeTargetPath(location.legacyAbsolutePath);
-    return {
-      id,
-      location,
-      targetPath,
-      viewMode: normalizeViewMode(location.viewMode),
-      initialImage: getLegacyInitialImageProjection(location),
-      title: getTabTitle(targetPath, location.viewMode),
-      sourceBoundary: null
     };
   }
 
@@ -240,36 +188,7 @@ const createLocationFromAbsolutePath = (
     };
   }
 
-  let legacyInitialMediaPath = initialImage || null;
-  if (legacyInitialMediaPath && isPortableRelativePath(legacyInitialMediaPath)) {
-    legacyInitialMediaPath = resolvePortableRelativePath(
-      normalizedTargetPath,
-      legacyInitialMediaPath
-    );
-  }
-  return {
-    kind: 'legacyAbsolute',
-    legacyAbsolutePath: normalizedTargetPath,
-    viewMode: normalizedViewMode === 'album' ? 'album' : 'folder',
-    legacyInitialMediaPath
-  };
-};
-
-const createLegacyRootLocation = (absolutePath) => ({
-  kind: 'legacyAbsolute',
-  legacyAbsolutePath: normalizeTargetPath(absolutePath),
-  viewMode: 'folder',
-  legacyInitialMediaPath: null
-});
-
-const resolveURLLocation = (location, sources) => {
-  if (location.kind !== 'legacyAbsolute') return location;
-  return createLocationFromAbsolutePath(
-    location.legacyAbsolutePath,
-    location.viewMode,
-    location.legacyInitialMediaPath,
-    sources
-  );
+  return null;
 };
 
 const findSessionTabMatchingLocation = (session, location) => {
@@ -282,7 +201,6 @@ const findSessionTabMatchingLocation = (session, location) => {
 
 const isExplicitURLLocation = (location) => (
   location.kind === 'directory'
-  || location.kind === 'legacyAbsolute'
   || location.kind === 'favorites'
 );
 
@@ -321,10 +239,9 @@ const isExternalFileDrag = (event) => {
   return types.includes('Files');
 };
 
-function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = false }) {
+function BrowserPage({ colorMode, scrollContext = null }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const params = useParams();
   const hydrationCompletedRef = useRef(false);
   const hydrationGenerationRef = useRef(0);
   const mountedRef = useRef(false);
@@ -399,11 +316,6 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     [activeTabId]
   );
 
-  const navigateWithPersist = useMemo(
-    () => withLastPathTracking(navigate),
-    [navigate]
-  );
-
   const saveActiveTabScrollPosition = useCallback(() => {
     if (!scrollContext?.savePosition) {
       return;
@@ -434,39 +346,23 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       const options = {};
       if (replace) options.replace = true;
       if (state !== undefined) options.state = state;
-      const projected = createRuntimeTab(browserLocation, sourcesRef.current);
-      if (projected.targetPath) setLastPath(projected.targetPath);
       navigate(buildNavigationTargetUrl(browserLocation.target), options);
       return;
     }
 
     if (browserLocation.kind === 'favorites') {
-      navigateWithPersist('', {
-        viewMode: 'favorites',
-        initialImage: null,
-        replace,
-        ...(state !== undefined ? { state } : {})
-      });
+      const options = {};
+      if (replace) options.replace = true;
+      if (state !== undefined) options.state = state;
+      navigate('/favorites', options);
       return;
     }
 
-    if (browserLocation.kind === 'legacyAbsolute') {
-      navigateWithPersist(browserLocation.legacyAbsolutePath, {
-        viewMode: browserLocation.viewMode,
-        initialImage: getLegacyInitialImageProjection(browserLocation),
-        replace,
-        ...(state !== undefined ? { state } : {})
-      });
-      return;
-    }
-
-    navigateWithPersist('', {
-      viewMode: 'folder',
-      initialImage: null,
-      replace,
-      ...(state !== undefined ? { state } : {})
-    });
-  }, [navigate, navigateWithPersist]);
+    const options = {};
+    if (replace) options.replace = true;
+    if (state !== undefined) options.state = state;
+    navigate('/', options);
+  }, [navigate]);
 
   const commitTabLocation = useCallback(({
     tabId = createTabId(),
@@ -538,27 +434,21 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       console.warn('保存来源根目录失败:', error);
     }
 
-    return {
-      browserLocation: createLegacyRootLocation(absolutePath),
-      source: null,
-      fallback: true
-    };
+    return null;
   }, []);
 
   const applyRegisteredRoot = useCallback((registered) => {
+    if (!registered?.source) return sourcesRef.current;
     let nextSources = sourcesRef.current;
     if (registered.source) {
       nextSources = upsertSourceRoot(nextSources, registered.source);
       setRuntimeSources(nextSources);
     }
-    if (registered.fallback) {
-      setErrorMessage('来源注册失败，已使用兼容模式打开');
-    }
     return nextSources;
   }, [setRuntimeSources]);
 
   useEffect(() => {
-    if (hydrationStatus !== HYDRATION_SUCCEEDED || redirectFromOldRoute) return;
+    if (hydrationStatus !== HYDRATION_SUCCEEDED) return;
 
     try {
       saveTabsSession({
@@ -569,35 +459,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     } catch (error) {
       console.warn('保存标签会话失败:', error);
     }
-  }, [tabs, activeTabId, hydrationStatus, redirectFromOldRoute]);
+  }, [tabs, activeTabId, hydrationStatus]);
 
   useEffect(() => {
-    if (!redirectFromOldRoute) return;
-
-    const { albumPath } = params;
-    const searchParams = new URLSearchParams(location.search);
-    const imagePath = searchParams.get('image');
-
-    if (albumPath) {
-      let targetPath = albumPath;
-      try {
-        targetPath = decodeURIComponent(albumPath);
-      } catch (_error) {
-        // Keep malformed legacy input usable instead of crashing the redirect.
-      }
-      navigateWithPersist(targetPath, {
-        viewMode: 'album',
-        initialImage: imagePath || null,
-        replace: true,
-        state: location.state
-      });
-    } else {
-      navigate('/', { replace: true, state: location.state });
-    }
-  }, [redirectFromOldRoute, params, location, navigate, navigateWithPersist]);
-
-  useEffect(() => {
-    if (hydrationCompletedRef.current || redirectFromOldRoute) return undefined;
+    if (hydrationCompletedRef.current) return undefined;
     let cancelled = false;
     const generation = hydrationGenerationRef.current + 1;
     hydrationGenerationRef.current = generation;
@@ -608,6 +473,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     );
 
     const hydrate = async () => {
+      clearLegacyNavigationStorage(localStorage);
       let loadedSources = [];
       let registrySucceeded = false;
       try {
@@ -626,12 +492,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       setRuntimeSources(loadedSources);
 
       const restoredSession = loadTabsSession({
-        storage: localStorage,
-        sources: loadedSources
+        storage: localStorage
       });
       const savedSnapshot = loadTabsSession({
         storage: localStorage,
-        sources: loadedSources,
         snapshot: true
       });
       setHasSavedTabsSnapshot(Boolean(savedSnapshot));
@@ -639,12 +503,20 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       const nextHydrationStatus = registrySucceeded
         ? HYDRATION_SUCCEEDED
         : HYDRATION_FAILED;
-      const resolvedURLLocation = resolveURLLocation(urlLocation, loadedSources);
-      const searchParams = new URLSearchParams(location.search);
-      const commandLinePath = searchParams.get('initialPath');
-
       const applyExplicitURL = (browserLocation) => {
         if (!isCurrentHydration()) return;
+        if (browserLocation.kind === 'directory'
+            && !materializeBrowserLocation(browserLocation, sourcesRef.current)) {
+          const landingTab = createRuntimeTab({ kind: 'landing' }, sourcesRef.current);
+          setTabs([landingTab]);
+          setActiveTabId(landingTab.id);
+          setErrorMessage('照片来源不可用，请重新打开来源目录');
+          pendingNavigationRef.current = createPendingNavigation(landingTab.location);
+          navigateBrowserLocation(landingTab.location, { replace: true });
+          setHydrationStatus(nextHydrationStatus);
+          hydrationCompletedRef.current = true;
+          return;
+        }
         const matchingTab = findSessionTabMatchingLocation(restoredSession, browserLocation);
         if (matchingTab) {
           const runtimeTabs = materializeSessionTabs(restoredSession, sourcesRef.current);
@@ -659,34 +531,19 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         hydrationCompletedRef.current = true;
       };
 
-      if (urlLocation.kind === 'directory') {
-        applyExplicitURL(resolvedURLLocation);
-        return;
-      }
-
-      if (commandLinePath) {
-        const registered = await registerAbsoluteRoot(commandLinePath);
-        if (!isCurrentHydration()) return;
-        const registeredSources = applyRegisteredRoot(registered);
-        const commandLineTab = createRuntimeTab(
-          registered.browserLocation,
-          registeredSources
-        );
-        setTabs([commandLineTab]);
-        setActiveTabId(commandLineTab.id);
-        pendingNavigationRef.current = createPendingNavigation(registered.browserLocation);
-        navigateBrowserLocation(registered.browserLocation, { replace: true });
-        setHydrationStatus(nextHydrationStatus);
-        hydrationCompletedRef.current = true;
-        return;
-      }
-
-      if (isExplicitURLLocation(resolvedURLLocation)) {
-        applyExplicitURL(resolvedURLLocation);
+      if (isExplicitURLLocation(urlLocation)) {
+        applyExplicitURL(urlLocation);
         return;
       }
 
       if (restoredSession) {
+        const hasMissingSource = restoredSession.tabs.some((tab) => (
+          tab.location.kind === 'directory'
+          && !materializeBrowserLocation(tab.location, loadedSources)
+        ));
+        if (hasMissingSource) {
+          setErrorMessage('照片来源不可用，请重新打开来源目录');
+        }
         const runtimeTabs = materializeSessionTabs(restoredSession, loadedSources);
         const restoredActiveTab = runtimeTabs.find((tab) => (
           tab.id === restoredSession.activeTabId
@@ -700,26 +557,9 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         return;
       }
 
-      const lastPath = getLastPath();
-      const defaultRootPath = lastPath ? '' : getDefaultRootPath();
-      const fallbackPath = lastPath || defaultRootPath;
-      if (fallbackPath) {
-        const fallbackLocation = createLocationFromAbsolutePath(
-          fallbackPath,
-          'folder',
-          null,
-          loadedSources
-        );
-        const fallbackTab = createRuntimeTab(fallbackLocation, loadedSources);
-        setTabs([fallbackTab]);
-        setActiveTabId(fallbackTab.id);
-        pendingNavigationRef.current = createPendingNavigation(fallbackLocation);
-        navigateBrowserLocation(fallbackLocation, { replace: true });
-      } else {
-        const landingTab = createRuntimeTab({ kind: 'landing' }, loadedSources);
-        setTabs([landingTab]);
-        setActiveTabId(landingTab.id);
-      }
+      const landingTab = createRuntimeTab({ kind: 'landing' }, loadedSources);
+      setTabs([landingTab]);
+      setActiveTabId(landingTab.id);
       setHydrationStatus(nextHydrationStatus);
       hydrationCompletedRef.current = true;
     };
@@ -728,12 +568,17 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     return () => {
       cancelled = true;
     };
-  }, [applyRegisteredRoot, location.search, navigateBrowserLocation, redirectFromOldRoute, registerAbsoluteRoot, setRuntimeSources, urlLocation]);
+  }, [navigateBrowserLocation, setRuntimeSources, urlLocation]);
 
   useEffect(() => {
-    if (hydrationStatus === HYDRATION_PENDING || redirectFromOldRoute) return;
+    if (hydrationStatus === HYDRATION_PENDING) return;
 
-    const browserLocation = resolveURLLocation(urlLocation, sourcesRef.current);
+    const browserLocation = urlLocation;
+    if (browserLocation.kind === 'directory'
+        && !materializeBrowserLocation(browserLocation, sourcesRef.current)) {
+      setErrorMessage('照片来源不可用，请重新打开来源目录');
+      return;
+    }
     const nextIdentity = getBrowserLocationIdentity(browserLocation);
     const routeKey = `${location.pathname}\n${location.search}`;
     const routeChanged = observedRouteKeyRef.current !== routeKey;
@@ -761,11 +606,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       if (getBrowserLocationIdentity(tab.location) === nextIdentity) return tab;
       return createRuntimeTab(browserLocation, sourcesRef.current, tab.id);
     }));
-  }, [activeTabId, hydrationStatus, invalidateRootOperations, isCurrentRootOperation, location.pathname, location.search, redirectFromOldRoute, urlLocation]);
-
-  useEffect(() => {
-    if (displayState?.targetPath) setLastPath(displayState.targetPath);
-  }, [displayState?.targetPath]);
+  }, [activeTabId, hydrationStatus, invalidateRootOperations, isCurrentRootOperation, location.pathname, location.search, urlLocation]);
 
   const createLocationForActivePath = useCallback((
     targetPath,
@@ -776,7 +617,12 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     if (!targetPath) return { kind: 'landing' };
 
     if (activeTab?.location?.kind !== 'directory') {
-      return createLocationFromAbsolutePath(targetPath, viewMode, initialImage, []);
+      return createLocationFromAbsolutePath(
+        targetPath,
+        viewMode,
+        initialImage,
+        sourcesRef.current
+      );
     }
 
     const sourceRoot = sourcesRef.current.find((source) => (
@@ -811,7 +657,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     replace = false
   ) => {
     const browserLocation = createLocationForActivePath(targetPath, viewMode, initialImage);
-    if (!browserLocation) return;
+    if (!browserLocation) {
+      setErrorMessage('该目录未关联照片来源，请先重新打开来源目录');
+      return;
+    }
     commitTabLocation({
       tabId: activeTabId,
       browserLocation,
@@ -862,16 +711,24 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       openLocationInNewTab({ kind: 'favorites' });
       return;
     }
-    const resolvedTargetPath = (!targetPath && viewMode === 'folder')
-      ? getDefaultRootPath()
-      : targetPath;
-    openLocationInNewTab(createLocationFromAbsolutePath(
-      resolvedTargetPath,
+    if (!targetPath) {
+      openLocationInNewTab(activeTab?.location?.kind === 'directory'
+        ? activeTab.location
+        : { kind: 'landing' });
+      return;
+    }
+    const browserLocation = createLocationFromAbsolutePath(
+      targetPath,
       viewMode,
       initialImage,
       sourcesRef.current
-    ));
-  }, [openLocationInNewTab]);
+    );
+    if (!browserLocation) {
+      setErrorMessage('该目录未关联照片来源，请先重新打开来源目录');
+      return;
+    }
+    openLocationInNewTab(browserLocation);
+  }, [activeTab, openLocationInNewTab]);
 
   const openFavoritesInNewTab = useCallback(() => {
     openLocationInNewTab({ kind: 'favorites' });
@@ -917,6 +774,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         for (const folderPath of folders) {
           const registered = await registerAbsoluteRoot(folderPath);
           if (!isCurrentRootOperation(operationToken)) return;
+          if (!registered) {
+            setErrorMessage(`无法建立照片来源：${folderPath}`);
+            continue;
+          }
           const registeredSources = applyRegisteredRoot(registered);
           openLocationInNewTab(
             registered.browserLocation,
@@ -1070,7 +931,6 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
 
     const savedTabsSession = loadTabsSession({
       storage: localStorage,
-      sources: sourcesRef.current,
       snapshot: true
     });
     if (!savedTabsSession) {
@@ -1099,6 +959,9 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       if (!selectedDir || !isCurrentRootOperation(operationToken)) return;
       const registered = await registerAbsoluteRoot(selectedDir);
       if (!isCurrentRootOperation(operationToken)) return;
+      if (!registered) {
+        throw new Error('无法建立照片来源，请检查目录是否可访问');
+      }
       const registeredSources = applyRegisteredRoot(registered);
 
       if (target === 'current') {
@@ -1121,12 +984,10 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       }
 
       if (target === 'new-window') {
-        const newWindowPayload = registered.browserLocation.kind === 'directory'
-          ? {
-            contractVersion: 1,
-            target: registered.browserLocation.target
-          }
-          : registered.browserLocation.legacyAbsolutePath;
+        const newWindowPayload = {
+          contractVersion: 1,
+          target: registered.browserLocation.target
+        };
         const result = await ipcRenderer.invoke(CHANNELS.CREATE_NEW_INSTANCE, newWindowPayload);
         if (!isCurrentRootOperation(operationToken)) return;
         if (!result?.success) {
@@ -1136,6 +997,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     } catch (error) {
       if (!isCurrentRootOperation(operationToken)) return;
       console.error('打开文件夹失败:', error);
+      setErrorMessage(error?.message || '打开文件夹失败');
     }
   }, [activeTabId, applyRegisteredRoot, beginRootOperation, commitTabLocation, isCurrentRootOperation, openLocationInNewTab, registerAbsoluteRoot]);
 
@@ -1338,11 +1200,6 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
       </Menu>
     </Box>
   ), [activeTabId, closeTabById, commitTabLocation, dragIndicator.position, dragIndicator.tabId, handleCloseOthers, handleOpenFolderToTarget, handleRestoreTabsSnapshot, handleSaveTabsSnapshot, handleTabChange, handleTabDragEnd, handleTabDragLeave, handleTabDragOver, handleTabDragStart, handleTabDrop, hasSavedTabsSnapshot, openFolderMenuAnchorEl, openNewTab, tabs, tabsMenuAnchorEl]);
-
-  // 如果是重定向，不渲染内容
-  if (redirectFromOldRoute) {
-    return null;
-  }
 
   const pageContent = displayState.viewMode === 'album'
     ? (
