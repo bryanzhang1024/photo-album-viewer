@@ -9,8 +9,6 @@ import {
 } from '@testing-library/react';
 import {
   MemoryRouter,
-  Route,
-  Routes,
   useLocation
 } from 'react-router-dom';
 
@@ -76,20 +74,6 @@ jest.mock('../../../src/renderer/components/PageLayout', () => (
   }
 ));
 
-jest.mock('../../../src/renderer/contexts/FavoritesContext', () => ({
-  useFavorites: jest.fn(() => ({
-    favorites: { folders: [], albums: [], images: [], collections: [] },
-    isFolderFavorited: jest.fn(() => false),
-    isAlbumFavorited: jest.fn(() => false),
-    toggleFolderFavorite: jest.fn(),
-    toggleAlbumFavorite: jest.fn()
-  }))
-}));
-
-jest.mock('../../../src/renderer/contexts/SettingsContext', () => ({
-  useSettings: jest.fn(() => ({ settings: { homeSortGrouping: 'mixed' } }))
-}));
-
 jest.mock('../../../src/renderer/hooks/useAlbumImages', () => jest.fn());
 
 jest.mock('../../../src/renderer/hooks/useGridThumbnailPrefetch', () => {
@@ -101,18 +85,7 @@ jest.mock('../../../src/renderer/hooks/useGridThumbnailPrefetch', () => {
   };
 });
 
-jest.mock('../../../src/renderer/App', () => {
-  const ReactModule = require('react');
-  return {
-    ScrollPositionContext: ReactModule.createContext({
-      savePosition: () => {},
-      getPosition: () => 0
-    })
-  };
-});
-
-const BrowserPage = require('../../../src/renderer/pages/BrowserPage').default;
-const { ScrollPositionContext } = require('../../../src/renderer/App');
+const App = require('../../../src/renderer/App').default;
 const useAlbumImages = require('../../../src/renderer/hooks/useAlbumImages');
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
 const CHANNELS = require('../../../src/common/ipc-channels');
@@ -327,25 +300,13 @@ function LocationProbe({ onVisit }) {
 }
 
 function renderBrowser(onVisit = () => {}) {
-  const scrollContext = { savePosition: jest.fn(), getPosition: jest.fn(() => 0) };
   return render(
     <MemoryRouter
       initialEntries={[buildRootUrl()]}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
-      <ScrollPositionContext.Provider value={scrollContext}>
-        <Routes>
-          <Route
-            path="*"
-            element={(
-              <>
-                <LocationProbe onVisit={onVisit} />
-                <BrowserPage colorMode={{ mode: 'light' }} />
-              </>
-            )}
-          />
-        </Routes>
-      </ScrollPositionContext.Provider>
+      <LocationProbe onVisit={onVisit} />
+      <App />
     </MemoryRouter>
   );
 }
@@ -596,7 +557,30 @@ describe('BrowserPage real random-navigation integration', () => {
       });
     });
 
-    expect(canonicalRequests.map((request) => request.ref.relativePath)).toEqual(['', 'A', 'B']);
+    await pressBackspace();
+    await waitFor(() => expect(readCanonicalRoute().relativePath).toBe(''));
+    await clickRandomBrowse();
+    await waitFor(() => {
+      expect(readCanonicalRoute()).toEqual({
+        pathname: '/browse',
+        relativePath: 'C',
+        view: 'folder'
+      });
+    });
+
+    await pressBackspace();
+    await waitFor(() => expect(readCanonicalRoute().relativePath).toBe(''));
+    await clickRandomBrowse();
+    await waitFor(() => {
+      expect(readCanonicalRoute()).toEqual({
+        pathname: '/browse',
+        relativePath: 'D',
+        view: 'album'
+      });
+    });
+
+    expect(canonicalRequests.map((request) => request.ref.relativePath))
+      .toEqual(['', 'A', 'B', 'C', 'D']);
   });
 
   test('keeps adjacent navigation photo-only while Album random can enter a folder', async () => {
