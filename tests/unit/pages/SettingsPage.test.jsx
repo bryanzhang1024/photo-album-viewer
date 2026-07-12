@@ -54,9 +54,18 @@ const SOURCE = {
   updatedAt: '2026-07-12T00:00:00.000Z'
 };
 
+const COMPUTER_SOURCE = {
+  schemaVersion: 1,
+  sourceId: 'src_22222222-2222-4222-8222-222222222222',
+  rootPath: '/',
+  label: '电脑',
+  sourceGeneration: 1
+};
+
 describe('SettingsPage sorting preferences', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.electronAPI.platform = undefined;
     global.electronMock.ipcRenderer.invoke.mockResolvedValue({ success: true });
   });
 
@@ -147,5 +156,45 @@ describe('SettingsPage sorting preferences', () => {
         }
       );
     });
+  });
+
+  test('uses the existing computer root for a selected macOS directory', async () => {
+    window.electronAPI.platform = 'darwin';
+    global.electronMock.ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.SELECT_DIRECTORY) {
+        return Promise.resolve('/Volumes/1TB/Collection/600-Cos Weibo');
+      }
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve({
+          contractVersion: 1,
+          ok: true,
+          data: { sources: [COMPUTER_SOURCE] }
+        });
+      }
+      if (channel === CHANNELS.CREATE_NEW_INSTANCE) return Promise.resolve({ success: true });
+      return Promise.resolve({ success: true });
+    });
+
+    render(<SettingsPage colorMode={{ mode: 'light', toggleColorMode: jest.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: '在新窗口中打开' }));
+
+    await waitFor(() => {
+      expect(global.electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.CREATE_NEW_INSTANCE,
+        {
+          contractVersion: 1,
+          target: {
+            sourceId: COMPUTER_SOURCE.sourceId,
+            relativePath: 'Volumes/1TB/Collection/600-Cos Weibo',
+            viewMode: 'browse',
+            initialMediaRelativePath: null
+          }
+        }
+      );
+    });
+    expect(global.electronMock.ipcRenderer.invoke).not.toHaveBeenCalledWith(
+      CHANNELS.SAVE_SOURCE_ROOT_V1,
+      expect.anything()
+    );
   });
 });

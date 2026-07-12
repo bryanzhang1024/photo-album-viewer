@@ -407,6 +407,9 @@ describe('BrowserPage real random-navigation integration', () => {
           data: { sources: [SOURCE] }
         });
       }
+      if (channel === CHANNELS.VALIDATE_NAVIGATION_TARGET_V1) {
+        return Promise.resolve({ success: true });
+      }
       if (channel === CHANNELS.SCAN_NAVIGATION_LEVEL) {
         return Promise.resolve(createLegacyScan(args[0]));
       }
