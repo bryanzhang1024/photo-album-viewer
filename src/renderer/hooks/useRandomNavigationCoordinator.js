@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CHANNELS from '../../common/ipc-channels';
+import { validateDirectoryEnvelopeV1 } from '../../common/contracts/directory-contract-v1';
 import { sourceIdsEqualV1 } from '../../common/contracts/navigation-contract-v1';
 import { getBrowserLocationIdentity } from '../domain/browserLocation';
 import {
@@ -47,6 +48,12 @@ async function loadDirectorySnapshot(ipcRenderer, source, ref) {
     runtimeSource: { sourceId: source.sourceId, rootPath: source.rootPath },
     ref: canonicalRef
   });
+  const validation = validateDirectoryEnvelopeV1(response);
+  if (!validation.valid) {
+    const error = new Error('目录扫描返回无效数据');
+    error.code = 'INVALID_RESPONSE';
+    throw error;
+  }
   if (!response?.ok) {
     const error = new Error(response?.error?.message || '目录扫描失败');
     error.code = response?.error?.code || 'INVALID_RESPONSE';
@@ -65,12 +72,15 @@ export function useRandomNavigationCoordinator({
   onError
 }) {
   const randomStateByTabRef = useRef(new Map());
-  const loadingTabIdsRef = useRef(new Set());
-  const operationGenerationRef = useRef(0);
+  const loadingOwnersByTabRef = useRef(new Map());
+  const tabGenerationsRef = useRef(new Map());
+  const globalEpochRef = useRef(0);
+  const nextOperationTokenRef = useRef(0);
   const tabSourceIdsRef = useRef(new Map());
   const activeTabIdRef = useRef(activeTabId);
   const activeTabRef = useRef(activeTab);
   const [loadingTabIds, setLoadingTabIds] = useState(() => new Set());
+  const [, setCacheRevision] = useState(0);
 
   activeTabIdRef.current = activeTabId;
   activeTabRef.current = activeTab;
@@ -86,22 +96,53 @@ export function useRandomNavigationCoordinator({
     && ipcRenderer?.invoke
     && sourceIdsEqualV1(activeSourceRoot.sourceId, activeContext.scopeRef.sourceId)
   );
-  const activeOperationIdentity = `${activeTabId || ''}\n${
-    getBrowserLocationIdentity(activeTab?.location)
-  }`;
-  const observedActiveIdentityRef = useRef(activeOperationIdentity);
+  const activeLocationIdentity = getBrowserLocationIdentity(activeTab?.location);
+  const observedActiveIdentityRef = useRef({
+    tabId: activeTabId,
+    locationIdentity: activeLocationIdentity
+  });
+
+  const bumpTabGeneration = useCallback((tabId) => {
+    if (!tabId) return 0;
+    const nextGeneration = (tabGenerationsRef.current.get(tabId) || 0) + 1;
+    tabGenerationsRef.current.set(tabId, nextGeneration);
+    return nextGeneration;
+  }, []);
+
+  const claimLoadingOwner = useCallback((tabId, operationToken) => {
+    loadingOwnersByTabRef.current.set(tabId, operationToken);
+    setLoadingTabIds(new Set(loadingOwnersByTabRef.current.keys()));
+  }, []);
+
+  const releaseLoadingOwner = useCallback((tabId, operationToken = null) => {
+    if (!loadingOwnersByTabRef.current.has(tabId)) return false;
+    if (operationToken !== null
+        && loadingOwnersByTabRef.current.get(tabId) !== operationToken) {
+      return false;
+    }
+    loadingOwnersByTabRef.current.delete(tabId);
+    setLoadingTabIds(new Set(loadingOwnersByTabRef.current.keys()));
+    return true;
+  }, []);
 
   useEffect(() => {
-    if (observedActiveIdentityRef.current === activeOperationIdentity) return;
-    observedActiveIdentityRef.current = activeOperationIdentity;
-    operationGenerationRef.current += 1;
-  }, [activeOperationIdentity]);
+    const previous = observedActiveIdentityRef.current;
+    if (previous.tabId === activeTabId
+        && previous.locationIdentity === activeLocationIdentity) {
+      return;
+    }
+    if (previous.tabId) bumpTabGeneration(previous.tabId);
+    observedActiveIdentityRef.current = {
+      tabId: activeTabId,
+      locationIdentity: activeLocationIdentity
+    };
+  }, [activeLocationIdentity, activeTabId, bumpTabGeneration]);
 
   useEffect(() => {
     const previousSourceIds = tabSourceIdsRef.current;
     const nextSourceIds = new Map();
     const liveTabIds = new Set();
-    let invalidated = false;
+    const invalidatedTabIds = new Set();
 
     for (const tab of Array.isArray(tabs) ? tabs : []) {
       liveTabIds.add(tab.id);
@@ -109,39 +150,29 @@ export function useRandomNavigationCoordinator({
       nextSourceIds.set(tab.id, sourceIdentity);
       if (previousSourceIds.has(tab.id)
           && previousSourceIds.get(tab.id) !== sourceIdentity) {
-        randomStateByTabRef.current.delete(tab.id);
-        invalidated = true;
+        invalidatedTabIds.add(tab.id);
       }
     }
 
     for (const tabId of previousSourceIds.keys()) {
       if (liveTabIds.has(tabId)) continue;
-      randomStateByTabRef.current.delete(tabId);
-      invalidated = true;
+      invalidatedTabIds.add(tabId);
     }
 
     tabSourceIdsRef.current = nextSourceIds;
-    if (invalidated) operationGenerationRef.current += 1;
-
-    const nextLoadingTabIds = new Set(
-      [...loadingTabIdsRef.current].filter((tabId) => liveTabIds.has(tabId))
-    );
-    if (nextLoadingTabIds.size !== loadingTabIdsRef.current.size) {
-      loadingTabIdsRef.current = nextLoadingTabIds;
-      setLoadingTabIds(nextLoadingTabIds);
+    let loadingChanged = false;
+    for (const tabId of invalidatedTabIds) {
+      randomStateByTabRef.current.delete(tabId);
+      bumpTabGeneration(tabId);
+      loadingChanged = loadingOwnersByTabRef.current.delete(tabId) || loadingChanged;
     }
-  }, [tabs]);
+    if (loadingChanged) {
+      setLoadingTabIds(new Set(loadingOwnersByTabRef.current.keys()));
+    }
+  }, [bumpTabGeneration, tabs]);
 
   useEffect(() => () => {
-    operationGenerationRef.current += 1;
-  }, []);
-
-  const setTabLoading = useCallback((tabId, loading) => {
-    const nextLoadingTabIds = new Set(loadingTabIdsRef.current);
-    if (loading) nextLoadingTabIds.add(tabId);
-    else nextLoadingTabIds.delete(tabId);
-    loadingTabIdsRef.current = nextLoadingTabIds;
-    setLoadingTabIds(nextLoadingTabIds);
+    globalEpochRef.current += 1;
   }, []);
 
   const storeScopeEntry = useCallback((tabId, scopeKey, entry) => {
@@ -163,21 +194,24 @@ export function useRandomNavigationCoordinator({
   }, []);
 
   const handleRandomBrowse = useCallback(async () => {
-    if (!available || loadingTabIdsRef.current.has(activeTabId)) return false;
+    if (!available || loadingOwnersByTabRef.current.has(activeTabId)) return false;
 
     const capturedTabId = activeTabId;
     const capturedLocationIdentity = getBrowserLocationIdentity(activeTab.location);
-    operationGenerationRef.current += 1;
-    const capturedOperationGeneration = operationGenerationRef.current;
+    const capturedTabGeneration = bumpTabGeneration(capturedTabId);
+    const capturedGlobalEpoch = globalEpochRef.current;
+    nextOperationTokenRef.current += 1;
+    const operationToken = nextOperationTokenRef.current;
     const context = getRandomNavigationContext(activeTab.location);
     const source = activeSourceRoot;
     const operationStillMatches = () => (
       activeTabIdRef.current === capturedTabId
       && getBrowserLocationIdentity(activeTabRef.current?.location)
         === capturedLocationIdentity
-      && operationGenerationRef.current === capturedOperationGeneration
+      && tabGenerationsRef.current.get(capturedTabId) === capturedTabGeneration
+      && globalEpochRef.current === capturedGlobalEpoch
     );
-    setTabLoading(capturedTabId, true);
+    claimLoadingOwner(capturedTabId, operationToken);
 
     try {
       let entry = readScopeEntry(capturedTabId, context.scopeKey);
@@ -260,44 +294,68 @@ export function useRandomNavigationCoordinator({
       onError?.(error.message || '目录扫描失败');
       return false;
     } finally {
-      setTabLoading(capturedTabId, false);
+      releaseLoadingOwner(capturedTabId, operationToken);
     }
   }, [
     activeSourceRoot,
     activeTab,
     activeTabId,
     available,
+    bumpTabGeneration,
+    claimLoadingOwner,
     commitTabLocation,
     ipcRenderer,
     onError,
     readScopeEntry,
-    setTabLoading,
+    releaseLoadingOwner,
     storeScopeEntry
   ]);
 
   const invalidateActiveScope = useCallback(() => {
-    operationGenerationRef.current += 1;
     if (!activeTabId || !activeContext) return;
+    bumpTabGeneration(activeTabId);
+    releaseLoadingOwner(activeTabId);
     const scopes = randomStateByTabRef.current.get(activeTabId);
     const entry = scopes?.get(activeContext.scopeKey);
-    if (!entry) return;
-    storeScopeEntry(activeTabId, activeContext.scopeKey, {
-      ...entry,
-      targets: null
-    });
-  }, [activeContext, activeTabId, storeScopeEntry]);
+    if (entry) {
+      storeScopeEntry(activeTabId, activeContext.scopeKey, {
+        ...entry,
+        targets: null
+      });
+    }
+    setCacheRevision((revision) => revision + 1);
+  }, [
+    activeContext,
+    activeTabId,
+    bumpTabGeneration,
+    releaseLoadingOwner,
+    storeScopeEntry
+  ]);
 
   const clearAllRandomState = useCallback(() => {
-    operationGenerationRef.current += 1;
+    globalEpochRef.current += 1;
     randomStateByTabRef.current.clear();
+    loadingOwnersByTabRef.current.clear();
+    setLoadingTabIds(new Set());
+    setCacheRevision((revision) => revision + 1);
   }, []);
 
   const randomBrowseLoading = loadingTabIds.has(activeTabId);
+  const activeScopeEntry = activeContext
+    ? randomStateByTabRef.current.get(activeTabId)?.get(activeContext.scopeKey)
+    : null;
+  const activeTargets = activeScopeEntry?.targets;
+  const activeScopeHasKnownPool = Array.isArray(activeTargets);
+  const activeScopeHasEligibleTarget = activeScopeHasKnownPool && activeTargets.some((item) => (
+    item.candidateKey !== activeContext.currentCandidateKey
+  ));
 
   return {
     available,
     randomBrowseLoading,
-    randomBrowseDisabled: !available || randomBrowseLoading,
+    randomBrowseDisabled: !available
+      || randomBrowseLoading
+      || (activeScopeHasKnownPool && !activeScopeHasEligibleTarget),
     handleRandomBrowse,
     invalidateActiveScope,
     clearAllRandomState

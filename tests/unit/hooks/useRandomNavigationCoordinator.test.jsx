@@ -274,6 +274,59 @@ describe('useRandomNavigationCoordinator normal draws', () => {
     expect(invoke.mock.calls.filter(([, request]) => request.ref.relativePath === 'S1'))
       .toHaveLength(2);
   });
+
+  test('disables an empty scope until invalidation makes its pool unknown again', async () => {
+    const invoke = createSnapshotInvoke((relativePath) => (
+      relativePath === 'S' ? createSnapshot('S') : null
+    ));
+    const options = createOptions({ ipcRenderer: { invoke } });
+    const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+    expect(result.current.randomBrowseDisabled).toBe(false);
+    expect(await draw(result)).toBe(false);
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: true
+    });
+    expect(options.commitTabLocation).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.invalidateActiveScope());
+    expect(result.current.randomBrowseDisabled).toBe(false);
+
+    expect(await draw(result)).toBe(false);
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: true
+    });
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(options.commitTabLocation).not.toHaveBeenCalled();
+  });
+
+  test('disables a photoSet scope when its current album is the only target', async () => {
+    const albumTab = createTab('tab-a', 'S/A', 'photoSet');
+    const invoke = createSnapshotInvoke((relativePath) => (
+      relativePath === 'S'
+        ? createSnapshot('S', { children: [createChild('S/A')] })
+        : null
+    ));
+    const options = createOptions({
+      activeTab: albumTab,
+      tabs: [albumTab],
+      ipcRenderer: { invoke }
+    });
+    const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+    expect(await draw(result)).toBe(false);
+
+    expect(result.current).toMatchObject({
+      available: true,
+      randomBrowseLoading: false,
+      randomBrowseDisabled: true
+    });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(options.commitTabLocation).not.toHaveBeenCalled();
+  });
 });
 
 describe('useRandomNavigationCoordinator retries and async guards', () => {
@@ -329,6 +382,12 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
       tabId: 'tab-a',
       browserLocation: createDirectoryLocation('S/B', 'photoSet')
     });
+    expect(harness.invoke).toHaveBeenCalledTimes(4);
+    expect(harness.options.onError).not.toHaveBeenCalled();
+    expect(harness.result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
   });
 
   test('treats a target view change as recoverable and validates a different target', async () => {
@@ -342,6 +401,50 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
     expect(harness.options.commitTabLocation).toHaveBeenCalledWith({
       tabId: 'tab-a',
       browserLocation: createDirectoryLocation('S/B', 'photoSet')
+    });
+    expect(harness.invoke).toHaveBeenCalledTimes(4);
+    expect(harness.options.onError).not.toHaveBeenCalled();
+    expect(harness.result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
+  });
+
+  test('rejects a malformed success envelope without a recoverable parent retry', async () => {
+    let parentScans = 0;
+    let targetValidations = 0;
+    const invoke = jest.fn(async (_channel, request) => {
+      const { relativePath } = request.ref;
+      if (relativePath === 'S') {
+        parentScans += 1;
+        return createDirectorySuccessEnvelopeV1(createSnapshot('S', {
+          children: [createChild('S/A'), createChild('S/B')]
+        }));
+      }
+      targetValidations += 1;
+      return {
+        contractVersion: 1,
+        ok: true,
+        data: {
+          status: 'ready',
+          completeness: { directMedia: 'complete' },
+          facts: { directMediaCount: 1 }
+        }
+      };
+    });
+    const options = createOptions({ ipcRenderer: { invoke } });
+    const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+    expect(await draw(result)).toBe(false);
+
+    expect(parentScans).toBe(1);
+    expect(targetValidations).toBe(1);
+    expect(options.commitTabLocation).not.toHaveBeenCalled();
+    expect(options.onError).toHaveBeenCalledTimes(1);
+    expect(options.onError).toHaveBeenCalledWith('目录扫描返回无效数据');
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
     });
   });
 
@@ -358,6 +461,11 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
         }));
       }
       attemptedTargets.push(relativePath);
+      if (attemptedTargets.length > 2) {
+        return createDirectorySuccessEnvelopeV1(
+          createSnapshot(relativePath, { viewMode: 'photoSet' })
+        );
+      }
       return createDirectoryErrorEnvelopeV1(
         attemptedTargets.length === 1 ? 'ENOENT' : 'ENOTDIR',
         'stale target',
@@ -372,6 +480,25 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
     expect(parentScanCount).toBe(2);
     expect(attemptedTargets).toEqual(['S/A', 'S/B']);
     expect(options.commitTabLocation).not.toHaveBeenCalled();
+    expect(options.onError).toHaveBeenCalledTimes(1);
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
+
+    expect(await draw(result)).toBe(true);
+
+    expect(parentScanCount).toBe(2);
+    expect(attemptedTargets).toEqual(['S/A', 'S/B', 'S/A']);
+    expect(options.commitTabLocation).toHaveBeenCalledTimes(1);
+    expect(options.commitTabLocation).toHaveBeenCalledWith({
+      tabId: 'tab-a',
+      browserLocation: createDirectoryLocation('S/A', 'photoSet')
+    });
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
   });
 
   test.each(['EACCES', 'IO_ERROR'])(
@@ -386,8 +513,13 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
       expect(await draw(harness.result)).toBe(false);
 
       expect(harness.getParentScanCount()).toBe(1);
+      expect(harness.invoke).toHaveBeenCalledTimes(2);
       expect(harness.options.commitTabLocation).not.toHaveBeenCalled();
       expect(harness.options.onError).toHaveBeenCalledWith('target cannot be read');
+      expect(harness.result.current).toMatchObject({
+        randomBrowseLoading: false,
+        randomBrowseDisabled: false
+      });
     }
   );
 
@@ -535,6 +667,10 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
       await expect(firstDraw).resolves.toBe(true);
     });
     expect(options.commitTabLocation).toHaveBeenCalledTimes(1);
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
   });
 
   test('clearAllRandomState invalidates pending work without consuming its bag', async () => {
@@ -580,6 +716,207 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
     expect(options.commitTabLocation).toHaveBeenCalledWith({
       tabId: 'tab-a',
       browserLocation: createDirectoryLocation('S/A', 'photoSet')
+    });
+  });
+
+  test.each([
+    ['closed', (_tabA, tabB) => [tabB]],
+    [
+      'moved to another source',
+      (tabA, tabB) => [
+        createTab(tabA.id, 'T', 'browse', SECOND_SOURCE_ID),
+        tabB
+      ]
+    ]
+  ])('does not cancel tab B when unrelated tab A is %s', async (_label, mutateTabs) => {
+    const validation = createDeferred();
+    const tabA = createTab('tab-a', 'T');
+    const tabB = createTab('tab-b', 'S');
+    let parentScans = 0;
+    let targetValidations = 0;
+    const invoke = jest.fn(async (_channel, request) => {
+      if (request.ref.relativePath === 'S') {
+        parentScans += 1;
+        return createDirectorySuccessEnvelopeV1(createSnapshot('S', {
+          children: [createChild('S/A'), createChild('S/B')]
+        }));
+      }
+      targetValidations += 1;
+      return validation.promise;
+    });
+    const commitTabLocation = jest.fn();
+    const initialProps = createOptions({
+      activeTab: tabB,
+      activeTabId: tabB.id,
+      tabs: [tabA, tabB],
+      commitTabLocation,
+      ipcRenderer: { invoke }
+    });
+    const { result, rerender } = renderHook(
+      (props) => useRandomNavigationCoordinator(props),
+      { initialProps }
+    );
+    let pendingDraw;
+    await act(async () => {
+      pendingDraw = result.current.handleRandomBrowse();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(targetValidations).toBe(1));
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: true,
+      randomBrowseDisabled: true
+    });
+
+    rerender({ ...initialProps, tabs: mutateTabs(tabA, tabB) });
+    expect(result.current.randomBrowseLoading).toBe(true);
+
+    await act(async () => {
+      validation.resolve(createDirectorySuccessEnvelopeV1(
+        createSnapshot('S/A', { viewMode: 'photoSet' })
+      ));
+      await expect(pendingDraw).resolves.toBe(true);
+    });
+
+    expect(parentScans).toBe(1);
+    expect(targetValidations).toBe(1);
+    expect(commitTabLocation).toHaveBeenCalledTimes(1);
+    expect(commitTabLocation).toHaveBeenCalledWith({
+      tabId: 'tab-b',
+      browserLocation: createDirectoryLocation('S/A', 'photoSet')
+    });
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
+  });
+
+  test('clears the old loading owner when the same tab changes source', async () => {
+    const validation = createDeferred();
+    const originalTab = createTab('tab-a', 'S');
+    let targetValidations = 0;
+    const invoke = jest.fn(async (_channel, request) => {
+      if (request.ref.relativePath === 'S') {
+        return createDirectorySuccessEnvelopeV1(createSnapshot('S', {
+          children: [createChild('S/A')]
+        }));
+      }
+      targetValidations += 1;
+      return validation.promise;
+    });
+    const commitTabLocation = jest.fn();
+    const initialProps = createOptions({
+      activeTab: originalTab,
+      tabs: [originalTab],
+      commitTabLocation,
+      ipcRenderer: { invoke }
+    });
+    const { result, rerender } = renderHook(
+      (props) => useRandomNavigationCoordinator(props),
+      { initialProps }
+    );
+    let pendingDraw;
+    await act(async () => {
+      pendingDraw = result.current.handleRandomBrowse();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(targetValidations).toBe(1));
+    expect(result.current.randomBrowseLoading).toBe(true);
+
+    const replacementTab = createTab('tab-a', 'S', 'browse', SECOND_SOURCE_ID);
+    rerender({
+      ...initialProps,
+      activeTab: replacementTab,
+      activeSourceRoot: SECOND_SOURCE,
+      tabs: [replacementTab]
+    });
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
+
+    await act(async () => {
+      validation.resolve(createDirectorySuccessEnvelopeV1(
+        createSnapshot('S/A', { viewMode: 'photoSet' })
+      ));
+      await expect(pendingDraw).resolves.toBe(false);
+    });
+    expect(commitTabLocation).not.toHaveBeenCalled();
+    expect(result.current.randomBrowseLoading).toBe(false);
+  });
+
+  test('keeps a newer same-tab loading owner when an invalidated request finishes', async () => {
+    const firstValidation = createDeferred();
+    const secondValidation = createDeferred();
+    let parentScans = 0;
+    let targetValidations = 0;
+    const invoke = jest.fn(async (_channel, request) => {
+      if (request.ref.relativePath === 'S') {
+        parentScans += 1;
+        return createDirectorySuccessEnvelopeV1(createSnapshot('S', {
+          children: [createChild('S/A'), createChild('S/B')]
+        }));
+      }
+      targetValidations += 1;
+      return targetValidations === 1
+        ? firstValidation.promise
+        : secondValidation.promise;
+    });
+    const options = createOptions({ ipcRenderer: { invoke } });
+    const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+    let firstDraw;
+    await act(async () => {
+      firstDraw = result.current.handleRandomBrowse();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(targetValidations).toBe(1));
+    expect(result.current.randomBrowseLoading).toBe(true);
+
+    act(() => result.current.clearAllRandomState());
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
+    });
+
+    let secondDraw;
+    await act(async () => {
+      secondDraw = result.current.handleRandomBrowse();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(targetValidations).toBe(2));
+    expect(parentScans).toBe(2);
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: true,
+      randomBrowseDisabled: true
+    });
+
+    await act(async () => {
+      firstValidation.resolve(createDirectorySuccessEnvelopeV1(
+        createSnapshot('S/A', { viewMode: 'photoSet' })
+      ));
+      await expect(firstDraw).resolves.toBe(false);
+    });
+    expect(options.commitTabLocation).not.toHaveBeenCalled();
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: true,
+      randomBrowseDisabled: true
+    });
+
+    await act(async () => {
+      secondValidation.resolve(createDirectorySuccessEnvelopeV1(
+        createSnapshot('S/A', { viewMode: 'photoSet' })
+      ));
+      await expect(secondDraw).resolves.toBe(true);
+    });
+    expect(parentScans).toBe(2);
+    expect(targetValidations).toBe(2);
+    expect(options.commitTabLocation).toHaveBeenCalledTimes(1);
+    expect(options.commitTabLocation).toHaveBeenCalledWith({
+      tabId: 'tab-a',
+      browserLocation: createDirectoryLocation('S/A', 'photoSet')
+    });
+    expect(result.current).toMatchObject({
+      randomBrowseLoading: false,
+      randomBrowseDisabled: false
     });
   });
 });
