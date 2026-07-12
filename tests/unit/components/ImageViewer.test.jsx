@@ -81,31 +81,86 @@ describe('ImageViewer owned shortcuts', () => {
     jest.restoreAllMocks();
   });
 
-  test.each(['e', 'E'])('%s rotates right without navigating to a random image', (key) => {
+  test.each([
+    ['e', {}],
+    ['E', { shiftKey: true }]
+  ])('%s rotates right without navigating to a random image', (key, modifiers) => {
     const props = renderViewer({ images: shortcutImages });
     const image = screen.getByAltText('IMG_0001.jpg');
 
     expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(0deg)' });
 
-    fireEvent.keyDown(window, { key });
+    fireEvent.keyDown(window, { key, ...modifiers });
 
     expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(90deg)' });
     expect(props.onIndexChange).not.toHaveBeenCalled();
   });
 
-  test.each(['r', 'R'])('%s navigates to a random image without rotating', async (key) => {
+  test.each([
+    ['r', {}],
+    ['R', { shiftKey: true }]
+  ])('%s navigates to a random image without rotating', async (key, modifiers) => {
     mockLoadedImages();
     jest.spyOn(Math, 'random').mockReturnValue(0);
     const props = renderViewer({ images: shortcutImages });
     const image = screen.getByAltText('IMG_0001.jpg');
 
-    fireEvent.keyDown(window, { key });
+    fireEvent.keyDown(window, { key, ...modifiers });
 
     await waitFor(() => {
       expect(props.onIndexChange).toHaveBeenCalledTimes(1);
     });
     expect(props.onIndexChange.mock.calls[0][0]).not.toBe(0);
     expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(0deg)' });
+  });
+
+  test.each([
+    ['Ctrl+E', 'E', { ctrlKey: true }],
+    ['Cmd+E', 'E', { metaKey: true }],
+    ['Alt+E', 'E', { altKey: true }],
+    ['Ctrl+R', 'R', { ctrlKey: true }],
+    ['Cmd+R', 'R', { metaKey: true }],
+    ['Alt+R', 'R', { altKey: true }]
+  ])('ignores %s', (_label, key, modifiers) => {
+    mockLoadedImages();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const props = renderViewer({ images: shortcutImages });
+    const image = screen.getByAltText('IMG_0001.jpg');
+
+    fireEvent.keyDown(window, { key, ...modifiers });
+
+    expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(0deg)' });
+    expect(props.onIndexChange).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['E', 'input'],
+    ['E', 'textarea'],
+    ['E', 'contentEditable'],
+    ['R', 'input'],
+    ['R', 'textarea'],
+    ['R', 'contentEditable']
+  ])('ignores Shift+%s from an editable %s target', (key, editableKind) => {
+    mockLoadedImages();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const props = renderViewer({ images: shortcutImages });
+    const image = screen.getByAltText('IMG_0001.jpg');
+    const editable = editableKind === 'textarea'
+      ? document.createElement('textarea')
+      : document.createElement(editableKind === 'input' ? 'input' : 'div');
+    if (editableKind === 'contentEditable') {
+      editable.contentEditable = 'true';
+      editable.tabIndex = 0;
+      Object.defineProperty(editable, 'isContentEditable', { value: true });
+    }
+    document.body.appendChild(editable);
+    editable.focus();
+
+    fireEvent.keyDown(editable, { key, shiftKey: true });
+
+    expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(0deg)' });
+    expect(props.onIndexChange).not.toHaveBeenCalled();
+    editable.remove();
   });
 });
 

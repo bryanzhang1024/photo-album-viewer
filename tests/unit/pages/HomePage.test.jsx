@@ -269,6 +269,7 @@ describe('HomePage refresh button', () => {
       expect(onRandomBrowse).toHaveBeenCalledTimes(1);
     });
     expect(onRandomBrowse.mock.calls).toEqual([[]]);
+    expect(drawRandomAlbum).not.toHaveBeenCalled();
     expect(onAlbumClick).not.toHaveBeenCalled();
   });
 

@@ -440,13 +440,21 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
         case 'q':
           handleManualRotate('left');
           break;
-        default:
+        default: {
+          const activeElement = e.target?.tagName ? e.target : document.activeElement;
+          const isEditableTarget = activeElement?.tagName === 'INPUT'
+            || activeElement?.tagName === 'TEXTAREA'
+            || activeElement?.isContentEditable;
+          if (e.metaKey || e.ctrlKey || e.altKey || isEditableTarget) {
+            break;
+          }
           if (shortcutKey === 'r') {
             handleRandomImage();
           } else if (shortcutKey === 'e') {
             handleManualRotate('right');
           }
           break;
+        }
       }
     };
     

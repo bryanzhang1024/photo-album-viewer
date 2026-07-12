@@ -117,6 +117,12 @@ const ipcRenderer = global.electronMock.ipcRenderer;
 let drawRandomSiblingAlbum;
 let resetRandomBag;
 
+const createDefaultNeighboringAlbumsFixture = () => ({
+  neighboringAlbums: { prev: null, next: null, total: 0, currentIndex: 0 },
+  siblingAlbums: [],
+  loadNeighboringAlbums: jest.fn(() => Promise.resolve())
+});
+
 beforeEach(() => {
   drawRandomSiblingAlbum = jest.fn();
   resetRandomBag = jest.fn();
@@ -124,6 +130,7 @@ beforeEach(() => {
     drawNext: drawRandomSiblingAlbum,
     resetBag: resetRandomBag
   });
+  useNeighboringAlbums.mockReturnValue(createDefaultNeighboringAlbumsFixture());
 });
 
 const SOURCE_ID = 'src_11111111-1111-4111-8111-111111111111';
@@ -298,6 +305,7 @@ describe('AlbumPage refresh button', () => {
       expect(onRandomBrowse).toHaveBeenCalledTimes(1);
     });
     expect(onRandomBrowse.mock.calls).toEqual([[]]);
+    expect(drawRandomSiblingAlbum).not.toHaveBeenCalled();
     expect(onAlbumClick).not.toHaveBeenCalled();
   });
 

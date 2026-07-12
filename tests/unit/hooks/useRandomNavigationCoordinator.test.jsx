@@ -196,6 +196,58 @@ describe('useRandomNavigationCoordinator normal draws', () => {
     expect(options.onError).not.toHaveBeenCalled();
   });
 
+  test('accepts response refs whose source id differs only by canonical casing', async () => {
+    const responseSourceId = SOURCE_ID.toLowerCase();
+    const invoke = createSnapshotInvoke((relativePath) => {
+      if (relativePath === 'S') {
+        return createSnapshot('S', {
+          sourceId: responseSourceId,
+          children: [createChild('S/A', 'photoSet', responseSourceId)]
+        });
+      }
+      if (relativePath === 'S/A') {
+        return createSnapshot('S/A', {
+          sourceId: responseSourceId,
+          viewMode: 'photoSet'
+        });
+      }
+      return null;
+    });
+    const options = createOptions({ ipcRenderer: { invoke } });
+    const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+    expect(await draw(result)).toBe(true);
+
+    expect(options.commitTabLocation).toHaveBeenCalledWith({
+      tabId: 'tab-a',
+      browserLocation: createDirectoryLocation('S/A', 'photoSet', responseSourceId)
+    });
+    expect(options.onError).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [null, '当前文件夹缺少来源信息，无法随机浏览'],
+    [SECOND_SOURCE, '当前文件夹的来源信息不匹配，无法随机浏览']
+  ])(
+    'keeps canonical random browsing available and reports an invalid SourceRoot before IPC',
+    async (activeSourceRoot, expectedMessage) => {
+      const options = createOptions({ activeSourceRoot });
+      const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+      expect(result.current).toMatchObject({
+        available: true,
+        randomBrowseLoading: false,
+        randomBrowseDisabled: false
+      });
+      expect(await draw(result)).toBe(false);
+
+      expect(options.ipcRenderer.invoke).not.toHaveBeenCalled();
+      expect(options.commitTabLocation).not.toHaveBeenCalled();
+      expect(options.onError).toHaveBeenCalledTimes(1);
+      expect(options.onError).toHaveBeenCalledWith(expectedMessage);
+    }
+  );
+
   test('keeps an independent no-replacement queue for each tab at the same scope', async () => {
     const tabA = createTab('tab-a');
     const tabB = createTab('tab-b');
@@ -290,6 +342,8 @@ describe('useRandomNavigationCoordinator normal draws', () => {
     });
     expect(options.commitTabLocation).not.toHaveBeenCalled();
     expect(invoke).toHaveBeenCalledTimes(1);
+    expect(options.onError).toHaveBeenCalledTimes(1);
+    expect(options.onError).toHaveBeenLastCalledWith('当前文件夹没有可随机浏览的目录');
 
     act(() => result.current.invalidateActiveScope());
     expect(result.current.randomBrowseDisabled).toBe(false);
@@ -301,6 +355,8 @@ describe('useRandomNavigationCoordinator normal draws', () => {
     });
     expect(invoke).toHaveBeenCalledTimes(2);
     expect(options.commitTabLocation).not.toHaveBeenCalled();
+    expect(options.onError).toHaveBeenCalledTimes(2);
+    expect(options.onError).toHaveBeenLastCalledWith('当前文件夹没有可随机浏览的目录');
   });
 
   test('disables a photoSet scope when its current album is the only target', async () => {
@@ -326,6 +382,8 @@ describe('useRandomNavigationCoordinator normal draws', () => {
     });
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(options.commitTabLocation).not.toHaveBeenCalled();
+    expect(options.onError).toHaveBeenCalledTimes(1);
+    expect(options.onError).toHaveBeenCalledWith('当前文件夹没有其他可随机浏览的目录');
   });
 });
 
@@ -448,6 +506,119 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
     });
   });
 
+  test.each([
+    [
+      'sourceId',
+      () => createSnapshot('S', {
+        sourceId: SECOND_SOURCE_ID,
+        children: [createChild('S/A', 'photoSet', SECOND_SOURCE_ID)]
+      })
+    ],
+    [
+      'relativePath',
+      () => createSnapshot('T', { children: [createChild('T/A')] })
+    ]
+  ])(
+    'rejects a parent success response whose ref.%s differs from the requested scope without caching it',
+    async (_field, createMismatchedParent) => {
+      let parentScans = 0;
+      const invoke = jest.fn(async (_channel, request) => {
+        const { relativePath } = request.ref;
+        if (relativePath === 'S') {
+          parentScans += 1;
+          return createDirectorySuccessEnvelopeV1(
+            parentScans === 1
+              ? createMismatchedParent()
+              : createSnapshot('S', { children: [createChild('S/A')] })
+          );
+        }
+        return createDirectorySuccessEnvelopeV1(
+          createSnapshot(relativePath, { viewMode: 'photoSet' })
+        );
+      });
+      const options = createOptions({ ipcRenderer: { invoke } });
+      const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+      expect(await draw(result)).toBe(false);
+
+      expect(parentScans).toBe(1);
+      expect(options.commitTabLocation).not.toHaveBeenCalled();
+      expect(options.onError).toHaveBeenCalledWith('目录扫描返回无效数据');
+
+      options.onError.mockClear();
+      expect(await draw(result)).toBe(true);
+
+      expect(parentScans).toBe(2);
+      expect(options.commitTabLocation).toHaveBeenCalledTimes(1);
+      expect(options.commitTabLocation).toHaveBeenCalledWith({
+        tabId: 'tab-a',
+        browserLocation: createDirectoryLocation('S/A', 'photoSet')
+      });
+      expect(options.onError).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([
+    [
+      'sourceId',
+      () => createSnapshot('S/A', {
+        sourceId: SECOND_SOURCE_ID,
+        viewMode: 'photoSet'
+      })
+    ],
+    [
+      'relativePath',
+      () => createSnapshot('S/B', { viewMode: 'photoSet' })
+    ]
+  ])(
+    'rejects a target success response whose ref.%s differs from the requested target without consuming the draw',
+    async (_field, createMismatchedTarget) => {
+      let parentScans = 0;
+      let targetAValidations = 0;
+      const invoke = jest.fn(async (_channel, request) => {
+        const { relativePath } = request.ref;
+        if (relativePath === 'S') {
+          parentScans += 1;
+          return createDirectorySuccessEnvelopeV1(createSnapshot('S', {
+            children: [createChild('S/A'), createChild('S/B')]
+          }));
+        }
+        if (relativePath === 'S/A') {
+          targetAValidations += 1;
+          return createDirectorySuccessEnvelopeV1(
+            targetAValidations === 1
+              ? createMismatchedTarget()
+              : createSnapshot('S/A', { viewMode: 'photoSet' })
+          );
+        }
+        return createDirectorySuccessEnvelopeV1(
+          createSnapshot(relativePath, { viewMode: 'photoSet' })
+        );
+      });
+      const options = createOptions({ ipcRenderer: { invoke } });
+      const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+      expect(await draw(result)).toBe(false);
+
+      expect(parentScans).toBe(1);
+      expect(targetAValidations).toBe(1);
+      expect(options.commitTabLocation).not.toHaveBeenCalled();
+      expect(options.onError).toHaveBeenCalledWith('目录扫描返回无效数据');
+
+      options.onError.mockClear();
+      expect(await draw(result)).toBe(true);
+
+      expect(parentScans).toBe(1);
+      expect(targetAValidations).toBe(2);
+      expect(options.commitTabLocation).toHaveBeenCalledTimes(1);
+      expect(options.commitTabLocation).toHaveBeenCalledWith({
+        tabId: 'tab-a',
+        browserLocation: createDirectoryLocation('S/A', 'photoSet')
+      });
+      expect(options.onError).not.toHaveBeenCalled();
+    }
+  );
+
   test('stops after one parent rescan when both target validations are recoverable', async () => {
     let parentScanCount = 0;
     const attemptedTargets = [];
@@ -481,6 +652,7 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
     expect(attemptedTargets).toEqual(['S/A', 'S/B']);
     expect(options.commitTabLocation).not.toHaveBeenCalled();
     expect(options.onError).toHaveBeenCalledTimes(1);
+    expect(options.onError).toHaveBeenCalledWith('随机目标已变化，请刷新后重试');
     expect(result.current).toMatchObject({
       randomBrowseLoading: false,
       randomBrowseDisabled: false
@@ -500,6 +672,43 @@ describe('useRandomNavigationCoordinator retries and async guards', () => {
       randomBrowseDisabled: false
     });
   });
+
+  test.each([
+    ['an empty pool', []],
+    ['only the rejected target', [createChild('S/A')]]
+  ])(
+    'reports a changed target when the stale retry rescan leaves %s',
+    async (_label, retryChildren) => {
+      let parentScanCount = 0;
+      let targetValidationCount = 0;
+      const invoke = jest.fn(async (_channel, request) => {
+        const { relativePath } = request.ref;
+        if (relativePath === 'S') {
+          parentScanCount += 1;
+          return createDirectorySuccessEnvelopeV1(createSnapshot('S', {
+            children: parentScanCount === 1 ? [createChild('S/A')] : retryChildren,
+            revision: `parent-${parentScanCount}`
+          }));
+        }
+        targetValidationCount += 1;
+        return createDirectoryErrorEnvelopeV1(
+          'ENOENT',
+          'stale target',
+          { retryable: true, details: { relativePath } }
+        );
+      });
+      const options = createOptions({ ipcRenderer: { invoke } });
+      const { result } = renderHook(() => useRandomNavigationCoordinator(options));
+
+      expect(await draw(result)).toBe(false);
+
+      expect(parentScanCount).toBe(2);
+      expect(targetValidationCount).toBe(1);
+      expect(options.commitTabLocation).not.toHaveBeenCalled();
+      expect(options.onError).toHaveBeenCalledTimes(1);
+      expect(options.onError).toHaveBeenCalledWith('随机目标已变化，请刷新后重试');
+    }
+  );
 
   test.each(['EACCES', 'IO_ERROR'])(
     'does not rescan the parent after nonrecoverable %s',

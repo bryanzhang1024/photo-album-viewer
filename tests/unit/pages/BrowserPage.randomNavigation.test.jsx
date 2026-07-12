@@ -429,6 +429,41 @@ describe('BrowserPage real random-navigation integration', () => {
     jest.restoreAllMocks();
   });
 
+  test('shows a BrowserPage Snackbar instead of using the legacy draw when a canonical source is missing', async () => {
+    ipcRenderer.invoke.mockImplementation((channel, ...args) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve({
+          contractVersion: 1,
+          ok: true,
+          data: { sources: [] }
+        });
+      }
+      if (channel === CHANNELS.SCAN_NAVIGATION_LEVEL) {
+        return Promise.resolve(createLegacyScan(ROOT_PATH));
+      }
+      if (channel === CHANNELS.GET_DIRECTORY_LEVEL_V1) {
+        canonicalRequests.push(args[0]);
+        throw new Error('canonical IPC must not run without a SourceRoot');
+      }
+      return Promise.resolve(undefined);
+    });
+
+    renderBrowser();
+    await waitFor(() => {
+      expect(localStorage.getItem('browser_tabs_session_v2')).not.toBeNull();
+      expect(screen.getByRole('button', { name: '视图选项' })).toBeInTheDocument();
+    });
+    const initialRoute = readCanonicalRoute();
+
+    await clickRandomBrowse();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '当前文件夹缺少来源信息，无法随机浏览'
+    );
+    expect(canonicalRequests).toEqual([]);
+    expect(readCanonicalRoute()).toEqual(initialRoute);
+  });
+
   test('keeps one canonical round across real pages and preserves folder/hybrid view modes', async () => {
     const visits = [];
     renderBrowser((visit) => visits.push(visit));

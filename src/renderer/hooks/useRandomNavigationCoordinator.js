@@ -16,6 +16,11 @@ const RECOVERABLE_TARGET_ERRORS = new Set([
   'ENOTDIR',
   'TARGET_VIEW_CHANGED'
 ]);
+const EMPTY_POOL_MESSAGE = '当前文件夹没有可随机浏览的目录';
+const NO_OTHER_CANDIDATE_MESSAGE = '当前文件夹没有其他可随机浏览的目录';
+const STALE_TARGET_MESSAGE = '随机目标已变化，请刷新后重试';
+const MISSING_SOURCE_MESSAGE = '当前文件夹缺少来源信息，无法随机浏览';
+const MISMATCHED_SOURCE_MESSAGE = '当前文件夹的来源信息不匹配，无法随机浏览';
 
 function getTabSourceIdentity(tab) {
   const sourceId = tab?.location?.kind === 'directory'
@@ -26,7 +31,7 @@ function getTabSourceIdentity(tab) {
 
 function drawUnrejectedTarget(state, targets, currentCandidateKey, rejectedKeys) {
   let pendingState = state;
-  for (let index = 0; index < targets.length; index += 1) {
+  for (let index = 0; index < Math.max(1, targets.length); index += 1) {
     const draw = drawRandomNavigationTarget(pendingState, targets, {
       currentCandidateKey
     });
@@ -57,6 +62,12 @@ async function loadDirectorySnapshot(ipcRenderer, source, ref) {
   if (!response?.ok) {
     const error = new Error(response?.error?.message || '目录扫描失败');
     error.code = response?.error?.code || 'INVALID_RESPONSE';
+    throw error;
+  }
+  if (!sourceIdsEqualV1(response.data.ref.sourceId, canonicalRef.sourceId)
+      || response.data.ref.relativePath !== canonicalRef.relativePath) {
+    const error = new Error('目录扫描返回无效数据');
+    error.code = 'INVALID_RESPONSE';
     throw error;
   }
   return response.data;
@@ -92,9 +103,7 @@ export function useRandomNavigationCoordinator({
   const available = Boolean(
     activeTabId
     && activeContext
-    && activeSourceRoot
     && ipcRenderer?.invoke
-    && sourceIdsEqualV1(activeSourceRoot.sourceId, activeContext.scopeRef.sourceId)
   );
   const activeLocationIdentity = getBrowserLocationIdentity(activeTab?.location);
   const observedActiveIdentityRef = useRef({
@@ -196,6 +205,15 @@ export function useRandomNavigationCoordinator({
   const handleRandomBrowse = useCallback(async () => {
     if (!available || loadingOwnersByTabRef.current.has(activeTabId)) return false;
 
+    if (!activeSourceRoot) {
+      onError?.(MISSING_SOURCE_MESSAGE);
+      return false;
+    }
+    if (!sourceIdsEqualV1(activeSourceRoot.sourceId, activeContext.scopeRef.sourceId)) {
+      onError?.(MISMATCHED_SOURCE_MESSAGE);
+      return false;
+    }
+
     const capturedTabId = activeTabId;
     const capturedLocationIdentity = getBrowserLocationIdentity(activeTab.location);
     const capturedTabGeneration = bumpTabGeneration(capturedTabId);
@@ -240,7 +258,14 @@ export function useRandomNavigationCoordinator({
           rejectedKeys
         );
         pendingBagState = draw.state;
-        if (!draw.target) return false;
+        if (!draw.target) {
+          onError?.(attempt > 0
+            ? STALE_TARGET_MESSAGE
+            : (draw.reason === 'emptyPool'
+              ? EMPTY_POOL_MESSAGE
+              : NO_OTHER_CANDIDATE_MESSAGE));
+          return false;
+        }
 
         try {
           const targetSnapshot = await loadDirectorySnapshot(
@@ -255,7 +280,12 @@ export function useRandomNavigationCoordinator({
           }
         } catch (error) {
           if (!operationStillMatches()) return false;
-          if (attempt > 0 || !RECOVERABLE_TARGET_ERRORS.has(error?.code)) {
+          const recoverable = RECOVERABLE_TARGET_ERRORS.has(error?.code);
+          if (attempt > 0 && recoverable) {
+            onError?.(STALE_TARGET_MESSAGE);
+            return false;
+          }
+          if (!recoverable) {
             throw error;
           }
 
@@ -297,6 +327,7 @@ export function useRandomNavigationCoordinator({
       releaseLoadingOwner(capturedTabId, operationToken);
     }
   }, [
+    activeContext,
     activeSourceRoot,
     activeTab,
     activeTabId,
