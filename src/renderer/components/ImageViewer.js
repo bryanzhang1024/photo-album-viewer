@@ -351,6 +351,8 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   // 添加键盘导航支持
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const shortcutKey = typeof e.key === 'string' ? e.key.toLowerCase() : '';
+
       // Cmd/Ctrl + C 复制当前文件（保留原文件名/后缀）
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
@@ -435,16 +437,15 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
             handleToggleFavorite();
           }
           break;
-        case 'r':
-          handleRandomImage();
-          break;
         case 'q':
           handleManualRotate('left');
           break;
-        case 'e':
-          handleManualRotate('right');
-          break;
         default:
+          if (shortcutKey === 'r') {
+            handleRandomImage();
+          } else if (shortcutKey === 'e') {
+            handleManualRotate('right');
+          }
           break;
       }
     };

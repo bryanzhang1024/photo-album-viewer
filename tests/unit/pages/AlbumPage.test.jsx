@@ -257,10 +257,10 @@ describe('AlbumPage refresh button', () => {
 
     expect(refreshIndex).toBe(0);
     expect(tuneIndex).toBeGreaterThan(refreshIndex);
-    expect(screen.queryByRole('button', { name: '随机选择相簿 (E)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '随机当前文件夹 (E)' })).not.toBeInTheDocument();
 
     fireEvent.click(tuneButton);
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
 
     fireEvent.click(refreshButton);
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -292,7 +292,7 @@ describe('AlbumPage refresh button', () => {
       );
     });
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
 
     await waitFor(() => {
       expect(onRandomBrowse).toHaveBeenCalledTimes(1);
@@ -369,7 +369,7 @@ describe('AlbumPage refresh button', () => {
       );
     });
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    const randomButton = screen.getByRole('button', { name: '随机选择相簿 (E)' });
+    const randomButton = screen.getByRole('button', { name: '随机当前文件夹 (E)' });
 
     expect(randomButton).toBeDisabled();
     fireEvent.click(randomButton);
@@ -414,7 +414,7 @@ describe('AlbumPage refresh button', () => {
       );
     });
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
 
     expect(onAlbumClick).toHaveBeenCalledWith('/albums/local', 'local', null);
   });
@@ -452,7 +452,7 @@ describe('AlbumPage refresh button', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
 
-    expect(screen.getByRole('button', { name: '随机选择相簿 (E)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '随机当前文件夹 (E)' })).toBeDisabled();
   });
 
   test('leaves page random refresh and navigation callbacks untouched while the viewer owns E and R', async () => {

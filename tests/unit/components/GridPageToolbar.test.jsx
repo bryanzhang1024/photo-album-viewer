@@ -58,7 +58,9 @@ describe('GridPageToolbar', () => {
     render(<GridPageToolbar {...defaultProps} />);
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
+    const button = screen.getByRole('button', { name: '随机当前文件夹 (E)' });
+    expect(button).toHaveTextContent('随机浏览');
+    fireEvent.click(button);
 
     expect(defaultProps.onRandomAlbum).toHaveBeenCalledTimes(1);
   });

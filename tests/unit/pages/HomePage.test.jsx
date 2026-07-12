@@ -263,7 +263,7 @@ describe('HomePage refresh button', () => {
 
     expect(await screen.findByText('local')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
 
     await waitFor(() => {
       expect(onRandomBrowse).toHaveBeenCalledTimes(1);
@@ -356,7 +356,7 @@ describe('HomePage refresh button', () => {
 
     expect(await screen.findByText('local')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    const randomButton = screen.getByRole('button', { name: '随机选择相簿 (E)' });
+    const randomButton = screen.getByRole('button', { name: '随机当前文件夹 (E)' });
 
     expect(randomButton).toBeDisabled();
     fireEvent.click(randomButton);
@@ -404,7 +404,7 @@ describe('HomePage refresh button', () => {
 
     expect(await screen.findByText('local')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
 
     expect(onAlbumClick).toHaveBeenCalledWith('/photos/local', 'local');
   });

@@ -37,6 +37,16 @@ const images = [
   }
 ];
 
+const shortcutImages = [
+  ...images,
+  {
+    path: '/photos/trip/IMG_0003.jpg',
+    name: 'IMG_0003.jpg',
+    size: 2560,
+    lastModified: '2026-05-18T12:32:00.000Z'
+  }
+];
+
 function renderViewer(overrides = {}) {
   const props = {
     images,
@@ -49,6 +59,55 @@ function renderViewer(overrides = {}) {
   render(<ImageViewer {...props} />);
   return props;
 }
+
+function mockLoadedImages() {
+  jest.spyOn(global, 'Image').mockImplementation(() => {
+    const image = {};
+    Object.defineProperty(image, 'src', {
+      set() {
+        image.onload?.();
+      }
+    });
+    return image;
+  });
+}
+
+describe('ImageViewer owned shortcuts', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test.each(['e', 'E'])('%s rotates right without navigating to a random image', (key) => {
+    const props = renderViewer({ images: shortcutImages });
+    const image = screen.getByAltText('IMG_0001.jpg');
+
+    expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(0deg)' });
+
+    fireEvent.keyDown(window, { key });
+
+    expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(90deg)' });
+    expect(props.onIndexChange).not.toHaveBeenCalled();
+  });
+
+  test.each(['r', 'R'])('%s navigates to a random image without rotating', async (key) => {
+    mockLoadedImages();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const props = renderViewer({ images: shortcutImages });
+    const image = screen.getByAltText('IMG_0001.jpg');
+
+    fireEvent.keyDown(window, { key });
+
+    await waitFor(() => {
+      expect(props.onIndexChange).toHaveBeenCalledTimes(1);
+    });
+    expect(props.onIndexChange.mock.calls[0][0]).not.toBe(0);
+    expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(0deg)' });
+  });
+});
 
 describe('ImageViewer image info panel', () => {
   beforeEach(() => {
