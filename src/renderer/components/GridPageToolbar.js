@@ -174,7 +174,7 @@ function TunePopover({
   onDensityChange,
   onRandomAlbum,
   randomDisabled,
-  randomTooltip = '随机选择相簿 (E)'
+  randomTooltip = '随机当前文件夹 (E)'
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const densitySelectId = useId();
@@ -243,7 +243,7 @@ function TunePopover({
           disabled={randomDisabled}
           aria-label={randomTooltip}
         >
-          随机选相簿
+          随机浏览
         </Button>
       </Popover>
     </>

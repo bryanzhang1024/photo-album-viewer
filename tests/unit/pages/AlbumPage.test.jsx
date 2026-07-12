@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
@@ -36,7 +36,9 @@ jest.mock('../../../src/renderer/components/BreadcrumbNavigation', () =>
 );
 
 jest.mock('../../../src/renderer/components/ImageCard', () =>
-  jest.fn(({ image }) => <div data-testid="image-card">{image?.name || 'image'}</div>)
+  jest.fn(({ image, onClick }) => (
+    <div data-testid="image-card" onClick={onClick}>{image?.name || 'image'}</div>
+  ))
 );
 
 jest.mock('../../../src/renderer/components/ImageViewer', () =>
@@ -89,6 +91,8 @@ jest.mock('../../../src/renderer/hooks/useNeighboringAlbums', () =>
   }))
 );
 
+jest.mock('../../../src/renderer/hooks/useShuffleBag', () => jest.fn());
+
 jest.mock('../../../src/renderer/utils/ImageCacheManager', () => ({
   __esModule: true,
   default: {
@@ -103,11 +107,31 @@ const { ScrollPositionContext } = require('../../../src/renderer/App');
 const useAlbumImages = require('../../../src/renderer/hooks/useAlbumImages');
 const useBreadcrumbs = require('../../../src/renderer/hooks/useBreadcrumbs');
 const useNeighboringAlbums = require('../../../src/renderer/hooks/useNeighboringAlbums');
+const useShuffleBag = require('../../../src/renderer/hooks/useShuffleBag');
 const imageCache = require('../../../src/renderer/utils/ImageCacheManager').default;
 const BreadcrumbNavigation = require('../../../src/renderer/components/BreadcrumbNavigation');
 const AlbumPage = require('../../../src/renderer/pages/AlbumPage').default;
 const CHANNELS = require('../../../src/common/ipc-channels');
 const ipcRenderer = global.electronMock.ipcRenderer;
+
+let drawRandomSiblingAlbum;
+let resetRandomBag;
+
+const createDefaultNeighboringAlbumsFixture = () => ({
+  neighboringAlbums: { prev: null, next: null, total: 0, currentIndex: 0 },
+  siblingAlbums: [],
+  loadNeighboringAlbums: jest.fn(() => Promise.resolve())
+});
+
+beforeEach(() => {
+  drawRandomSiblingAlbum = jest.fn();
+  resetRandomBag = jest.fn();
+  useShuffleBag.mockReturnValue({
+    drawNext: drawRandomSiblingAlbum,
+    resetBag: resetRandomBag
+  });
+  useNeighboringAlbums.mockReturnValue(createDefaultNeighboringAlbumsFixture());
+});
 
 const SOURCE_ID = 'src_11111111-1111-4111-8111-111111111111';
 
@@ -240,13 +264,265 @@ describe('AlbumPage refresh button', () => {
 
     expect(refreshIndex).toBe(0);
     expect(tuneIndex).toBeGreaterThan(refreshIndex);
-    expect(screen.queryByRole('button', { name: '随机选择相簿 (E)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '随机当前文件夹 (E)' })).not.toBeInTheDocument();
 
     fireEvent.click(tuneButton);
-    fireEvent.click(screen.getByRole('button', { name: '随机选择相簿 (E)' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
 
     fireEvent.click(refreshButton);
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  test('routes the toolbar random action through the canonical coordinator without local navigation', async () => {
+    const onRandomBrowse = jest.fn().mockResolvedValue(undefined);
+    const onAlbumClick = jest.fn();
+    drawRandomSiblingAlbum.mockReturnValue({ path: '/albums/local', name: 'local' });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          onAlbumClick={onAlbumClick}
+          onRandomBrowse={onRandomBrowse}
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/albums/trip'
+      );
+    });
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
+
+    await waitFor(() => {
+      expect(onRandomBrowse).toHaveBeenCalledTimes(1);
+    });
+    expect(onRandomBrowse.mock.calls).toEqual([[]]);
+    expect(drawRandomSiblingAlbum).not.toHaveBeenCalled();
+    expect(onAlbumClick).not.toHaveBeenCalled();
+  });
+
+  test('refreshes album images without touching canonical random state', async () => {
+    const refresh = jest.fn();
+    const onRandomBrowse = jest.fn().mockResolvedValue(undefined);
+    const onRandomScopeRefresh = jest.fn();
+    useAlbumImages.mockReturnValue({
+      images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
+      totalCount: 1,
+      hasMore: false,
+      loading: false,
+      loadingMore: false,
+      error: '',
+      queryKey: '{}',
+      loadImages: jest.fn(() => Promise.resolve([])),
+      loadMore: jest.fn(),
+      ensureImageLoaded: jest.fn(() => Promise.resolve({ images: [], globalIndex: -1, offset: 0 })),
+      refresh,
+      removeImage: jest.fn()
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          onRandomBrowse={onRandomBrowse}
+          onRandomScopeRefresh={onRandomScopeRefresh}
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新当前相簿' }));
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(onRandomBrowse).not.toHaveBeenCalled();
+    expect(onRandomScopeRefresh).not.toHaveBeenCalled();
+    expect(resetRandomBag).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['loading', { randomBrowseLoading: true }],
+    ['disabled', { randomBrowseDisabled: true }]
+  ])('disables canonical random browsing while it is %s', async (_state, randomProps) => {
+    const onRandomBrowse = jest.fn().mockResolvedValue(undefined);
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          onRandomBrowse={onRandomBrowse}
+          urlMode={true}
+          {...randomProps}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/albums/trip'
+      );
+    });
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
+    const randomButton = screen.getByRole('button', { name: '随机当前文件夹 (E)' });
+
+    expect(randomButton).toBeDisabled();
+    fireEvent.click(randomButton);
+    expect(onRandomBrowse).not.toHaveBeenCalled();
+  });
+
+  test('keeps the page-local random adapter when the canonical coordinator is absent', async () => {
+    const onAlbumClick = jest.fn();
+    drawRandomSiblingAlbum.mockReturnValue({ path: '/albums/local', name: 'local' });
+    useNeighboringAlbums.mockReturnValue({
+      neighboringAlbums: {
+        prev: null,
+        next: { path: '/albums/local', name: 'local' },
+        currentIndex: 0,
+        total: 2
+      },
+      siblingAlbums: [
+        { path: '/albums/trip', name: 'trip' },
+        { path: '/albums/local', name: 'local' }
+      ],
+      loadNeighboringAlbums: jest.fn(() => Promise.resolve())
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          onAlbumClick={onAlbumClick}
+          onRandomBrowse={null}
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/albums/trip'
+      );
+    });
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
+    fireEvent.click(screen.getByRole('button', { name: '随机当前文件夹 (E)' }));
+
+    expect(onAlbumClick).toHaveBeenCalledWith('/albums/local', 'local', null);
+  });
+
+  test('disables the legacy random action when the current album is the only photo set', async () => {
+    useNeighboringAlbums.mockReturnValue({
+      neighboringAlbums: {
+        prev: null,
+        next: null,
+        currentIndex: 0,
+        total: 1
+      },
+      siblingAlbums: [{ path: '/albums/trip', name: 'trip' }],
+      loadNeighboringAlbums: jest.fn(() => Promise.resolve())
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          onRandomBrowse={null}
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/albums/trip'
+      );
+    });
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
+
+    expect(screen.getByRole('button', { name: '随机当前文件夹 (E)' })).toBeDisabled();
+  });
+
+  test('leaves page random refresh and navigation callbacks untouched while the viewer owns E and R', async () => {
+    const refresh = jest.fn();
+    const onRandomBrowse = jest.fn().mockResolvedValue(undefined);
+    const onRandomScopeRefresh = jest.fn();
+    const onAlbumClick = jest.fn();
+    const onNavigate = jest.fn();
+    const onGoBack = jest.fn();
+    useAlbumImages.mockReturnValue({
+      images: [{ path: '/albums/trip/1.jpg', name: '1.jpg', size: 1, lastModified: 1 }],
+      totalCount: 1,
+      hasMore: false,
+      loading: false,
+      loadingMore: false,
+      error: '',
+      queryKey: '{}',
+      loadImages: jest.fn(() => Promise.resolve([])),
+      loadMore: jest.fn(),
+      ensureImageLoaded: jest.fn(() => Promise.resolve({ images: [], globalIndex: -1, offset: 0 })),
+      refresh,
+      removeImage: jest.fn()
+    });
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          onAlbumClick={onAlbumClick}
+          onGoBack={onGoBack}
+          onNavigate={onNavigate}
+          onRandomBrowse={onRandomBrowse}
+          onRandomScopeRefresh={onRandomScopeRefresh}
+          urlMode={true}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+        CHANNELS.SCAN_NAVIGATION_LEVEL,
+        '/albums/trip'
+      );
+    });
+    fireEvent.click(await screen.findByText('1.jpg'));
+    expect(screen.getByTestId('image-viewer')).toBeInTheDocument();
+
+    await act(async () => {
+      ['e', 'E', 'r', 'R'].forEach((key) => fireEvent.keyDown(window, { key }));
+      await Promise.resolve();
+    });
+
+    expect(onRandomBrowse).not.toHaveBeenCalled();
+    expect(onRandomScopeRefresh).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(onAlbumClick).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(onGoBack).not.toHaveBeenCalled();
+    expect(resetRandomBag).not.toHaveBeenCalled();
   });
 
   test('loads the legacy root key without decoding initialPath percent twice', async () => {

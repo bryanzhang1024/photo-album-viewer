@@ -2,6 +2,9 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mockAlbumRefreshTargets = [];
+const mockHandleRandomBrowse = jest.fn();
+const mockInvalidateRandomScope = jest.fn();
+const mockClearAllRandomState = jest.fn();
 
 jest.mock('react-router-dom', () => {
   const actual = jest.requireActual('react-router-dom');
@@ -88,6 +91,10 @@ jest.mock('../../../src/renderer/pages/FavoritesPage', () =>
   jest.fn((props) => <div data-testid="favorites-page">{props.tabsHeaderContent}</div>)
 );
 
+jest.mock('../../../src/renderer/hooks/useRandomNavigationCoordinator', () => ({
+  useRandomNavigationCoordinator: jest.fn()
+}));
+
 jest.mock('../../../src/renderer/utils/navigation', () => {
   const actual = jest.requireActual('../../../src/renderer/utils/navigation');
   return {
@@ -103,6 +110,9 @@ const AlbumPage = require('../../../src/renderer/pages/AlbumPage');
 const FavoritesPage = require('../../../src/renderer/pages/FavoritesPage');
 const { ScrollPositionContext } = require('../../../src/renderer/App');
 const navigationUtils = require('../../../src/renderer/utils/navigation');
+const {
+  useRandomNavigationCoordinator
+} = require('../../../src/renderer/hooks/useRandomNavigationCoordinator');
 const reactRouter = require('react-router-dom');
 const CHANNELS = require('../../../src/common/ipc-channels');
 const browserTabsSessionV1 = require('../../fixtures/legacy/browser-tabs-session-v1.json');
@@ -185,6 +195,14 @@ describe('BrowserPage', () => {
     localStorage.clear();
     mockAlbumRefreshTargets.length = 0;
     navigationUtils.getLastPath.mockReturnValue('');
+    useRandomNavigationCoordinator.mockImplementation(({ activeTab }) => ({
+      available: activeTab?.location?.kind === 'directory',
+      randomBrowseLoading: true,
+      randomBrowseDisabled: true,
+      handleRandomBrowse: mockHandleRandomBrowse,
+      invalidateActiveScope: mockInvalidateRandomScope,
+      clearAllRandomState: mockClearAllRandomState
+    }));
     window.electronAPI.getPathForFile = jest.fn((file) => file?.mockPath || '');
     ipcRenderer.invoke.mockImplementation((channel) => {
       if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
@@ -355,6 +373,116 @@ describe('BrowserPage', () => {
         rootPath: '/Volumes/NAS/Photos',
         relativePath: '2025'
       });
+    });
+  });
+
+  test('passes one canonical random coordinator contract to HomePage and AlbumPage', async () => {
+    const source = createSource();
+    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+      tabs: [
+        {
+          id: 'tab-folder-random',
+          location: createCanonicalLocation({
+            relativePath: '2025',
+            viewMode: 'browse'
+          })
+        },
+        {
+          id: 'tab-album-random',
+          location: createCanonicalLocation({
+            relativePath: '2026/旅行',
+            viewMode: 'photoSet'
+          })
+        }
+      ],
+      activeTabId: 'tab-folder-random'
+    })));
+    ipcRenderer.invoke.mockImplementation((channel) => {
+      if (channel === CHANNELS.LOAD_SOURCE_ROOTS_V1) {
+        return Promise.resolve(createLoadSourcesResponse([source]));
+      }
+      return Promise.resolve(undefined);
+    });
+    setupRouterMocks({ pathname: '/', search: '' });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+      expect(homeProps).toEqual(expect.objectContaining({
+        onRandomBrowse: mockHandleRandomBrowse,
+        onRandomScopeRefresh: mockInvalidateRandomScope,
+        randomBrowseLoading: true,
+        randomBrowseDisabled: true
+      }));
+    });
+    const homeRandomHandler = HomePage.mock.calls[HomePage.mock.calls.length - 1][0]
+      .onRandomBrowse;
+
+    fireEvent.click(screen.getByRole('tab', { name: /旅行/i }));
+
+    await waitFor(() => {
+      const albumProps = AlbumPage.mock.calls[AlbumPage.mock.calls.length - 1][0];
+      expect(albumProps).toEqual(expect.objectContaining({
+        onRandomBrowse: homeRandomHandler,
+        onRandomScopeRefresh: mockInvalidateRandomScope,
+        randomBrowseLoading: true,
+        randomBrowseDisabled: true
+      }));
+    });
+    expect(useRandomNavigationCoordinator).toHaveBeenLastCalledWith(expect.objectContaining({
+      activeTabId: 'tab-album-random',
+      activeSourceRoot: source,
+      tabs: expect.arrayContaining([
+        expect.objectContaining({ id: 'tab-folder-random' }),
+        expect.objectContaining({ id: 'tab-album-random' })
+      ]),
+      commitTabLocation: expect.any(Function),
+      ipcRenderer: window.electronAPI,
+      onError: expect.any(Function)
+    }));
+  });
+
+  test('passes null random handlers to legacy HomePage and AlbumPage locations', async () => {
+    localStorage.setItem('browser_tabs_session_v2', JSON.stringify(createV2Session({
+      tabs: [
+        {
+          id: 'tab-legacy-folder',
+          location: {
+            kind: 'legacyAbsolute',
+            legacyAbsolutePath: '/Legacy/Folder',
+            viewMode: 'folder',
+            legacyInitialMediaPath: null
+          }
+        },
+        {
+          id: 'tab-legacy-album',
+          location: {
+            kind: 'legacyAbsolute',
+            legacyAbsolutePath: '/Legacy/Album',
+            viewMode: 'album',
+            legacyInitialMediaPath: null
+          }
+        }
+      ],
+      activeTabId: 'tab-legacy-folder'
+    })));
+    setupRouterMocks({ pathname: '/', search: '' });
+
+    render(<BrowserPage colorMode="dark" />);
+
+    await waitFor(() => {
+      const homeProps = HomePage.mock.calls[HomePage.mock.calls.length - 1][0];
+      expect(homeProps.onRandomBrowse).toBeNull();
+      expect(homeProps.onRandomScopeRefresh).toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Album/i }));
+
+    await waitFor(() => {
+      const albumProps = AlbumPage.mock.calls[AlbumPage.mock.calls.length - 1][0];
+      expect(albumProps.onRandomBrowse).toBeNull();
+      expect(albumProps.onRandomScopeRefresh).toBeNull();
     });
   });
 
@@ -1787,6 +1915,10 @@ describe('BrowserPage', () => {
         replace: true
       });
     });
+    expect(mockClearAllRandomState).toHaveBeenCalledTimes(1);
+    expect(mockClearAllRandomState.mock.invocationCallOrder[0]).toBeLessThan(
+      AlbumPage.mock.invocationCallOrder[0]
+    );
     expect(localStorage.getItem('browser_tabs_snapshot_v1')).toBe(snapshotRaw);
   });
 

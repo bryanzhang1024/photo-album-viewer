@@ -49,6 +49,7 @@ import {
   loadTabsSession,
   saveTabsSession
 } from '../persistence/sessionAdapter';
+import { useRandomNavigationCoordinator } from '../hooks/useRandomNavigationCoordinator';
 
 const DEFAULT_ROOT_PATH_KEY = 'lastRootPath_default';
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -498,6 +499,16 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     navigateBrowserLocation(browserLocation, { replace, state });
     return nextTab;
   }, [activeTabId, invalidateRootOperations, isCurrentRootOperation, navigateBrowserLocation, saveActiveTabScrollPosition]);
+
+  const randomNavigation = useRandomNavigationCoordinator({
+    activeTab,
+    activeTabId,
+    activeSourceRoot,
+    tabs,
+    commitTabLocation,
+    ipcRenderer,
+    onError: setErrorMessage
+  });
 
   const registerAbsoluteRoot = useCallback(async (absolutePath) => {
     try {
@@ -1053,6 +1064,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
   }, [tabs, activeTabId, hydrationStatus]);
 
   const handleRestoreTabsSnapshot = useCallback(() => {
+    randomNavigation.clearAllRandomState();
     setTabsMenuAnchorEl(null);
     invalidateRootOperations();
 
@@ -1075,7 +1087,7 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
     pendingNavigationRef.current = createPendingNavigation(nextActiveTab.location);
     navigateBrowserLocation(nextActiveTab.location, { replace: true });
     setSuccessMessage(`已恢复 ${savedTabsSession.tabs.length} 个标签页`);
-  }, [invalidateRootOperations, navigateBrowserLocation]);
+  }, [invalidateRootOperations, navigateBrowserLocation, randomNavigation.clearAllRandomState]);
 
   const handleOpenFolderToTarget = useCallback(async (target) => {
     setOpenFolderMenuAnchorEl(null);
@@ -1346,6 +1358,12 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         onAlbumClick={handleAlbumClick}
         onGoBack={handleGoBack}
         onOpenFavoritesInNewTab={openFavoritesInNewTab}
+        onRandomBrowse={randomNavigation.available ? randomNavigation.handleRandomBrowse : null}
+        onRandomScopeRefresh={randomNavigation.available
+          ? randomNavigation.invalidateActiveScope
+          : null}
+        randomBrowseLoading={randomNavigation.randomBrowseLoading}
+        randomBrowseDisabled={randomNavigation.randomBrowseDisabled}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}
@@ -1375,6 +1393,12 @@ function BrowserPage({ colorMode, scrollContext = null, redirectFromOldRoute = f
         onAlbumClick={handleAlbumClick}
         onFolderClick={handleFolderClick}
         onOpenFavoritesInNewTab={openFavoritesInNewTab}
+        onRandomBrowse={randomNavigation.available ? randomNavigation.handleRandomBrowse : null}
+        onRandomScopeRefresh={randomNavigation.available
+          ? randomNavigation.invalidateActiveScope
+          : null}
+        randomBrowseLoading={randomNavigation.randomBrowseLoading}
+        randomBrowseDisabled={randomNavigation.randomBrowseDisabled}
         // 保持兼容性
         urlMode={true}
         tabsHeaderContent={renderTabsHeader}

@@ -49,6 +49,9 @@ function AlbumPage({
   onAlbumClick = null,
   onGoBack = null,
   onOpenFavoritesInNewTab = null,
+  onRandomBrowse = null,
+  randomBrowseLoading = false,
+  randomBrowseDisabled = false,
   sourceBoundary = null,
   sourceBreadcrumbs = null,
   urlMode = false,
@@ -170,6 +173,10 @@ function AlbumPage({
     sourceBreadcrumbs
   );
   const { neighboringAlbums, siblingAlbums, loadNeighboringAlbums } = useNeighboringAlbums(decodedAlbumPath);
+  const legacyRandomCandidates = useMemo(
+    () => siblingAlbums.filter((album) => album.path !== decodedAlbumPath),
+    [siblingAlbums, decodedAlbumPath]
+  );
   const { drawNext: drawRandomSiblingAlbum, resetBag: resetRandomBag } = useShuffleBag(
     siblingAlbums,
     decodedAlbumPath || '__album__',
@@ -177,9 +184,11 @@ function AlbumPage({
   );
 
   const handleRefreshAlbum = useCallback(() => {
-    resetRandomBag();
+    if (!onRandomBrowse) {
+      resetRandomBag();
+    }
     refresh();
-  }, [resetRandomBag, refresh]);
+  }, [onRandomBrowse, resetRandomBag, refresh]);
 
   useEffect(() => {
     setSearchQuery('');
@@ -623,6 +632,13 @@ function AlbumPage({
 
   // 处理随机选择相簿（口袋式洗牌，耗尽后自动重洗）
   const handleRandomAlbum = useCallback(() => {
+    if (onRandomBrowse) {
+      Promise.resolve()
+        .then(() => onRandomBrowse())
+        .catch((error) => setError(error?.message || '随机浏览失败'));
+      return;
+    }
+
     const randomAlbum = drawRandomSiblingAlbum();
     if (!randomAlbum) {
       setError('没有其他相簿可供随机选择');
@@ -630,7 +646,7 @@ function AlbumPage({
     }
 
     navigateToAlbumPath(randomAlbum.path, randomAlbum.name);
-  }, [drawRandomSiblingAlbum, navigateToAlbumPath]);
+  }, [onRandomBrowse, drawRandomSiblingAlbum, navigateToAlbumPath]);
 
   // 添加键盘事件监听
   useEffect(() => {
@@ -718,6 +734,10 @@ function AlbumPage({
     handleNavigateToAdjacentAlbum
   ]);
 
+  const randomDisabled = onRandomBrowse
+    ? randomBrowseDisabled || randomBrowseLoading
+    : legacyRandomCandidates.length === 0;
+
   const renderHeader = () => (
     <>
       <BreadcrumbNavigation
@@ -750,7 +770,7 @@ function AlbumPage({
           localStorage.setItem('userDensity', value);
         }}
         onRandomAlbum={handleRandomAlbum}
-        randomDisabled={false}
+        randomDisabled={randomDisabled}
         onRefresh={handleRefreshAlbum}
         refreshDisabled={!canRefreshAlbum}
         refreshAriaLabel="刷新当前相簿"
