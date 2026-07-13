@@ -3,6 +3,10 @@ const path = require('path');
 const fs = require('fs');
 const { promisify } = require('util');
 const CHANNELS = require(path.join(__dirname, '..', '..', 'common', 'ipc-channels.js'));
+const {
+    attachFavoritesLocators,
+    materializeFavoritesData
+} = require(path.join(__dirname, '..', '..', 'common', 'favorite-locator.js'));
 
 const stat = promisify(fs.stat);
 const readFile = promisify(fs.readFile);
@@ -11,6 +15,7 @@ const writeFile = promisify(fs.writeFile);
 const FAVORITES_FILE_PATH = path.join(app.getPath('userData'), 'favorites.json');
 let favoritesWatcher = null;
 let watcherRestartTimer = null;
+let sourceRootService = null;
 
 function scheduleWatcherRestart(delayMs = 1000) {
     if (watcherRestartTimer) {
@@ -41,6 +46,16 @@ async function loadFavoritesInternal() {
     return JSON.parse(data);
 }
 
+async function listSourceRoots() {
+    if (!sourceRootService) return [];
+    return await sourceRootService.listSourceRoots();
+}
+
+async function loadFavoritesForRenderer() {
+    const data = await loadFavoritesInternal();
+    return materializeFavoritesData(data, await listSourceRoots());
+}
+
 async function startFavoritesWatcher() {
     try {
         if (favoritesWatcher) {
@@ -60,7 +75,7 @@ async function startFavoritesWatcher() {
             if (eventType === 'change') {
                 setTimeout(async () => {
                     try {
-                        const favoritesData = await loadFavoritesInternal();
+                        const favoritesData = await loadFavoritesForRenderer();
                         BrowserWindow.getAllWindows().forEach(window => {
                             if (window.webContents && !window.webContents.isDestroyed()) {
                                 window.webContents.send(CHANNELS.FAVORITES_UPDATED, favoritesData);
@@ -89,9 +104,11 @@ function stopFavoritesWatcher() {
     }
 }
 
-function registerIpcHandlers() {
+function registerIpcHandlers(options = {}) {
+    sourceRootService = options.sourceRootService || null;
+
     ipcMain.handle(CHANNELS.LOAD_FAVORITES, async () => {
-        return await loadFavoritesInternal();
+        return await loadFavoritesForRenderer();
     });
 
     ipcMain.handle(CHANNELS.SAVE_FAVORITES, async (event, favoritesData, expectedVersion) => {
@@ -100,7 +117,8 @@ function registerIpcHandlers() {
             if (expectedVersion !== undefined && currentData.version !== expectedVersion) {
                 return { success: false, error: '版本冲突，请刷新后重试', currentVersion: currentData.version, expectedVersion: expectedVersion };
             }
-            const enhancedData = { ...favoritesData, version: (currentData.version || 1) + 1, lastModified: Date.now() };
+            const locatedData = attachFavoritesLocators(favoritesData, await listSourceRoots());
+            const enhancedData = { ...locatedData, version: (currentData.version || 1) + 1, lastModified: Date.now() };
             await writeFile(FAVORITES_FILE_PATH, JSON.stringify(enhancedData, null, 2));
             BrowserWindow.getAllWindows().forEach(window => {
                 if (window.webContents && !window.webContents.isDestroyed()) {

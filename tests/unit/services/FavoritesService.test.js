@@ -11,6 +11,7 @@ jest.mock('electron', () => {
 }, { virtual: true });
 
 describe('FavoritesService', () => {
+  const SOURCE_ID = 'src_22222222-2222-4222-8222-222222222222';
   let electron;
   let mockFs;
   let FavoritesService;
@@ -103,6 +104,81 @@ describe('FavoritesService', () => {
       CHANNELS.FAVORITES_UPDATED,
       expect.objectContaining({ version: initialData.version + 1 })
     );
+  });
+
+  test('loads locator favorites against the current SourceRoot path', async () => {
+    const fs = require('fs');
+    const favoritesPath = path.join('/mock/userData', 'favorites.json');
+    fs.writeFileSync(favoritesPath, JSON.stringify({
+      folders: [],
+      albums: [{
+        id: 'album_1',
+        path: '/Volumes/Old/album',
+        sourceId: SOURCE_ID,
+        relativePath: 'album'
+      }],
+      images: [],
+      collections: [],
+      version: 3
+    }));
+
+    const sourceRootService = {
+      listSourceRoots: jest.fn().mockResolvedValue([{
+        sourceId: SOURCE_ID,
+        rootPath: '/Volumes/NewCollection',
+        label: 'Collection'
+      }])
+    };
+    FavoritesService.registerIpcHandlers({ sourceRootService });
+
+    const data = await electron.ipcMain.invoke(CHANNELS.LOAD_FAVORITES);
+
+    expect(data.albums[0]).toMatchObject({
+      path: '/Volumes/NewCollection/album',
+      sourceId: SOURCE_ID,
+      relativePath: 'album'
+    });
+  });
+
+  test('attaches SourceRoot locators before saving favorites', async () => {
+    const fs = require('fs');
+    const favoritesPath = path.join('/mock/userData', 'favorites.json');
+    fs.writeFileSync(favoritesPath, JSON.stringify({
+      folders: [],
+      albums: [],
+      images: [],
+      collections: [],
+      version: 4
+    }));
+
+    const sourceRootService = {
+      listSourceRoots: jest.fn().mockResolvedValue([{
+        sourceId: SOURCE_ID,
+        rootPath: '/Volumes/NewCollection',
+        label: 'Collection'
+      }])
+    };
+    FavoritesService.registerIpcHandlers({ sourceRootService });
+
+    const result = await electron.ipcMain.invoke(
+      CHANNELS.SAVE_FAVORITES,
+      {
+        folders: [],
+        albums: [],
+        images: [{ id: 'image_1', path: '/Volumes/NewCollection/album/a.jpg' }],
+        collections: [],
+        version: 4
+      },
+      4
+    );
+
+    expect(result.success).toBe(true);
+    const stored = JSON.parse(fs.readFileSync(favoritesPath, 'utf8'));
+    expect(stored.images[0]).toMatchObject({
+      path: '/Volumes/NewCollection/album/a.jpg',
+      sourceId: SOURCE_ID,
+      relativePath: 'album/a.jpg'
+    });
   });
 
   test('saving favorites rejects on version conflict', async () => {
