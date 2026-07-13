@@ -8,6 +8,10 @@ const {
   createFavoritesDigest,
   createReconciliationPlan
 } = require('../../../src/main/services/FavoritesReconciliation');
+const {
+  SCAN_ROOTS,
+  createCommandConfig
+} = require('../../../scripts/reconcile-favorites');
 
 const SOURCE_ID = 'src_22222222-2222-4222-8222-222222222222';
 const roots = ['/library'];
@@ -209,5 +213,17 @@ describe('FavoritesReconciliation', () => {
       backup_path: result.backupPath,
       cleanup_allowed: false
     });
+  });
+
+  test('uses the approved roots and only applies with an explicit flag', () => {
+    expect(SCAN_ROOTS).toEqual([
+      '/Volumes/Collection/300-Cosplayer',
+      '/Volumes/1TB/Collection/400-Cos Album',
+      '/Volumes/1TB/Collection/500-Cos专题',
+      '/Volumes/1TB/Collection/600-Cos Weibo',
+      '/Volumes/1TB/Collection/兴趣'
+    ]);
+    expect(createCommandConfig([]).apply).toBe(false);
+    expect(createCommandConfig(['--apply']).apply).toBe(true);
   });
 });
