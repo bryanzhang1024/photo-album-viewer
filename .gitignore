@@ -65,4 +65,5 @@ logs/
 *.temp
 .claude/
 .gemini/
+.codex/
 .venv/

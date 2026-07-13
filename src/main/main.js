@@ -35,11 +35,10 @@ const {
   validateSourceRootsEnvelopeV1
 } = require('../common/contracts/navigation-contract-v1');
 
-FavoritesService.registerIpcHandlers();
-
 const sourceRootService = createSourceRootService({
   registryPath: path.join(app.getPath('userData'), 'library-sources-v3.json')
 });
+FavoritesService.registerIpcHandlers({ sourceRootService });
 
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
