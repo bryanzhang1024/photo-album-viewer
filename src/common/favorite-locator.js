@@ -133,6 +133,7 @@ module.exports = {
   attachFavoriteLocator,
   attachAlbumPreviewLocators,
   attachFavoritesLocators,
+  collectAlbumPreviewPaths,
   materializeAlbumPreviewPaths,
   materializeFavoritePath,
   materializeFavoritesData
