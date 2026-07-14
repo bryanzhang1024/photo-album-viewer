@@ -90,4 +90,69 @@ describe('favorite locator', () => {
     expect(materialized.images[0].path).toBe('/Volumes/Rebased/album/a.jpg');
     expect(materialized.collections).toBe(data.collections);
   });
+
+  test('stores album previews relative to the album and rebases them with the SourceRoot', () => {
+    const data = {
+      folders: [],
+      albums: [{
+        id: 'album_1',
+        path: '/Volumes/1TB/Collection/album',
+        previewImages: [{
+          path: '/Volumes/1TB/Collection/album/nested/cover.jpg',
+          name: 'cover.jpg'
+        }]
+      }],
+      images: [],
+      collections: []
+    };
+
+    const attached = attachFavoritesLocators(data, sources);
+    expect(attached.albums[0].previewRelativePaths).toEqual(['nested/cover.jpg']);
+
+    const materialized = materializeFavoritesData(attached, [{
+      sourceId: NESTED_SOURCE_ID,
+      rootPath: '/Volumes/Rebased',
+      label: 'Collection'
+    }]);
+    expect(materialized.albums[0]).toMatchObject({
+      path: '/Volumes/Rebased/album',
+      previewRelativePaths: ['nested/cover.jpg'],
+      previewSamples: ['/Volumes/Rebased/album/nested/cover.jpg'],
+      samples: ['/Volumes/Rebased/album/nested/cover.jpg'],
+      previewImagePath: '/Volumes/Rebased/album/nested/cover.jpg',
+      previewImages: [{
+        path: '/Volumes/Rebased/album/nested/cover.jpg',
+        name: 'cover.jpg'
+      }]
+    });
+  });
+
+  test('ignores album preview paths outside the album or with invalid portable segments', () => {
+    const attached = attachFavoritesLocators({
+      albums: [{
+        path: '/Volumes/1TB/Collection/album',
+        previewSamples: [
+          '/Volumes/1TB/Collection/other/cover.jpg',
+          '/Volumes/1TB/Collection/album/valid.jpg'
+        ]
+      }]
+    }, sources);
+    expect(attached.albums[0].previewRelativePaths).toEqual(['valid.jpg']);
+
+    const materialized = materializeFavoritesData({
+      albums: [{
+        path: '/old/album',
+        sourceId: NESTED_SOURCE_ID,
+        relativePath: 'album',
+        previewRelativePaths: ['../outside.jpg', '/absolute.jpg', 'valid.jpg']
+      }]
+    }, [{
+      sourceId: NESTED_SOURCE_ID,
+      rootPath: '/Volumes/Rebased',
+      label: 'Collection'
+    }]);
+    expect(materialized.albums[0].previewSamples).toEqual([
+      '/Volumes/Rebased/album/valid.jpg'
+    ]);
+  });
 });
