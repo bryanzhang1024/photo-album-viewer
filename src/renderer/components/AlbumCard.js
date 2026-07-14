@@ -46,6 +46,22 @@ const normalizeThumbnailUrl = (url) => {
   return `thumbnail-protocol://${getBasename(url)}`;
 };
 
+const getFirstAlbumImagePath = async (albumPath) => {
+  if (!ipcRenderer || !albumPath) return null;
+
+  const result = await ipcRenderer.invoke(CHANNELS.GET_ALBUM_IMAGES, albumPath);
+  const images = Array.isArray(result) ? result : result?.images;
+  if (!Array.isArray(images)) return null;
+  const firstImage = images.find((image) => typeof image?.path === 'string' && image.path.length > 0);
+  return firstImage?.path || null;
+};
+
+const requestPreviewThumbnail = async (imagePath) => {
+  if (!ipcRenderer || !imagePath) return null;
+  const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, [imagePath], 0);
+  return normalizeThumbnailUrl(results?.[imagePath]);
+};
+
 // 相簿/文件夹预览卡片组件 - 重构版本
 function AlbumCard({ 
   node,           // 新的导航节点数据
@@ -180,13 +196,14 @@ function AlbumCard({
     const loadViaIpc = async () => {
       try {
         setLoading(true);
-        const imagePaths = cardData.samples ? cardData.samples.slice(0, 1) : [];
-        if (imagePaths.length === 0) return;
+        let imagePath = cardData.samples?.[0] || null;
+        if (!imagePath && cardData.canViewAsPhotoSet) {
+          imagePath = await getFirstAlbumImagePath(cardData.path);
+        }
+        if (!imagePath) return;
 
-        const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, imagePaths, 0);
-        const validUrls = imagePaths
-          .map((p) => normalizeThumbnailUrl(results[p]))
-          .filter(Boolean);
+        const thumbnailUrl = await requestPreviewThumbnail(imagePath);
+        const validUrls = thumbnailUrl ? [thumbnailUrl] : [];
         imageCache.set('preview', cacheKey, validUrls);
         setPreviewUrls(validUrls);
       } catch (err) {
@@ -211,10 +228,14 @@ function AlbumCard({
     try {
       setPreviewUrls([]);
       setLoading(true);
-      const results = await ipcRenderer.invoke(CHANNELS.GET_BATCH_THUMBNAILS, [sample], 0);
-      const url = results[sample];
-      if (url) {
-        const thumbnailUrl = `thumbnail-protocol://${getBasename(url)}`;
+      let thumbnailUrl = await requestPreviewThumbnail(sample);
+      if (!thumbnailUrl && cardData.canViewAsPhotoSet) {
+        const fallbackPath = await getFirstAlbumImagePath(cardData.path);
+        if (fallbackPath && fallbackPath !== sample) {
+          thumbnailUrl = await requestPreviewThumbnail(fallbackPath);
+        }
+      }
+      if (thumbnailUrl) {
         imageCache.set('preview', cacheKey, [thumbnailUrl]);
         setPreviewUrls([thumbnailUrl]);
       }
