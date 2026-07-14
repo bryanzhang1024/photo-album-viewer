@@ -40,7 +40,8 @@ function run(argv = process.argv.slice(2)) {
   const output = {
     mode: config.apply ? 'apply' : 'dry-run',
     summary: plan.summary,
-    unresolved: plan.unresolved
+    unresolved: plan.unresolved,
+    albumPreviewUnresolved: plan.albumPreviewUnresolved
   };
 
   if (config.apply) {

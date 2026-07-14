@@ -1,7 +1,19 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { attachFavoriteLocator } = require('../../common/favorite-locator');
+const {
+  attachFavoriteLocator,
+  collectAlbumPreviewPaths
+} = require('../../common/favorite-locator');
+const {
+  getPortableRelativePath,
+  isPortableRelativePath,
+  resolvePortableRelativePath
+} = require('../../common/path-codec');
+
+const MEDIA_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff'
+]);
 
 function createFavoritesDigest(favorites) {
   return crypto.createHash('sha256').update(JSON.stringify(favorites)).digest('hex');
@@ -21,6 +33,7 @@ function scanMediaRoots(scanRoots, fsApi) {
   const directoriesByBasename = new Map();
   const directoriesByIdentity = new Map();
   const filesByBasename = new Map();
+  const mediaFilesByDirectory = new Map();
 
   for (const root of scanRoots) {
     if (!fsApi.existsSync(root)) {
@@ -42,16 +55,25 @@ function scanMediaRoots(scanRoots, fsApi) {
           );
           stack.push(entryPath);
         } else if (entry.isFile()) {
-          addToIndex(filesByBasename, entry.name, {
+          const file = {
             path: entryPath,
             size: fsApi.statSync(entryPath).size
-          });
+          };
+          addToIndex(filesByBasename, entry.name, file);
+          if (MEDIA_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+            addToIndex(mediaFilesByDirectory, current, file);
+          }
         }
       }
     }
   }
 
-  return { directoriesByBasename, directoriesByIdentity, filesByBasename };
+  return {
+    directoriesByBasename,
+    directoriesByIdentity,
+    filesByBasename,
+    mediaFilesByDirectory
+  };
 }
 
 function createDirectoryResolver(index) {
@@ -113,6 +135,66 @@ function createLocatedChange(collection, item, newPath, reason, sources) {
   };
 }
 
+function resolveAlbumPreview(album, albumPath, index, fsApi) {
+  const mediaFiles = [...(index.mediaFilesByDirectory.get(albumPath) || [])]
+    .sort((left, right) => left.path.localeCompare(right.path));
+
+  for (const relativePath of album.previewRelativePaths || []) {
+    if (!relativePath || !isPortableRelativePath(relativePath)) continue;
+    const candidate = resolvePortableRelativePath(albumPath, relativePath);
+    if (fsApi.existsSync(candidate)) {
+      return { previewPath: candidate, previewRelativePath: relativePath, reason: 'previewRelativePath' };
+    }
+  }
+
+  const legacyPreviews = collectAlbumPreviewPaths(album);
+  for (const previewPath of legacyPreviews) {
+    const relativePath = getPortableRelativePath(album.path, previewPath);
+    if (relativePath === null || relativePath === '' || !isPortableRelativePath(relativePath)) {
+      continue;
+    }
+    const candidate = resolvePortableRelativePath(albumPath, relativePath);
+    if (fsApi.existsSync(candidate)) {
+      return { previewPath: candidate, previewRelativePath: relativePath, reason: 'albumRelativePath' };
+    }
+  }
+
+  for (const previewPath of legacyPreviews) {
+    const basename = path.basename(previewPath);
+    const matches = mediaFiles.filter((file) => path.basename(file.path) === basename);
+    if (matches.length === 1) {
+      return {
+        previewPath: matches[0].path,
+        previewRelativePath: getPortableRelativePath(albumPath, matches[0].path),
+        reason: 'albumFilename'
+      };
+    }
+  }
+
+  if (mediaFiles.length === 0) return null;
+  return {
+    previewPath: mediaFiles[0].path,
+    previewRelativePath: getPortableRelativePath(albumPath, mediaFiles[0].path),
+    reason: 'albumFirstMedia'
+  };
+}
+
+function hasCanonicalAlbumPreview(album, preview) {
+  return Array.isArray(album.previewRelativePaths)
+    && album.previewRelativePaths.length === 1
+    && album.previewRelativePaths[0] === preview.previewRelativePath
+    && Array.isArray(album.previewSamples)
+    && album.previewSamples.length === 1
+    && album.previewSamples[0] === preview.previewPath
+    && Array.isArray(album.samples)
+    && album.samples.length === 1
+    && album.samples[0] === preview.previewPath
+    && album.previewImagePath === preview.previewPath
+    && Array.isArray(album.previewImages)
+    && album.previewImages.length === 1
+    && album.previewImages[0]?.path === preview.previewPath;
+}
+
 function createReconciliationPlan({ favorites, sources, scanRoots, fsApi = fs }) {
   if (!favorites || !Array.isArray(sources) || !Array.isArray(scanRoots)) {
     throw new TypeError('favorites, sources and scanRoots are required');
@@ -146,6 +228,35 @@ function createReconciliationPlan({ favorites, sources, scanRoots, fsApi = fs })
       sources
     );
     if (change) changes.push(change);
+  }
+
+  const albumPreviewChanges = [];
+  const albumPreviewUnresolved = [];
+  for (const album of favorites.albums || []) {
+    const albumResolution = albumResolutions.get(album.path);
+    const albumPath = fsApi.existsSync(album.path)
+      ? album.path
+      : albumResolution?.newPath;
+    if (!albumPath || !fsApi.existsSync(albumPath)) {
+      albumPreviewUnresolved.push({
+        id: album.id,
+        albumPath: albumPath || album.path,
+        reason: 'albumNotFound'
+      });
+      continue;
+    }
+
+    const preview = resolveAlbumPreview(album, albumPath, index, fsApi);
+    if (!preview || !preview.previewRelativePath) {
+      albumPreviewUnresolved.push({ id: album.id, albumPath, reason: 'noMedia' });
+      continue;
+    }
+    if (hasCanonicalAlbumPreview(album, preview)) continue;
+    albumPreviewChanges.push({
+      id: album.id,
+      albumPath,
+      ...preview
+    });
   }
 
   const resolveAlbumPath = (oldAlbumPath) => {
@@ -228,10 +339,14 @@ function createReconciliationPlan({ favorites, sources, scanRoots, fsApi = fs })
     summary: {
       albumsResolved: changes.filter((change) => change.collection === 'albums').length,
       imagesResolved: changes.filter((change) => change.collection === 'images').length,
+      albumPreviewsResolved: albumPreviewChanges.length,
+      albumPreviewsUnresolved: albumPreviewUnresolved.length,
       unresolved: unresolved.length
     },
     changes,
-    unresolved
+    unresolved,
+    albumPreviewChanges,
+    albumPreviewUnresolved
   };
 }
 
@@ -255,6 +370,12 @@ function applyReconciliationPlan({
   for (const change of plan.changes) {
     if (!fsApi.existsSync(change.newPath)) {
       throw new Error(`重连目标已不存在: ${change.newPath}`);
+    }
+  }
+  for (const change of plan.albumPreviewChanges || []) {
+    if (!fsApi.existsSync(change.previewPath)
+        || getPortableRelativePath(change.albumPath, change.previewPath) !== change.previewRelativePath) {
+      throw new Error(`封面重连目标无效: ${change.previewPath}`);
     }
   }
 
@@ -290,17 +411,42 @@ function applyReconciliationPlan({
     `${change.collection}:${change.id}:${change.oldPath}`,
     change
   ]));
+  const previewChangesById = new Map((plan.albumPreviewChanges || []).map((change) => [
+    change.id,
+    change
+  ]));
   const updated = { ...favorites };
   for (const collection of ['albums', 'images']) {
     updated[collection] = (favorites[collection] || []).map((item) => {
       const change = changesByIdentity.get(`${collection}:${item.id}:${item.path}`);
-      if (!change) return item;
-      return {
+      let nextItem = change ? {
         ...item,
         path: change.newPath,
         sourceId: change.sourceId,
         relativePath: change.relativePath
+      } : item;
+
+      if (collection !== 'albums') return nextItem;
+      const previewChange = previewChangesById.get(item.id);
+      if (!previewChange) return nextItem;
+
+      const existingPreview = Array.isArray(item.previewImages)
+        && typeof item.previewImages[0] === 'object'
+        ? item.previewImages[0]
+        : {};
+      nextItem = {
+        ...nextItem,
+        previewRelativePaths: [previewChange.previewRelativePath],
+        previewSamples: [previewChange.previewPath],
+        samples: [previewChange.previewPath],
+        previewImagePath: previewChange.previewPath,
+        previewImages: [{
+          ...existingPreview,
+          path: previewChange.previewPath,
+          name: path.basename(previewChange.previewPath)
+        }]
       };
+      return nextItem;
     });
   }
   updated.version = (favorites.version || 1) + 1;

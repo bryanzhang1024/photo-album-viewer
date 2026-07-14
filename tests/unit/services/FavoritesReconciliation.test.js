@@ -25,6 +25,12 @@ function createFavorites() {
         id: 'album-unique',
         path: '/old/lunananya/set-037',
         name: 'set-037',
+        previewImages: [{
+          path: '/old/lunananya/set-037/cover.jpg',
+          name: 'cover.jpg',
+          size: 5
+        }],
+        previewImagePath: '/old/lunananya/set-037/cover.jpg',
         addedAt: 1
       },
       {
@@ -32,6 +38,12 @@ function createFavorites() {
         path: '/old/Misswarm/set/02_Foot',
         name: '02_Foot',
         addedAt: 2
+      },
+      {
+        id: 'album-empty',
+        path: '/library/empty-album',
+        name: 'empty-album',
+        addedAt: 8
       }
     ],
     images: [
@@ -85,6 +97,7 @@ describe('FavoritesReconciliation', () => {
   beforeEach(() => {
     mockFs = createFsMock({
       '/library': {
+        'empty-album': {},
         '500-Cos专题': {
           'set-037': { 'cover.jpg': '12345' },
           Misswarm: {
@@ -127,8 +140,32 @@ describe('FavoritesReconciliation', () => {
     expect(plan.summary).toEqual({
       albumsResolved: 2,
       imagesResolved: 3,
+      albumPreviewsResolved: 2,
+      albumPreviewsUnresolved: 1,
       unresolved: 2
     });
+    expect(plan.albumPreviewChanges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'album-unique',
+        albumPath: '/library/500-Cos专题/set-037',
+        previewPath: '/library/500-Cos专题/set-037/cover.jpg',
+        previewRelativePath: 'cover.jpg',
+        reason: 'albumRelativePath'
+      }),
+      expect.objectContaining({
+        id: 'album-child',
+        previewPath: '/library/500-Cos专题/Misswarm/set/02_Foot/C (1).jpg',
+        previewRelativePath: 'C (1).jpg',
+        reason: 'albumFirstMedia'
+      })
+    ]));
+    expect(plan.albumPreviewUnresolved).toEqual([
+      expect.objectContaining({
+        id: 'album-empty',
+        albumPath: '/library/empty-album',
+        reason: 'noMedia'
+      })
+    ]);
     expect(plan.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'album-child',
@@ -203,7 +240,35 @@ describe('FavoritesReconciliation', () => {
     });
     expect(stored.images.find((item) => item.id === 'image-generic').path)
       .toBe('/old/015 - 可畏礼服/3.jpg');
+    expect(stored.albums.find((item) => item.id === 'album-unique')).toMatchObject({
+      path: '/library/500-Cos专题/set-037',
+      previewRelativePaths: ['cover.jpg'],
+      previewSamples: ['/library/500-Cos专题/set-037/cover.jpg'],
+      samples: ['/library/500-Cos专题/set-037/cover.jpg'],
+      previewImagePath: '/library/500-Cos专题/set-037/cover.jpg',
+      previewImages: [{
+        path: '/library/500-Cos专题/set-037/cover.jpg',
+        name: 'cover.jpg',
+        size: 5
+      }],
+      addedAt: 1
+    });
+    expect(stored.albums.find((item) => item.id === 'album-empty')).toEqual(
+      favorites.albums.find((item) => item.id === 'album-empty')
+    );
     expect(stored.version).toBe(10);
+
+    const repeatedPlan = createReconciliationPlan({
+      favorites: stored,
+      sources,
+      scanRoots: roots
+    });
+    expect(repeatedPlan.summary).toMatchObject({
+      albumsResolved: 0,
+      imagesResolved: 0,
+      albumPreviewsResolved: 0,
+      albumPreviewsUnresolved: 1
+    });
 
     const backup = fs.readFileSync(result.backupPath, 'utf8');
     expect(createFavoritesDigest(JSON.parse(backup))).toBe(plan.sourceDigest);
