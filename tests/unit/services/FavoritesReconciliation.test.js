@@ -258,6 +258,18 @@ describe('FavoritesReconciliation', () => {
     );
     expect(stored.version).toBe(10);
 
+    const repeatedPlan = createReconciliationPlan({
+      favorites: stored,
+      sources,
+      scanRoots: roots
+    });
+    expect(repeatedPlan.summary).toMatchObject({
+      albumsResolved: 0,
+      imagesResolved: 0,
+      albumPreviewsResolved: 0,
+      albumPreviewsUnresolved: 1
+    });
+
     const backup = fs.readFileSync(result.backupPath, 'utf8');
     expect(createFavoritesDigest(JSON.parse(backup))).toBe(plan.sourceDigest);
     const manifest = JSON.parse(fs.readFileSync(path.join(result.backupDir, 'manifest.json'), 'utf8'));

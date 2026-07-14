@@ -179,6 +179,22 @@ function resolveAlbumPreview(album, albumPath, index, fsApi) {
   };
 }
 
+function hasCanonicalAlbumPreview(album, preview) {
+  return Array.isArray(album.previewRelativePaths)
+    && album.previewRelativePaths.length === 1
+    && album.previewRelativePaths[0] === preview.previewRelativePath
+    && Array.isArray(album.previewSamples)
+    && album.previewSamples.length === 1
+    && album.previewSamples[0] === preview.previewPath
+    && Array.isArray(album.samples)
+    && album.samples.length === 1
+    && album.samples[0] === preview.previewPath
+    && album.previewImagePath === preview.previewPath
+    && Array.isArray(album.previewImages)
+    && album.previewImages.length === 1
+    && album.previewImages[0]?.path === preview.previewPath;
+}
+
 function createReconciliationPlan({ favorites, sources, scanRoots, fsApi = fs }) {
   if (!favorites || !Array.isArray(sources) || !Array.isArray(scanRoots)) {
     throw new TypeError('favorites, sources and scanRoots are required');
@@ -235,6 +251,7 @@ function createReconciliationPlan({ favorites, sources, scanRoots, fsApi = fs })
       albumPreviewUnresolved.push({ id: album.id, albumPath, reason: 'noMedia' });
       continue;
     }
+    if (hasCanonicalAlbumPreview(album, preview)) continue;
     albumPreviewChanges.push({
       id: album.id,
       albumPath,
