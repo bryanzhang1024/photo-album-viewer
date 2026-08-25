@@ -179,6 +179,22 @@ describe('HomePage refresh button', () => {
     });
   });
 
+  test('opens the dedicated Cos library from the home toolbar', async () => {
+    const navigate = jest.fn();
+    reactRouter.useNavigate.mockReturnValue(navigate);
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <HomePage colorMode={{ mode: 'light' }} currentPath="" urlMode={true} />
+      </ScrollPositionContext.Provider>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cos 图库' }));
+    expect(navigate).toHaveBeenCalledWith('/cos');
+  });
+
   test('refreshes current folder in url mode', async () => {
     render(
       <ScrollPositionContext.Provider

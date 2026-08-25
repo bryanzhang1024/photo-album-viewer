@@ -52,6 +52,7 @@ function AlbumPage({
   randomBrowseDisabled = false,
   sourceBoundary = null,
   sourceBreadcrumbs = null,
+  readOnly = false,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null
@@ -808,6 +809,7 @@ function AlbumPage({
           onClose={handleCloseViewer}
           onIndexChange={setSelectedImageIndex}
           onImageDeleted={handleViewerImageDeleted}
+          readOnly={readOnly}
           hasMore={hasMore}
           onNearEnd={handleLoadMore}
         />

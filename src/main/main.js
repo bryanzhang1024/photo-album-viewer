@@ -14,6 +14,8 @@ const { resetLegacyNavigationFiles } = require('./services/NavigationStateCutove
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
 const { createSourceRootService } = require('./services/SourceRootService');
+const { CosLibraryService } = require('./services/CosLibraryService');
+const { registerCosLibraryIpcHandlers } = require('./services/CosLibraryIpc');
 const {
   createNavigationTargetForSource,
   createVirtualComputerRootResponse,
@@ -58,6 +60,21 @@ const DEFAULT_PERFORMANCE_SETTINGS = {
 // 当前性能设置
 let performanceSettings = {...DEFAULT_PERFORMANCE_SETTINGS};
 ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
+
+const cosLibraryService = new CosLibraryService({
+  configPath: path.join(app.getPath('userData'), 'cos-library-roots-v1.json'),
+  cachePath: path.join(app.getPath('userData'), 'cos-library-catalog-v1.json')
+});
+registerCosLibraryIpcHandlers({
+  ipcMain,
+  service: cosLibraryService,
+  dialog,
+  shell,
+  thumbnailService: ThumbnailService,
+  registerApprovedRoot,
+  getMainWindow,
+  thumbnailResolution: () => performanceSettings.thumbnailResolution
+});
 
 const thumbnailProtocolStats = {
   requestCount: 0,

@@ -89,7 +89,7 @@ function getResolutionText(dimensions) {
   return `${dimensions.width} x ${dimensions.height}`;
 }
 
-function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted, hasMore = false, onNearEnd }) {
+function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted, hasMore = false, onNearEnd, readOnly = false }) {
   // 使用收藏上下文和设置上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const { settings } = useSettings();
@@ -191,11 +191,11 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   }, []);
 
   const openDeleteConfirmation = useCallback(() => {
-    if (!currentImage?.path || deleteInProgress) return;
+    if (readOnly || !currentImage?.path || deleteInProgress) return;
     setDeleteError('');
     setDeleteConfirmOpen(true);
     setToolbarVisible(true);
-  }, [currentImage?.path, deleteInProgress]);
+  }, [currentImage?.path, deleteInProgress, readOnly]);
 
   const closeDeleteConfirmation = useCallback(() => {
     if (deleteInProgress) return;
@@ -204,7 +204,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   }, [deleteInProgress]);
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!currentImage?.path || deleteInProgress) return;
+    if (readOnly || !currentImage?.path || deleteInProgress) return;
 
     setDeleteInProgress(true);
     setDeleteError('');
@@ -230,7 +230,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     } finally {
       setDeleteInProgress(false);
     }
-  }, [currentImage?.path, currentIndex, deleteInProgress, images.length, onClose, onImageDeleted, onIndexChange]);
+  }, [currentImage?.path, currentIndex, deleteInProgress, images.length, onClose, onImageDeleted, onIndexChange, readOnly]);
   
   // 预加载图片并平滑过渡
   useEffect(() => {
@@ -413,7 +413,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
           handleShowInFolder();
           break;
         case 'Delete':
-          if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+          if (!readOnly && !e.metaKey && !e.ctrlKey && !e.altKey) {
             e.preventDefault();
             openDeleteConfirmation();
           }
@@ -460,7 +460,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, dimensionsByIndex, dualPageEnabled, handleCopyCurrentImage, images, infoOpen, onClose, toggleImageInfo, deleteConfirmOpen, closeDeleteConfirmation, openDeleteConfirmation, viewportSize]);
+  }, [currentIndex, dimensionsByIndex, dualPageEnabled, handleCopyCurrentImage, images, infoOpen, onClose, toggleImageInfo, deleteConfirmOpen, closeDeleteConfirmation, openDeleteConfirmation, readOnly, viewportSize]);
   
   // 监听全屏变化
   useEffect(() => {
@@ -1104,17 +1104,19 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
               <ViewColumnIcon />
             </IconButton>
           </Tooltip>
-          <Tooltip title="删除图片 (Delete)">
-            <IconButton
-              color="inherit"
-              onClick={openDeleteConfirmation}
-              size="small"
-              aria-label="删除图片 (Delete)"
-              sx={{ mr: 1 }}
-            >
-              <DeleteOutlineIcon />
-            </IconButton>
-          </Tooltip>
+          {!readOnly ? (
+            <Tooltip title="删除图片 (Delete)">
+              <IconButton
+                color="inherit"
+                onClick={openDeleteConfirmation}
+                size="small"
+                aria-label="删除图片 (Delete)"
+                sx={{ mr: 1 }}
+              >
+                <DeleteOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          ) : null}
           <Tooltip title="缩小 (Ctrl+滚轮向下)">
             <IconButton 
               color="inherit" 
@@ -1334,7 +1336,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
         </Box>
       )}
 
-      {deleteConfirmOpen && currentImage && (
+      {!readOnly && deleteConfirmOpen && currentImage && (
         <Box
           sx={{
             position: 'absolute',

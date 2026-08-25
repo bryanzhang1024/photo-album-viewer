@@ -190,4 +190,27 @@ describe('CosCatalogService', () => {
     expect(media.items[0]).not.toHaveProperty('absolutePath');
     expect(service.resolveMediaPath(media.items[0].id)).toBe(path.join(rootA, 'single', '2.jpg'));
   });
+
+  test('round-trips a path-free cache snapshot and marks media offline by root status', () => {
+    const snapshot = service.exportSnapshot();
+    expect(JSON.stringify(snapshot)).not.toContain(rootA);
+    expect(JSON.stringify(snapshot)).not.toContain(rootB);
+    expect(snapshot.version).toBe(2);
+    expect(snapshot.sets.find((item) => item.id === 'set-single').media).toMatchObject({
+      rootId: 'root-a',
+      directory: 'single',
+      names: ['2.jpg', '10.jpg']
+    });
+
+    const restored = new CosCatalogService();
+    restored.importSnapshot(snapshot, [
+      { id: 'root-a', path: rootA, status: 'offline' },
+      { id: 'root-b', path: rootB, status: 'online' }
+    ]);
+
+    expect(restored.listSets({ characterId: 'character:初音未来' }).total).toBe(3);
+    expect(restored.getSet('set-single')).toMatchObject({ status: 'online', imageCount: 2 });
+    expect(restored.getSet('set-multi-coser')).toMatchObject({ status: 'offline' });
+    expect(restored.resolveMediaPath(restored.getSet('set-single').coverMediaId)).toBeNull();
+  });
 });

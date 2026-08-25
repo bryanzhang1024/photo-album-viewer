@@ -273,6 +273,87 @@ class CosCatalogService {
     return looks.size;
   }
 
+  exportSnapshot() {
+    return {
+      version: 2,
+      sets: [...this.sets.values()].map((record) => {
+        const firstMedia = record.media[0];
+        return {
+          ...this.toSetDto(record),
+          media: firstMedia ? {
+            rootId: firstMedia.rootId,
+            directory: path.dirname(firstMedia.relativePath),
+            names: record.media.map((item) => item.name)
+          } : null
+        };
+      }),
+      errors: this.getErrors()
+    };
+  }
+
+  importSnapshot(snapshot, roots = []) {
+    if (!snapshot || ![1, 2].includes(snapshot.version) || !Array.isArray(snapshot.sets)) {
+      throw new TypeError('Unsupported Cos catalog snapshot');
+    }
+
+    this.reset();
+    const rootMap = new Map(roots.map((root) => [root.id, root]));
+    this.errors = Array.isArray(snapshot.errors)
+      ? snapshot.errors.map((error) => ({ ...error }))
+      : [];
+
+    snapshot.sets.forEach((cached) => {
+      const locations = Array.isArray(cached.locations)
+        ? cached.locations.map((location) => ({
+          rootId: location.rootId,
+          relativePath: location.relativePath,
+          status: rootMap.get(location.rootId)?.status === 'online' ? 'online' : 'offline'
+        }))
+        : [];
+      const cachedMedia = Array.isArray(cached.media)
+        ? cached.media
+        : cached.media && Array.isArray(cached.media.names)
+          ? cached.media.names.map((name) => ({
+            id: makeMediaId(cached.media.rootId, cached.media.directory, name),
+            name,
+            rootId: cached.media.rootId,
+            relativePath: path.join(cached.media.directory, name)
+          }))
+          : [];
+      const media = cachedMedia.map((item) => {
+        const root = rootMap.get(item.rootId);
+        const absolutePath = root?.status === 'online' && typeof root.path === 'string'
+          ? path.join(root.path, item.relativePath)
+          : null;
+        return { ...item, absolutePath };
+      });
+      const record = {
+        id: cached.id,
+        displayName: cached.displayName,
+        cosers: uniqueStrings(cached.cosers),
+        characters: uniqueStrings(cached.characters),
+        looks: uniqueStrings(cached.looks),
+        works: uniqueStrings(cached.works),
+        themes: uniqueStrings(cached.themes),
+        type: typeof cached.type === 'string' ? cached.type : '',
+        locations,
+        imageCount: Number.isFinite(cached.imageCount) ? cached.imageCount : media.length,
+        coverMediaId: cached.coverMediaId || media[0]?.id || null,
+        status: locations.some((location) => location.status === 'online') ? 'online' : 'offline',
+        media
+      };
+      this.ingestRecord(record);
+      media.forEach((item) => {
+        if (item.absolutePath) this.mediaPaths.set(item.id, item.absolutePath);
+      });
+    });
+
+    return {
+      setCount: this.sets.size,
+      errorCount: this.errors.length
+    };
+  }
+
   listCharacters(options = {}) {
     const items = [...this.characterSets.entries()]
       .map(([name, setIds]) => this.makeEntityCard('character', name, setIds))

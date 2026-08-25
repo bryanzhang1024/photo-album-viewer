@@ -267,6 +267,18 @@ describe('ImageViewer delete image flow', () => {
     expect(screen.getByRole('button', { name: /删除图片/i })).toBeInTheDocument();
   });
 
+  test('removes delete controls and ignores Delete in read-only mode', () => {
+    renderViewer({ readOnly: true });
+
+    expect(screen.queryByRole('button', { name: /删除图片/i })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.queryByRole('heading', { name: '删除图片' })).not.toBeInTheDocument();
+    expect(global.electronMock.ipcRenderer.invoke).not.toHaveBeenCalledWith(
+      CHANNELS.TRASH_IMAGE,
+      expect.any(String)
+    );
+  });
+
   test('opens delete confirmation with the current image path from the Delete key', () => {
     renderViewer();
 

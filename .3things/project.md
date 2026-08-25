@@ -17,7 +17,7 @@
 
 ## 已确认事实
 
-- 现有 Photo Album Viewer 3.2.1 已支持真实目录直读、相簿识别、虚拟网格、缩略图缓存、图片查看器、在 Finder 中显示和文件夹名称搜索。
+- Photo Album Viewer 3.3.0 在既有真实目录直读、虚拟网格、缩略图和图片查看能力上新增只读 Cos 图库模式。
 - 当前应用是 Electron 本地应用，不提供云同步或 Web 访问。
 - 正式图片套图分布在 `/Volumes/1TB/Collection/300-Cos套图库` 与 `/Volumes/CosPool/300-Cos套图库`。
 - 两个图片根当前可读取到 8,891 份 `cosset.json`；其中有 587 个 Coser、1,287 个角色、4,766 个服装/造型值。
@@ -52,11 +52,12 @@
 
 - 规格：`.3things/spec.md`
 - 实现记录：`.3things/build-log.md`
+- 本地实现：`CosCatalogService`、`CosLibraryService`、Cos IPC 与 `/cos` 页面
 
 ## 下一步
 
-- 在 `codex/cos-library-mode-mvp` 分支先实现并验证 `CosCatalogService` 的索引、去重、角色/Coser 多入口和角色—服装歧义规则。
-- 用真实只读数据探针核对 8,891 套及初音未来、兔子洞、韶华、星之迟迟等基线，再接第一条可见纵切片。
+- 用户在打包版中体验角色、Coser、搜索和套图卡片密度；需要调整时继续在本分支迭代。
+- 用户确认本地浏览体验后，再把同一索引/查询契约放进只读 HTTP 服务并设计鉴权；该步骤不属于本地 MVP。
 
 ## 决策记录
 
