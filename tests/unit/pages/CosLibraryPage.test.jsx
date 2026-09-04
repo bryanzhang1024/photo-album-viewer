@@ -44,6 +44,18 @@ describe('CosLibraryPage', () => {
           return { items: [{ id: 'character:初音未来', name: '初音未来', setCount: 110 }], total: 1 };
         case CHANNELS.COS_LIST_LOOKS:
           return { items: [{ id: 'look:兔子洞', name: '兔子洞', setCount: 7 }], total: 1 };
+        case CHANNELS.COS_LIST_COSERS:
+          if (payload?.query) {
+            return { items: [{ id: 'coser:Aki', name: 'Aki', setCount: 1 }], total: 1 };
+          }
+          return {
+            items: [
+              { id: 'coser:Alice', name: 'Alice', setCount: 2 },
+              { id: 'coser:__singletons__', name: '其他', coserCount: 292, setCount: 279 },
+              { id: 'coser:__unknown__', name: '未知 Coser', setCount: 204 }
+            ],
+            total: 3
+          };
         case CHANNELS.COS_LIST_SETS:
           return {
             items: [{
@@ -126,5 +138,42 @@ describe('CosLibraryPage', () => {
     await waitFor(() => {
       expect(window.electronAPI.invoke).toHaveBeenCalledWith(CHANNELS.COS_SELECT_ROOT);
     });
+  });
+
+  test('shows one Other card for one-set cosers and opens their deduplicated set grid', async () => {
+    render(
+      <MemoryRouter>
+        <CosLibraryPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /按 Coser/ }));
+    const otherCard = await screen.findByRole('button', { name: /其他/ });
+    expect(otherCard).toHaveTextContent('292 位 · 279 套');
+    fireEvent.click(otherCard);
+
+    const setCard = await screen.findByRole('button', { name: /兔子洞写真套图/ });
+    expect(setCard).toHaveTextContent('Alice');
+    expect(window.electronAPI.invoke).toHaveBeenCalledWith(
+      CHANNELS.COS_LIST_SETS,
+      expect.objectContaining({ coserId: 'coser:__singletons__' })
+    );
+  });
+
+  test('keeps a one-set coser directly findable from the Coser search box', async () => {
+    render(
+      <MemoryRouter>
+        <CosLibraryPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /按 Coser/ }));
+    fireEvent.change(await screen.findByPlaceholderText('搜索当前分类'), { target: { value: 'Aki' } });
+
+    expect(await screen.findByRole('button', { name: /Aki/ })).toHaveTextContent('1 套');
+    expect(window.electronAPI.invoke).toHaveBeenCalledWith(
+      CHANNELS.COS_LIST_COSERS,
+      expect.objectContaining({ query: 'Aki', groupSingletons: true })
+    );
   });
 });

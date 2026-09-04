@@ -7,7 +7,8 @@ const {
   CosCatalogService,
   MIXED_LOOK_ID,
   UNSPECIFIED_LOOK_ID,
-  UNKNOWN_COSER_ID
+  UNKNOWN_COSER_ID,
+  SINGLETON_COSERS_ID
 } = require('../../src/main/services/CosCatalogService');
 
 function writeSet(rootPath, folderName, metadata, imageNames = ['01.jpg']) {
@@ -142,6 +143,54 @@ describe('CosCatalogService', () => {
     expect(service.listSets({ coserId: 'coser:Bob' }).items.map((item) => item.id).sort()).toEqual([
       'set-ambiguous',
       'set-multi-coser'
+    ]);
+  });
+
+  test('groups one-set cosers into one deduplicated Other entry by default request', async () => {
+    writeSet(rootA, 'solo-carol', metadata({
+      id: 'set-solo-carol',
+      display_name: 'Carol 单人套图',
+      cosers: ['Carol']
+    }));
+    writeSet(rootA, 'solo-shared', metadata({
+      id: 'set-solo-shared',
+      display_name: 'Dana Eve 双人套图',
+      cosers: ['Dana', 'Eve']
+    }));
+    await service.buildIndex([
+      { id: 'root-a', path: rootA, label: 'A' },
+      { id: 'root-b', path: rootB, label: 'B' }
+    ]);
+
+    expect(service.listCosers({ groupSingletons: true }).items.map((item) => ({
+      id: item.id,
+      setCount: item.setCount,
+      coserCount: item.coserCount
+    }))).toEqual([
+      { id: 'coser:Alice', setCount: 2, coserCount: undefined },
+      { id: 'coser:Bob', setCount: 2, coserCount: undefined },
+      { id: SINGLETON_COSERS_ID, setCount: 2, coserCount: 3 },
+      { id: UNKNOWN_COSER_ID, setCount: 1, coserCount: undefined }
+    ]);
+    expect(service.listSets({ coserId: SINGLETON_COSERS_ID }).items.map((item) => item.id)).toEqual([
+      'set-solo-carol',
+      'set-solo-shared'
+    ]);
+  });
+
+  test('searches one-set cosers by their real names instead of hiding them in Other', async () => {
+    writeSet(rootA, 'solo-carol', metadata({
+      id: 'set-solo-carol',
+      display_name: 'Carol 单人套图',
+      cosers: ['Carol']
+    }));
+    await service.buildIndex([
+      { id: 'root-a', path: rootA, label: 'A' },
+      { id: 'root-b', path: rootB, label: 'B' }
+    ]);
+
+    expect(service.listCosers({ groupSingletons: true, query: 'carol' }).items).toEqual([
+      expect.objectContaining({ id: 'coser:Carol', name: 'Carol', setCount: 1 })
     ]);
   });
 

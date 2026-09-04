@@ -6,6 +6,7 @@ const { SUPPORTED_FORMATS } = require('./FileSystemService');
 const MIXED_LOOK_ID = 'look:__mixed__';
 const UNSPECIFIED_LOOK_ID = 'look:__unspecified__';
 const UNKNOWN_COSER_ID = 'coser:__unknown__';
+const SINGLETON_COSERS_ID = 'coser:__singletons__';
 const DEFAULT_PAGE_SIZE = 100;
 const INDEX_CONCURRENCY = 16;
 
@@ -363,15 +364,38 @@ class CosCatalogService {
   }
 
   listCosers(options = {}) {
+    const query = typeof options.query === 'string' ? options.query.trim() : '';
+    const shouldGroupSingletons = options.groupSingletons === true && !query;
+    const singletonEntries = shouldGroupSingletons
+      ? [...this.coserSets.entries()].filter(([key, setIds]) => (
+        key !== UNKNOWN_COSER_ID && setIds.size === 1
+      ))
+      : [];
+    const singletonSetIds = new Set();
+    singletonEntries.forEach(([, setIds]) => {
+      setIds.forEach((setId) => singletonSetIds.add(setId));
+    });
+
     const items = [...this.coserSets.entries()]
+      .filter(([key, setIds]) => (
+        !shouldGroupSingletons || key === UNKNOWN_COSER_ID || setIds.size > 1
+      ))
       .map(([key, setIds]) => key === UNKNOWN_COSER_ID
         ? this.makeEntityCard('coser', '未知 Coser', setIds, UNKNOWN_COSER_ID)
         : this.makeEntityCard('coser', key, setIds))
-      .filter((item) => this.matchesEntityQuery(item, options.query))
+      .concat(singletonSetIds.size > 0 ? [{
+        id: SINGLETON_COSERS_ID,
+        name: '其他',
+        coserCount: singletonEntries.length,
+        setCount: singletonSetIds.size,
+        coverMediaId: this.firstCover(singletonSetIds)
+      }] : [])
+      .filter((item) => this.matchesEntityQuery(item, query))
       .sort((left, right) => {
-        if (left.id === UNKNOWN_COSER_ID) return 1;
-        if (right.id === UNKNOWN_COSER_ID) return -1;
-        return naturalCompare(left.name, right.name);
+        const rank = (item) => (
+          item.id === UNKNOWN_COSER_ID ? 2 : item.id === SINGLETON_COSERS_ID ? 1 : 0
+        );
+        return rank(left) - rank(right) || naturalCompare(left.name, right.name);
       });
     return paginate(items, options);
   }
@@ -400,6 +424,7 @@ class CosCatalogService {
   listSets(options = {}) {
     let candidates = [...this.sets.values()];
     const character = entityName(options.characterId, 'character');
+    const isSingletonGroup = options.coserId === SINGLETON_COSERS_ID;
     const coser = options.coserId === UNKNOWN_COSER_ID
       ? UNKNOWN_COSER_ID
       : entityName(options.coserId, 'coser');
@@ -413,7 +438,15 @@ class CosCatalogService {
       const ids = this.characterLookSets.get(character)?.get(options.lookId) || new Set();
       candidates = candidates.filter((record) => ids.has(record.id));
     }
-    if (coser) {
+    if (isSingletonGroup) {
+      const ids = new Set();
+      this.coserSets.forEach((setIds, key) => {
+        if (key !== UNKNOWN_COSER_ID && setIds.size === 1) {
+          setIds.forEach((setId) => ids.add(setId));
+        }
+      });
+      candidates = candidates.filter((record) => ids.has(record.id));
+    } else if (coser) {
       const ids = this.coserSets.get(coser) || new Set();
       candidates = candidates.filter((record) => ids.has(record.id));
     }
@@ -496,5 +529,6 @@ module.exports = {
   MIXED_LOOK_ID,
   UNSPECIFIED_LOOK_ID,
   UNKNOWN_COSER_ID,
+  SINGLETON_COSERS_ID,
   DEFAULT_PAGE_SIZE
 };

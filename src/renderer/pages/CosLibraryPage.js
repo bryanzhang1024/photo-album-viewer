@@ -101,6 +101,9 @@ function MetadataChips({ values }) {
 }
 
 function EntityCard({ item, onClick }) {
+  const countLabel = item.coserCount
+    ? `${formatCount(item.coserCount)} 位 · ${formatCount(item.setCount)} 套`
+    : `${formatCount(item.setCount)} 套`;
   return (
     <Paper
       component={ButtonBase}
@@ -110,7 +113,7 @@ function EntityCard({ item, onClick }) {
       <CoverImage mediaId={item.coverMediaId} alt={item.name} />
       <Box sx={{ p: 1.25 }}>
         <Typography noWrap fontWeight={650}>{item.name}</Typography>
-        <Typography variant="caption" color="text.secondary">{formatCount(item.setCount)} 套</Typography>
+        <Typography variant="caption" color="text.secondary">{countLabel}</Typography>
       </Box>
     </Paper>
   );
@@ -121,7 +124,9 @@ function SetCard({ item, context, onClick }) {
     ? item.cosers
     : context === 'coser'
       ? [...item.characters, ...item.looks]
-      : [...item.cosers, ...item.characters];
+      : context === 'coser-group'
+        ? [...item.cosers, ...item.characters, ...item.looks]
+        : [...item.cosers, ...item.characters];
   const tooltip = [
     item.displayName,
     item.cosers?.length ? `Coser：${item.cosers.join('、')}` : '',
@@ -254,7 +259,7 @@ function CosLibraryPage({ colorMode }) {
   const requestForView = useCallback((offset = 0) => {
     const common = { query, offset, limit: PAGE_SIZE };
     if (view.kind === 'characters') return [CHANNELS.COS_LIST_CHARACTERS, common];
-    if (view.kind === 'cosers') return [CHANNELS.COS_LIST_COSERS, common];
+    if (view.kind === 'cosers') return [CHANNELS.COS_LIST_COSERS, { ...common, groupSingletons: true }];
     if (view.kind === 'looks') {
       return [CHANNELS.COS_LIST_LOOKS, { ...common, characterId: view.character.id }];
     }
@@ -487,7 +492,15 @@ function CosLibraryPage({ colorMode }) {
                     item={item}
                     onClick={() => {
                       if (view.kind === 'characters') pushView({ kind: 'looks', title: item.name, character: item });
-                      else if (view.kind === 'cosers') pushView({ kind: 'sets', title: item.name, coser: item, context: 'coser' });
+                      else if (view.kind === 'cosers') {
+                        const isSingletonGroup = Boolean(item.coserCount);
+                        pushView({
+                          kind: 'sets',
+                          title: isSingletonGroup ? '其他 · 单套 Coser' : item.name,
+                          coser: item,
+                          context: isSingletonGroup ? 'coser-group' : 'coser'
+                        });
+                      }
                       else if (view.kind === 'looks') pushView({ kind: 'sets', title: `${view.character.name} · ${item.name}`, character: view.character, look: item, context: 'character' });
                     }}
                   />
