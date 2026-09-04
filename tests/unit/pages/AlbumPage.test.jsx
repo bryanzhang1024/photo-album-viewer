@@ -46,9 +46,10 @@ jest.mock('../../../src/renderer/components/ImageViewer', () =>
 );
 
 jest.mock('../../../src/renderer/components/PageLayout', () =>
-  jest.fn(({ headerContent, children }) => (
+  jest.fn(({ headerContent, subHeaderContent, children }) => (
     <div>
       <div data-testid="page-header">{headerContent}</div>
+      {subHeaderContent ? <div data-testid="page-subheader">{subHeaderContent}</div> : null}
       <div>{children}</div>
     </div>
   ))
@@ -508,6 +509,46 @@ describe('AlbumPage refresh button', () => {
     expect(onAlbumClick).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
     expect(onGoBack).not.toHaveBeenCalled();
+  });
+
+  test('uses one semantic header and only Backspace navigation in embedded mode', async () => {
+    const onGoBack = jest.fn();
+    const onAlbumClick = jest.fn();
+    const onNavigate = jest.fn();
+
+    render(
+      <ScrollPositionContext.Provider
+        value={{ savePosition: jest.fn(), getPosition: jest.fn(() => 0) }}
+      >
+        <AlbumPage
+          colorMode={{ mode: 'light' }}
+          albumPath="/albums/trip"
+          urlMode={true}
+          embeddedMode={true}
+          headerLeadingContent={<span>Cos 图库 / Alice / 套图</span>}
+          headerExtraActions={<button type="button">用 PictureView 打开</button>}
+          onGoBack={onGoBack}
+          onAlbumClick={onAlbumClick}
+          onNavigate={onNavigate}
+        />
+      </ScrollPositionContext.Provider>
+    );
+
+    expect(await screen.findByText('Cos 图库 / Alice / 套图')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '用 PictureView 打开' })).toBeInTheDocument();
+    expect(screen.queryByTestId('breadcrumbs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('page-subheader')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '收藏菜单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '设置' })).not.toBeInTheDocument();
+
+    const handled = fireEvent.keyDown(window, { key: 'Backspace' });
+    fireEvent.keyDown(window, { key: 'h' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(handled).toBe(false);
+    expect(onGoBack).toHaveBeenCalledTimes(1);
+    expect(onAlbumClick).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 
   test.each(SOURCE_BOUNDARY_CASES)(

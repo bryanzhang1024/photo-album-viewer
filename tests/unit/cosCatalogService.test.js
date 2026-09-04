@@ -135,9 +135,9 @@ describe('CosCatalogService', () => {
 
     const cosers = service.listCosers().items;
     expect(cosers.map(({ id, name, setCount }) => [id, name, setCount])).toEqual([
+      [UNKNOWN_COSER_ID, '未知 Coser', 1],
       ['coser:Alice', 'Alice', 2],
-      ['coser:Bob', 'Bob', 2],
-      [UNKNOWN_COSER_ID, '未知 Coser', 1]
+      ['coser:Bob', 'Bob', 2]
     ]);
 
     expect(service.listSets({ coserId: 'coser:Bob' }).items.map((item) => item.id).sort()).toEqual([
@@ -167,10 +167,10 @@ describe('CosCatalogService', () => {
       setCount: item.setCount,
       coserCount: item.coserCount
     }))).toEqual([
-      { id: 'coser:Alice', setCount: 2, coserCount: undefined },
-      { id: 'coser:Bob', setCount: 2, coserCount: undefined },
       { id: SINGLETON_COSERS_ID, setCount: 2, coserCount: 3 },
-      { id: UNKNOWN_COSER_ID, setCount: 1, coserCount: undefined }
+      { id: UNKNOWN_COSER_ID, setCount: 1, coserCount: undefined },
+      { id: 'coser:Alice', setCount: 2, coserCount: undefined },
+      { id: 'coser:Bob', setCount: 2, coserCount: undefined }
     ]);
     expect(service.listSets({ coserId: SINGLETON_COSERS_ID }).items.map((item) => item.id)).toEqual([
       'set-solo-carol',

@@ -393,7 +393,7 @@ class CosCatalogService {
       .filter((item) => this.matchesEntityQuery(item, query))
       .sort((left, right) => {
         const rank = (item) => (
-          item.id === UNKNOWN_COSER_ID ? 2 : item.id === SINGLETON_COSERS_ID ? 1 : 0
+          item.id === SINGLETON_COSERS_ID ? 0 : item.id === UNKNOWN_COSER_ID ? 1 : 2
         );
         return rank(left) - rank(right) || naturalCompare(left.name, right.name);
       });

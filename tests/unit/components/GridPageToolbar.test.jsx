@@ -135,4 +135,24 @@ describe('GridPageToolbar', () => {
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
     expect(defaultProps.onOpenSettings).toHaveBeenCalledTimes(1);
   });
+
+  test('supports an embedded toolbar with only relevant controls and extra actions', () => {
+    render(
+      <GridPageToolbar
+        {...defaultProps}
+        showRandom={false}
+        showFavorites={false}
+        showSettings={false}
+        extraActions={<button type="button">用 PictureView 打开</button>}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: '收藏菜单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '设置' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '用 PictureView 打开' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
+    expect(screen.getByLabelText('密度')).toBeInTheDocument();
+    expect(screen.queryByText('随机浏览')).not.toBeInTheDocument();
+  });
 });

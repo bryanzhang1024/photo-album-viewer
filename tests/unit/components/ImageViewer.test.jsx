@@ -254,6 +254,15 @@ describe('ImageViewer image info panel', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
+
+  test('consumes Backspace when closing the viewer', () => {
+    const props = renderViewer();
+
+    const handled = fireEvent.keyDown(window, { key: 'Backspace' });
+
+    expect(handled).toBe(false);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ImageViewer delete image flow', () => {

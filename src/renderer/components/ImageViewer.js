@@ -393,6 +393,8 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
             setToolbarVisible(true);
             break;
           }
+          e.preventDefault();
+          e.stopPropagation();
           onClose();
           break;
         case '+':

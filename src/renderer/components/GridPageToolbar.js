@@ -169,12 +169,13 @@ function SortControls({
   );
 }
 
-function TunePopover({
+export function TunePopover({
   userDensity,
   onDensityChange,
   onRandomAlbum,
   randomDisabled,
-  randomTooltip = '随机当前文件夹 (E)'
+  randomTooltip = '随机当前文件夹 (E)',
+  showRandom = true
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const densitySelectId = useId();
@@ -219,7 +220,7 @@ function TunePopover({
           }
         }}
       >
-        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+        <FormControl fullWidth size="small" sx={{ mb: showRandom ? 2 : 0 }}>
           <InputLabel id={densitySelectId}>密度</InputLabel>
           <Select
             labelId={densitySelectId}
@@ -234,17 +235,19 @@ function TunePopover({
             ))}
           </Select>
         </FormControl>
-        <Button
-          fullWidth
-          variant="outlined"
-          size="small"
-          startIcon={<CasinoIcon />}
-          onClick={handleRandomClick}
-          disabled={randomDisabled}
-          aria-label={randomTooltip}
-        >
-          随机浏览
-        </Button>
+        {showRandom ? (
+          <Button
+            fullWidth
+            variant="outlined"
+            size="small"
+            startIcon={<CasinoIcon />}
+            onClick={handleRandomClick}
+            disabled={randomDisabled}
+            aria-label={randomTooltip}
+          >
+            随机浏览
+          </Button>
+        ) : null}
       </Popover>
     </>
   );
@@ -395,7 +398,11 @@ function GridPageToolbar({
   navigation = null,
   favoriteMenuItems = [],
   openFavoritesItem,
-  onOpenSettings
+  onOpenSettings,
+  showRandom = true,
+  showFavorites = true,
+  showSettings = true,
+  extraActions = null
 }) {
   const sortSelectId = useId();
 
@@ -448,23 +455,29 @@ function GridPageToolbar({
         onRandomAlbum={onRandomAlbum}
         randomDisabled={randomDisabled}
         randomTooltip={randomTooltip}
+        showRandom={showRandom}
       />
       <AlbumNavigation navigation={navigation} />
-      <FavoritesMenu
-        favoriteMenuItems={favoriteMenuItems}
-        openFavoritesItem={openFavoritesItem}
-      />
-      <Tooltip title="设置">
-        <IconButton
-          color="inherit"
-          onClick={onOpenSettings}
-          size="small"
-          sx={{ mx: 0.5 }}
-          aria-label="设置"
-        >
-          <SettingsIcon />
-        </IconButton>
-      </Tooltip>
+      {showFavorites ? (
+        <FavoritesMenu
+          favoriteMenuItems={favoriteMenuItems}
+          openFavoritesItem={openFavoritesItem}
+        />
+      ) : null}
+      {showSettings ? (
+        <Tooltip title="设置">
+          <IconButton
+            color="inherit"
+            onClick={onOpenSettings}
+            size="small"
+            sx={{ mx: 0.5 }}
+            aria-label="设置"
+          >
+            <SettingsIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+      {extraActions}
     </Box>
   );
 }
