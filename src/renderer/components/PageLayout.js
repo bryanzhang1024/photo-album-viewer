@@ -31,6 +31,10 @@ function PageLayout({ loading, error, headerContent, subHeaderContent = null, ch
           <Container maxWidth="md">
             <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
           </Container>
+        ) : loading ? (
+          <Box sx={{ minHeight: 240, display: 'grid', placeItems: 'center' }}>
+            <CircularProgress />
+          </Box>
         ) : (
           children
         )}

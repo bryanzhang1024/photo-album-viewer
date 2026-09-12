@@ -74,4 +74,34 @@ describe('preload IPC allowlist', () => {
     const { api } = loadPreload();
     expect(() => api.invoke('unknown-channel')).toThrow('Blocked IPC invoke channel');
   });
+
+  test.each([
+    'COS_GET_STATUS',
+    'COS_SELECT_ROOT',
+    'COS_REMOVE_ROOT',
+    'COS_REFRESH',
+    'COS_LIST_CHARACTERS',
+    'COS_LIST_LOOKS',
+    'COS_LIST_COSERS',
+    'COS_LIST_SETS',
+    'COS_GET_SET',
+    'COS_GET_SET_ALBUM_PATH',
+    'COS_GET_MEDIA_THUMBNAIL',
+    'COS_SHOW_SET_IN_FOLDER',
+    'COS_OPEN_IN_PICTUREVIEW'
+  ])('allows the %s Cos library channel in common and fallback mode', async (channelKey) => {
+    for (const useFallback of [false, true]) {
+      const { api } = loadPreload({ useFallback });
+      await expect(api.invoke(CHANNELS[channelKey], {})).resolves.toBe('ok');
+    }
+  });
+
+  test('allows Cos index progress listeners in common and fallback mode', () => {
+    for (const useFallback of [false, true]) {
+      const { api, electron } = loadPreload({ useFallback });
+      const listener = jest.fn();
+      expect(() => api.on(CHANNELS.COS_INDEX_PROGRESS, listener)).not.toThrow();
+      expect(electron.ipcRenderer.on).toHaveBeenCalledWith('cos-index-progress', listener);
+    }
+  });
 });

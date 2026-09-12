@@ -14,6 +14,7 @@ import {
   useTheme
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
+import CollectionsIcon from '@mui/icons-material/Collections';
 import AlbumCard from '../components/AlbumCard';
 import ImageCard from '../components/ImageCard';
 import ImageViewer from '../components/ImageViewer';
@@ -669,6 +670,15 @@ function HomePage({
           compact={isSmallScreen}
           sx={{ flexGrow: 1, minWidth: 0 }}
         />
+        <Button
+          size="small"
+          color="inherit"
+          startIcon={<CollectionsIcon />}
+          onClick={() => navigate('/cos')}
+          sx={{ whiteSpace: 'nowrap', mr: 0.5 }}
+        >
+          Cos 图库
+        </Button>
         <GridPageToolbar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}

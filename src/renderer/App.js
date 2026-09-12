@@ -6,6 +6,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import BrowserPage from './pages/BrowserPage';
 import TestPage from './pages/TestPage';
 import SettingsPage from './pages/SettingsPage';
+import CosLibraryPage from './pages/CosLibraryPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import CHANNELS from '../common/ipc-channels';
@@ -196,6 +197,7 @@ function App() {
               <Route path="/test" element={<TestPage colorMode={colorMode} />} />
               <Route path="/favorites" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
+              <Route path="/cos/*" element={<CosLibraryPage colorMode={colorMode} />} />
             </Routes>
           </ScrollPositionContext.Provider>
         </FavoritesProvider>

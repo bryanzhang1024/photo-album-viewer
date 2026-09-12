@@ -1,3 +1,4 @@
+const { resolveBrowserImage } = require('./services/ImagePreviewService');
 const { app, ipcMain, dialog, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -14,6 +15,8 @@ const { resetLegacyNavigationFiles } = require('./services/NavigationStateCutove
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
 const { createSourceRootService } = require('./services/SourceRootService');
+const { CosLibraryService } = require('./services/CosLibraryService');
+const { registerCosLibraryIpcHandlers } = require('./services/CosLibraryIpc');
 const {
   createNavigationTargetForSource,
   createVirtualComputerRootResponse,
@@ -59,6 +62,21 @@ const DEFAULT_PERFORMANCE_SETTINGS = {
 let performanceSettings = {...DEFAULT_PERFORMANCE_SETTINGS};
 ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
 
+const cosLibraryService = new CosLibraryService({
+  configPath: path.join(app.getPath('userData'), 'cos-library-roots-v1.json'),
+  cachePath: path.join(app.getPath('userData'), 'cos-library-catalog-v1.json')
+});
+registerCosLibraryIpcHandlers({
+  ipcMain,
+  service: cosLibraryService,
+  dialog,
+  shell,
+  thumbnailService: ThumbnailService,
+  registerApprovedRoot,
+  getMainWindow,
+  thumbnailResolution: () => performanceSettings.thumbnailResolution
+});
+
 const thumbnailProtocolStats = {
   requestCount: 0,
   hitCount: 0,
@@ -67,7 +85,7 @@ const thumbnailProtocolStats = {
 
 const THUMBNAIL_PROTOCOL_PREFIX = 'thumbnail-protocol://';
 const LOCAL_IMAGE_PROTOCOL_PREFIX = 'local-image-protocol://';
-const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tif', '.tiff']);
+const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.jfif', '.tif', '.tiff', '.heic', '.heif', '.avif']);
 const DELETE_IMAGE_EXTENSIONS = new Set(FileSystemService.SUPPORTED_FORMATS || ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
 const APPROVED_ROOTS_FILE = path.join(app.getPath('userData'), 'approved-roots-v3.json');
 const approvedRoots = new Set();
@@ -428,12 +446,13 @@ app.whenReady().then(async () => {
     }
 
     fs.promises.stat(normalizedPath)
-      .then((stats) => {
+      .then(async (stats) => {
         if (!stats.isFile()) {
           callback(-6); // FILE_NOT_FOUND
           return;
         }
-        callback({ path: normalizedPath });
+        const previewPath = await resolveBrowserImage(normalizedPath, path.join(app.getPath('userData'), 'thumbnail-cache', 'full-preview'));
+        callback({ path: previewPath });
       })
       .catch(() => {
         callback(-6); // FILE_NOT_FOUND

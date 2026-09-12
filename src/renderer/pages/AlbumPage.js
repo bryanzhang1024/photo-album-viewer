@@ -52,9 +52,14 @@ function AlbumPage({
   randomBrowseDisabled = false,
   sourceBoundary = null,
   sourceBreadcrumbs = null,
+  readOnly = false,
+  collectionSetId = null,
   urlMode = false,
   tabsHeaderContent = null,
-  tabScrollKey = null
+  tabScrollKey = null,
+  embeddedMode = false,
+  headerLeadingContent = null,
+  headerExtraActions = null
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -147,6 +152,7 @@ function AlbumPage({
     removeImage,
     queryKey
   } = useAlbumImages(decodedAlbumPath, {
+    collectionSetId,
     sortBy,
     sortDirection,
     searchQuery: normalizedSearchQuery
@@ -214,16 +220,20 @@ function AlbumPage({
       }
 
       if (cancelled) return;
-      await loadNeighboringAlbums();
+      if (!embeddedMode) {
+        await loadNeighboringAlbums();
 
-      if (cancelled) return;
-      await loadBreadcrumbs();
+        if (cancelled) return;
+        await loadBreadcrumbs();
 
-      if (cancelled) return;
-      await loadChildFolderCount(decodedAlbumPath);
+        if (cancelled) return;
+        await loadChildFolderCount(decodedAlbumPath);
 
-      if (cancelled) return;
-      await preloadParentDirectory();
+        if (cancelled) return;
+        await preloadParentDirectory();
+      } else {
+        setChildFolderCount(0);
+      }
 
       if (initialImagePath.current && located?.globalIndex >= 0) {
         const imageIndex = located.globalIndex - (located.offset || 0);
@@ -242,7 +252,7 @@ function AlbumPage({
     return () => {
       cancelled = true;
     };
-  }, [decodedAlbumPath, queryKey, loadImages, ensureImageLoaded, loadNeighboringAlbums, loadBreadcrumbs, loadChildFolderCount]);
+  }, [decodedAlbumPath, embeddedMode, queryKey, loadImages, ensureImageLoaded, loadNeighboringAlbums, loadBreadcrumbs, loadChildFolderCount]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -560,14 +570,22 @@ function AlbumPage({
   // 添加键盘事件监听
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (searchHasFocus) {
+      const activeElement = document.activeElement;
+      if (searchHasFocus || activeElement?.tagName === 'INPUT' ||
+          activeElement?.tagName === 'TEXTAREA' || activeElement?.isContentEditable) {
         return;
       }
 
       // 如果按下ESC或Backspace键且没有打开查看器
-      if ((event.key === 'Escape' || event.key === 'Backspace') && !viewerOpen) {
+      const isBackKey = event.key === 'Backspace' || (!embeddedMode && event.key === 'Escape');
+      if (isBackKey && !viewerOpen) {
+        event.preventDefault();
+        event.stopPropagation();
         handleBack();
+        return;
       }
+
+      if (embeddedMode) return;
 
       // 按下 e 键触发随机选择相簿
       if ((event.key === 'e' || event.key === 'E') && !event.ctrlKey && !event.altKey && !event.metaKey) {
@@ -635,6 +653,7 @@ function AlbumPage({
   }, [
     viewerOpen,
     neighboringAlbums,
+    embeddedMode,
     searchHasFocus,
     handleRandomAlbum,
     handleRefreshAlbum,
@@ -647,16 +666,18 @@ function AlbumPage({
 
   const renderHeader = () => (
     <>
-      <BreadcrumbNavigation
-        breadcrumbs={breadcrumbs.length > 0
-          ? breadcrumbs
-          : getBreadcrumbPaths(decodedAlbumPath, breadcrumbRootPath)}
-        currentPath={decodedAlbumPath}
-        onNavigate={handleBreadcrumbNavigate}
-        variant="minimal"
-        compact={isSmallScreen}
-        sx={{ flexGrow: 1, minWidth: 0 }}
-      />
+      {headerLeadingContent || (
+        <BreadcrumbNavigation
+          breadcrumbs={breadcrumbs.length > 0
+            ? breadcrumbs
+            : getBreadcrumbPaths(decodedAlbumPath, breadcrumbRootPath)}
+          currentPath={decodedAlbumPath}
+          onNavigate={handleBreadcrumbNavigate}
+          variant="minimal"
+          compact={isSmallScreen}
+          sx={{ flexGrow: 1, minWidth: 0 }}
+        />
+      )}
       <GridPageToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -678,10 +699,11 @@ function AlbumPage({
         }}
         onRandomAlbum={handleRandomAlbum}
         randomDisabled={randomDisabled}
+        showRandom={!embeddedMode}
         onRefresh={handleRefreshAlbum}
         refreshDisabled={!canRefreshAlbum}
         refreshAriaLabel="刷新当前相簿"
-        navigation={{
+        navigation={embeddedMode ? null : {
           prev: neighboringAlbums.prev,
           next: neighboringAlbums.next,
           currentIndex: neighboringAlbums.currentIndex,
@@ -703,6 +725,9 @@ function AlbumPage({
           onClick: handleNavigateToFavorites
         }}
         onOpenSettings={() => navigate('/settings')}
+        showFavorites={!embeddedMode}
+        showSettings={!embeddedMode}
+        extraActions={headerExtraActions}
       />
     </>
   );
@@ -808,6 +833,7 @@ function AlbumPage({
           onClose={handleCloseViewer}
           onIndexChange={setSelectedImageIndex}
           onImageDeleted={handleViewerImageDeleted}
+          readOnly={readOnly}
           hasMore={hasMore}
           onNearEnd={handleLoadMore}
         />

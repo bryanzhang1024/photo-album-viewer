@@ -254,6 +254,15 @@ describe('ImageViewer image info panel', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
+
+  test('consumes Backspace when closing the viewer', () => {
+    const props = renderViewer();
+
+    const handled = fireEvent.keyDown(window, { key: 'Backspace' });
+
+    expect(handled).toBe(false);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ImageViewer delete image flow', () => {
@@ -265,6 +274,18 @@ describe('ImageViewer delete image flow', () => {
     renderViewer();
 
     expect(screen.getByRole('button', { name: /删除图片/i })).toBeInTheDocument();
+  });
+
+  test('removes delete controls and ignores Delete in read-only mode', () => {
+    renderViewer({ readOnly: true });
+
+    expect(screen.queryByRole('button', { name: /删除图片/i })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.queryByRole('heading', { name: '删除图片' })).not.toBeInTheDocument();
+    expect(global.electronMock.ipcRenderer.invoke).not.toHaveBeenCalledWith(
+      CHANNELS.TRASH_IMAGE,
+      expect.any(String)
+    );
   });
 
   test('opens delete confirmation with the current image path from the Delete key', () => {
@@ -337,4 +358,11 @@ describe('ImageViewer delete image flow', () => {
     expect(props.onImageDeleted).not.toHaveBeenCalled();
     expect(props.onClose).not.toHaveBeenCalled();
   });
+});
+
+test('keeps a failed image visible as an explicit error with a source-location action', async () => {
+  renderViewer({ readOnly: true });
+  fireEvent.error(screen.getByAltText('IMG_0001.jpg'));
+  expect(await screen.findByText('此图片无法预览，原文件仍保留')).toBeInTheDocument();
+  expect(screen.getByRole('button', {name:'定位原文件'})).toBeInTheDocument();
 });

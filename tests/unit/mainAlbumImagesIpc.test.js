@@ -47,4 +47,11 @@ describe('legacy album image IPC contract', () => {
       { offset: 0, limit: 200 }
     );
   });
+
+  test('registers the Cos library IPC adapter in the main process', () => {
+    const { electron } = setupMainProcess();
+    expect(electron.ipcMain._handlers.has(CHANNELS.COS_GET_STATUS)).toBe(true);
+    expect(electron.ipcMain._handlers.has(CHANNELS.COS_LIST_SETS)).toBe(true);
+    expect(electron.ipcMain._handlers.has(CHANNELS.COS_OPEN_IN_PICTUREVIEW)).toBe(true);
+  });
 });

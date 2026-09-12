@@ -38,7 +38,22 @@ try {
     GET_WINDOWS_INFO: 'get-windows-info',
     SCAN_DIRECTORY_TREE: 'scan-directory-tree',
     SCAN_NAVIGATION_PROGRESS: 'scan-navigation-progress',
-    FAVORITES_UPDATED: 'favorites-updated'
+    FAVORITES_UPDATED: 'favorites-updated',
+    COS_GET_STATUS: 'cos-get-status',
+    COS_SELECT_ROOT: 'cos-select-root',
+    COS_REMOVE_ROOT: 'cos-remove-root',
+    COS_REFRESH: 'cos-refresh',
+    COS_LIST_CHARACTERS: 'cos-list-characters',
+    COS_LIST_LOOKS: 'cos-list-looks',
+    COS_LIST_COSERS: 'cos-list-cosers',
+    COS_LIST_SETS: 'cos-list-sets',
+    COS_GET_SET: 'cos-get-set',
+    COS_GET_SET_IMAGES: 'cos-get-set-images',
+    COS_GET_SET_ALBUM_PATH: 'cos-get-set-album-path',
+    COS_GET_MEDIA_THUMBNAIL: 'cos-get-media-thumbnail',
+    COS_SHOW_SET_IN_FOLDER: 'cos-show-set-in-folder',
+    COS_OPEN_IN_PICTUREVIEW: 'cos-open-in-pictureview',
+    COS_INDEX_PROGRESS: 'cos-index-progress'
   };
 }
 
@@ -67,12 +82,27 @@ const INVOKE_CHANNELS = new Set([
   CHANNELS.CREATE_NEW_WINDOW,
   CHANNELS.CREATE_NEW_INSTANCE,
   CHANNELS.GET_WINDOWS_INFO,
-  CHANNELS.SCAN_DIRECTORY_TREE
+  CHANNELS.SCAN_DIRECTORY_TREE,
+  CHANNELS.COS_GET_STATUS,
+  CHANNELS.COS_SELECT_ROOT,
+  CHANNELS.COS_REMOVE_ROOT,
+  CHANNELS.COS_REFRESH,
+  CHANNELS.COS_LIST_CHARACTERS,
+  CHANNELS.COS_LIST_LOOKS,
+  CHANNELS.COS_LIST_COSERS,
+  CHANNELS.COS_LIST_SETS,
+  CHANNELS.COS_GET_SET,
+  CHANNELS.COS_GET_SET_IMAGES,
+  CHANNELS.COS_GET_SET_ALBUM_PATH,
+  CHANNELS.COS_GET_MEDIA_THUMBNAIL,
+  CHANNELS.COS_SHOW_SET_IN_FOLDER,
+  CHANNELS.COS_OPEN_IN_PICTUREVIEW
 ]);
 
 const LISTEN_CHANNELS = new Set([
   CHANNELS.FAVORITES_UPDATED,
-  CHANNELS.SCAN_NAVIGATION_PROGRESS
+  CHANNELS.SCAN_NAVIGATION_PROGRESS,
+  CHANNELS.COS_INDEX_PROGRESS
 ]);
 
 function ensureInvokeChannel(channel) {

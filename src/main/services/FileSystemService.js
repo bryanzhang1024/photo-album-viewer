@@ -835,7 +835,7 @@ function normalizeAlbumPageOptions(options = {}) {
   };
 }
 
-async function getAlbumImagesPage(albumPath, options = {}) {
+async function getAlbumImagesPage(albumPath, options = {}, suppliedMetadata = null) {
   try {
     const {
       offset,
@@ -851,7 +851,7 @@ async function getAlbumImagesPage(albumPath, options = {}) {
       clearAlbumImageMetadataCache(albumPath);
     }
 
-    const metadata = await buildAlbumImageMetadata(albumPath);
+    const metadata = suppliedMetadata || await buildAlbumImageMetadata(albumPath);
     const filtered = filterAlbumImagesBySearch(metadata, searchQuery);
     const sorted = sortAlbumImages(filtered, sortBy, sortDirection);
     const totalCount = sorted.length;
