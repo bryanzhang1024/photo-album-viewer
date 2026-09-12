@@ -22,7 +22,9 @@ function registerCosLibraryIpcHandlers({
   thumbnailResolution = () => 600
 }) {
   const withService = (handler) => async (...args) => {
-    await service.initialize();
+    // initialize() returns a full status summary even when already ready.
+    // Repeating that work per cover blocks the main thread and delays image responses.
+    if (!service.initialized || service.initializing) await service.initialize();
     return handler(...args);
   };
   const progressSender = (event) => (payload) => {

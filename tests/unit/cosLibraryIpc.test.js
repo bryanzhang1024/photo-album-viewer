@@ -2,6 +2,7 @@
 
 const CHANNELS = require('../../src/common/ipc-channels');
 const { registerCosLibraryIpcHandlers } = require('../../src/main/services/CosLibraryIpc');
+const { CosLibraryService } = require('../../src/main/services/CosLibraryService');
 
 function createIpcMain() {
   const handlers = new Map();
@@ -12,6 +13,47 @@ function createIpcMain() {
 }
 
 describe('CosLibraryIpc', () => {
+  test('serves ready covers independently without rebuilding whole-library status for each image', async () => {
+    const ipcMain = createIpcMain();
+    const service = new CosLibraryService({ configPath: '/unused/config.json', cachePath: '/unused/cache.json' });
+    service.initialized = true;
+    service.catalog.mediaPaths.set('media:slow', '/library/slow.jpg');
+    service.catalog.mediaPaths.set('media:fast', '/library/fast.jpg');
+    const facets = jest.spyOn(service.catalog, 'getFacets');
+    let finishSlow;
+    const slow = new Promise(resolve => { finishSlow = resolve; });
+    const thumbnailService = {
+      generateThumbnail: jest.fn(imagePath => imagePath.endsWith('slow.jpg')
+        ? slow : Promise.resolve('thumbnail-protocol://fast.webp'))
+    };
+    registerCosLibraryIpcHandlers({ ipcMain, service, thumbnailService });
+    const handler = ipcMain.handlers.get(CHANNELS.COS_GET_MEDIA_THUMBNAIL);
+    const slowRequest = handler(null, 'media:slow');
+    const fastRequest = handler(null, 'media:fast');
+    await expect(fastRequest).resolves.toBe('thumbnail-protocol://fast.webp');
+    finishSlow('thumbnail-protocol://slow.webp');
+    await expect(slowRequest).resolves.toBe('thumbnail-protocol://slow.webp');
+    expect(facets).not.toHaveBeenCalled();
+  });
+
+  test('still waits for an in-progress initial refresh before resolving media', async () => {
+    const ipcMain = createIpcMain();
+    let finishInitialization;
+    const initializing = new Promise(resolve => { finishInitialization = resolve; });
+    const service = {
+      initialized: true,
+      initializing,
+      initialize: jest.fn(() => initializing),
+      resolveMediaPath: jest.fn(() => '/library/01.jpg')
+    };
+    const thumbnailService = { generateThumbnail: jest.fn().mockResolvedValue('thumbnail-protocol://cover.webp') };
+    registerCosLibraryIpcHandlers({ ipcMain, service, thumbnailService });
+    const request = ipcMain.handlers.get(CHANNELS.COS_GET_MEDIA_THUMBNAIL)(null, 'media:one');
+    expect(service.resolveMediaPath).not.toHaveBeenCalled();
+    finishInitialization();
+    await expect(request).resolves.toBe('thumbnail-protocol://cover.webp');
+  });
+
   test('registers read-only query handlers and resolves thumbnails by media id', async () => {
     const ipcMain = createIpcMain();
     const service = {
