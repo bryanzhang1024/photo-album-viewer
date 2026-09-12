@@ -43,7 +43,7 @@ const UNKNOWN_COSER_ID = 'coser:__unknown__';
 const SINGLETON_COSERS_ID = 'coser:__singletons__';
 
 const specialEntityNames = new Map([
-  [UNKNOWN_COSER_ID, '未知 Coser'],
+  [UNKNOWN_COSER_ID, '未署名'],
   [SINGLETON_COSERS_ID, '其他'],
   ['look:__mixed__', '混合造型'],
   ['look:__unspecified__', '未细分']
@@ -64,7 +64,7 @@ function readLocationView(location) {
 
   const params = new URLSearchParams(location.search);
   if (location.pathname === '/cos/characters') return { kind: 'characters', title: '角色' };
-  if (location.pathname === '/cos/cosers') return { kind: 'cosers', title: 'Coser' };
+  if (location.pathname === '/cos/cosers') return { kind: 'cosers', title: '署名' };
   if (location.pathname === '/cos/looks') {
     const id = params.get('character') || '';
     const character = { id, name: entityNameFromId(id, 'character') };
@@ -81,10 +81,10 @@ function readLocationView(location) {
     const look = lookId ? { id: lookId, name: entityNameFromId(lookId, 'look') } : null;
     const coser = coserId ? { id: coserId, name: entityNameFromId(coserId, 'coser') } : null;
     const title = coser
-      ? (coser.id === SINGLETON_COSERS_ID ? '其他 · 单套 Coser' : coser.name)
+      ? (coser.id === SINGLETON_COSERS_ID ? '其他 · 单项署名' : coser.name)
       : character
-        ? `${character.name} · ${look?.name || '全部套图'}`
-        : '全部套图';
+        ? `${character.name} · ${look?.name || '全部收藏'}`
+        : '全部收藏';
     return { kind: 'sets', title, character, look, coser, context };
   }
   if (location.pathname === '/cos/album') {
@@ -127,7 +127,7 @@ function fallbackParentView(view) {
     return { kind: 'landing', title: 'Cos 图库' };
   }
   if (view.kind === 'looks') return { kind: 'characters', title: '角色' };
-  if (view.kind === 'sets' && view.coser) return { kind: 'cosers', title: 'Coser' };
+  if (view.kind === 'sets' && view.coser) return { kind: 'cosers', title: '署名' };
   if (view.kind === 'sets' && view.character) {
     return { kind: 'looks', title: view.character.name, character: view.character };
   }
@@ -193,8 +193,8 @@ function MetadataChips({ values }) {
 
 function EntityCard({ item, onClick }) {
   const countLabel = item.coserCount
-    ? `${formatCount(item.coserCount)} 位 · ${formatCount(item.setCount)} 套`
-    : `${formatCount(item.setCount)} 套`;
+    ? `${formatCount(item.coserCount)} 个署名 · ${formatCount(item.setCount)} 项`
+    : `${formatCount(item.setCount)} 项`;
   return (
     <Paper
       component={ButtonBase}
@@ -214,16 +214,18 @@ function SetCard({ item, context, onClick }) {
   const metadata = context === 'character'
     ? item.cosers
     : context === 'coser'
-      ? [...item.characters, ...item.looks]
+      ? [...item.characters, ...item.looks, ...(item.themes || []), item.type]
       : context === 'coser-group'
         ? [...item.cosers, ...item.characters, ...item.looks]
         : [...item.cosers, ...item.characters];
   const tooltip = [
     item.displayName,
-    item.cosers?.length ? `Coser：${item.cosers.join('、')}` : '',
+    item.cosers?.length ? `署名：${item.cosers.join('、')}` : '',
     item.characters?.length ? `角色：${item.characters.join('、')}` : '',
     item.looks?.length ? `造型：${item.looks.join('、')}` : '',
-    item.works?.length ? `作品：${item.works.join('、')}` : ''
+    item.works?.length ? `作品：${item.works.join('、')}` : '',
+    item.themes?.length ? `主题：${item.themes.join('、')}` : '',
+    item.originalName ? `原名：${item.originalName}` : ''
   ].filter(Boolean).join('\n');
 
   return (
@@ -264,7 +266,7 @@ function SetCard({ item, context, onClick }) {
   );
 }
 
-function LandingCard({ icon, title, count, unit = '套', subtitle, onClick }) {
+function LandingCard({ icon, title, count, unit = '项', subtitle, onClick }) {
   return (
     <Paper component={ButtonBase} onClick={onClick} sx={{ p: 2.5, textAlign: 'left', justifyContent: 'flex-start', borderRadius: 2 }}>
       <Box sx={{ display: 'grid', gap: 0.75 }}>
@@ -293,6 +295,10 @@ function CosLibraryPage({ colorMode }) {
     () => new URLSearchParams(location.search).get('q') || '',
     [location.search]
   );
+  const filters = useMemo(() => {
+    const p = new URLSearchParams(location.search);
+    return { kind: p.get('kind') || '', type: p.get('type') || '', theme: p.get('theme') || '' };
+  }, [location.search]);
   const isAlbumRoute = location.pathname === '/cos/album';
   const scrollPositionKey = `${location.pathname}${location.search}`;
   const [status, setStatus] = useState(null);
@@ -377,12 +383,12 @@ function CosLibraryPage({ colorMode }) {
     navigate(locationForView(previousView), { state: { cosView: previousView } });
   }, [isAlbumRoute, location.search, location.state, navigate, saveScrollPosition, view]);
 
-  const updateQuery = useCallback((nextQuery) => {
-    navigate(locationForView(view, nextQuery), {
-      replace: true,
-      state: location.state ? { ...location.state, cosView: view } : { cosView: view }
-    });
-  }, [location.state, navigate, view]);
+  const updateFilter = useCallback((key, value) => {
+    const params = new URLSearchParams(location.search);
+    if (value) params.set(key, value); else params.delete(key);
+    navigate({ pathname: location.pathname, search: `?${params}` }, { replace: true, state: location.state });
+  }, [location, navigate]);
+  const updateQuery = (value) => updateFilter('q', value);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -462,13 +468,14 @@ function CosLibraryPage({ colorMode }) {
     if (view.kind === 'sets') {
       return [CHANNELS.COS_LIST_SETS, {
         ...common,
+        ...filters,
         characterId: view.character?.id,
         lookId: view.look?.id,
         coserId: view.coser?.id
       }];
     }
     return null;
-  }, [isAlbumRoute, query, view]);
+  }, [isAlbumRoute, query, view, filters]);
 
   useEffect(() => {
     const request = requestForView(0);
@@ -526,7 +533,7 @@ function CosLibraryPage({ colorMode }) {
       setLoading(true);
       const nextStatus = await ipcRenderer.invoke(CHANNELS.COS_REFRESH);
       setStatus(nextStatus);
-      if (nextStatus?.ok === false) setError('有图库根目录离线，已保留现有索引；磁盘恢复后再刷新。');
+      if (nextStatus?.ok === false) setError('在线图库已更新；离线或读取失败的图库保留上次索引。');
     } catch (reason) {
       setError(reason?.message || '刷新索引失败');
     } finally {
@@ -589,13 +596,6 @@ function CosLibraryPage({ colorMode }) {
       return undefined;
     }
 
-    const stateAlbumPath = location.state?.cosAlbumPath;
-    const stateSetItem = location.state?.cosAlbum;
-    if (stateAlbumPath) {
-      setAlbum({ set: stateSetItem || { id: setId, displayName: setId }, albumPath: stateAlbumPath });
-      return undefined;
-    }
-
     let active = true;
     setLoading(true);
     Promise.all([
@@ -623,7 +623,7 @@ function CosLibraryPage({ colorMode }) {
   const summary = status?.summary || {};
   const allSetsCard = view.kind === 'looks' && !query ? {
     id: '__all__',
-    name: '全部套图',
+    name: '全部收藏',
     setCount: view.character.setCount || 0,
     coverMediaId: view.character.coverMediaId
   } : null;
@@ -634,6 +634,7 @@ function CosLibraryPage({ colorMode }) {
         colorMode={colorMode}
         albumPath={album.albumPath}
         readOnly={true}
+        collectionSetId={album.set.id}
         urlMode={true}
         onGoBack={goBack}
         embeddedMode={true}
@@ -682,7 +683,7 @@ function CosLibraryPage({ colorMode }) {
         <Box>
           <Typography variant="h4" fontWeight={750}>Cos 图库</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {formatCount(summary.setCount)} 套 · {formatCount(summary.imageCount)} 张图片
+            {formatCount(summary.setCount)} 项 · {formatCount(summary.imageCount)} 张图片
           </Typography>
         </Box>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' }, gap: 2 }}>
@@ -696,18 +697,18 @@ function CosLibraryPage({ colorMode }) {
           />
           <LandingCard
             icon={<PersonSearchIcon fontSize="large" />}
-            title="按 Coser"
+            title="按署名"
             count={summary.coserCount}
-            unit="位 Coser"
-            subtitle="Coser → ta 的全部作品"
-            onClick={() => pushView({ kind: 'cosers', title: 'Coser' })}
+            unit="个署名"
+            subtitle="人物、组织与发行来源"
+            onClick={() => pushView({ kind: 'cosers', title: '署名' })}
           />
           <LandingCard
             icon={<CollectionsIcon fontSize="large" />}
-            title="全部套图"
+            title="全部收藏"
             count={summary.setCount}
-            subtitle="跨名称、Coser、角色、造型与作品搜索"
-            onClick={() => pushView({ kind: 'sets', title: '全部套图', context: 'all' })}
+            subtitle="名称、原名、署名、角色与主题搜索"
+            onClick={() => pushView({ kind: 'sets', title: '全部收藏', context: 'all' })}
           />
         </Box>
         <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -753,7 +754,7 @@ function CosLibraryPage({ colorMode }) {
             >
               {row.map((item) => {
                 if (item.id === '__all__') {
-                  return <EntityCard key={item.id} item={item} onClick={() => pushView({ kind: 'sets', title: `${view.character.name} · 全部套图`, character: view.character, context: 'character' })} />;
+                  return <EntityCard key={item.id} item={item} onClick={() => pushView({ kind: 'sets', title: `${view.character.name} · 全部收藏`, character: view.character, context: 'character' })} />;
                 }
                 if (view.kind === 'sets') {
                   return <SetCard key={item.id} item={item} context={view.context} onClick={() => openSet(item)} />;
@@ -768,7 +769,7 @@ function CosLibraryPage({ colorMode }) {
                         const isSingletonGroup = Boolean(item.coserCount);
                         pushView({
                           kind: 'sets',
-                          title: isSingletonGroup ? '其他 · 单套 Coser' : item.name,
+                          title: isSingletonGroup ? '其他 · 单项署名' : item.name,
                           coser: item,
                           context: isSingletonGroup ? 'coser-group' : 'coser'
                         });
@@ -794,6 +795,23 @@ function CosLibraryPage({ colorMode }) {
         </IconButton>
       </Tooltip>
       <Typography fontWeight={700} sx={{ ml: 1, whiteSpace: 'nowrap' }}>{view.title}</Typography>
+      {view.kind === 'sets' ? (
+        <Box sx={{ display: 'flex', gap: 1, ml: 2, flexWrap: 'wrap' }}>
+          {[
+            ['kind', '收藏类别', [['sets', '套图与写真'], ['collections', '散图与合集']]],
+            ['type', '类型', (status?.facets?.types || []).map(v => [v,v])],
+            ['theme', '主题', (status?.facets?.themes || []).map(v => [v,v])]
+          ].map(([key,label,values]) => (
+            <TextField key={key} select label={label} size="small" value={filters[key]}
+              SelectProps={{ native: true }} InputLabelProps={{ shrink: true }}
+              inputProps={{ 'aria-label': label }} sx={{ minWidth: 115, maxWidth: 200 }}
+              onChange={event => updateFilter(key, event.target.value)}>
+              <option value="">全部</option>
+              {values.map(([value,text]) => <option key={value} value={value}>{text}</option>)}
+            </TextField>
+          ))}
+        </Box>
+      ) : null}
       <Box sx={{ flexGrow: 1 }} />
       {view.kind !== 'landing' ? (
         <TextField

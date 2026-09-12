@@ -46,11 +46,11 @@ describe('CosLibraryService', () => {
     expect(added.roots[0]).toMatchObject({ label: 'library', status: 'online' });
     expect(added.roots[0]).not.toHaveProperty('path');
     expect(service.listCharacters().items[0]).toMatchObject({ name: '初音未来', setCount: 1 });
-    expect(service.resolveSetAlbumPath('set-one')).toBe(path.join(rootPath, 'set-one'));
+    expect(await service.resolveSetAlbumPath('set-one')).toBe(path.join(rootPath, 'set-one'));
 
     const cacheContents = fs.readFileSync(cachePath, 'utf8');
     expect(cacheContents).not.toContain(rootPath);
-    expect(cacheContents.startsWith('{"version":1')).toBe(true);
+    expect(cacheContents.startsWith('{"version":2')).toBe(true);
 
     fs.renameSync(rootPath, `${rootPath}-offline`);
     const restored = new CosLibraryService({ configPath, cachePath, now: () => 5678 });
@@ -63,7 +63,7 @@ describe('CosLibraryService', () => {
     });
     expect(restored.listSets({ characterId: 'character:初音未来' }).total).toBe(1);
     expect(restored.getSet('set-one')).toMatchObject({ status: 'offline' });
-    expect(restored.resolveSetAlbumPath('set-one')).toBeNull();
+    expect(await restored.resolveSetAlbumPath('set-one')).toBeNull();
     await expect(restored.refresh()).resolves.toMatchObject({ ok: false, code: 'OFFLINE_ROOTS' });
   });
 

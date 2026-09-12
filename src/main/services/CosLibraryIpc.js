@@ -71,6 +71,7 @@ function registerCosLibraryIpcHandlers({
   ipcMain.handle(CHANNELS.COS_LIST_SETS, withService(async (_event, options) => (
     service.listSets(options)
   )));
+  ipcMain.handle(CHANNELS.COS_GET_SET_IMAGES, withService(async (_event, setId, options) => service.getSetImagesPage(setId, options)));
   ipcMain.handle(CHANNELS.COS_GET_SET, withService(async (_event, setId) => service.getSet(setId)));
   ipcMain.handle(CHANNELS.COS_GET_SET_ALBUM_PATH, withService(async (_event, setId) => (
     service.resolveSetAlbumPath(setId)
@@ -84,13 +85,14 @@ function registerCosLibraryIpcHandlers({
   }));
 
   ipcMain.handle(CHANNELS.COS_SHOW_SET_IN_FOLDER, withService(async (_event, setId) => {
-    const albumPath = service.resolveSetAlbumPath(setId);
+    const albumPath = await service.resolveSetAlbumPath(setId);
     if (!albumPath) return { success: false, error: '套图所在磁盘当前不可用' };
     shell.showItemInFolder(albumPath);
     return { success: true };
   }));
 
   ipcMain.handle(CHANNELS.COS_OPEN_IN_PICTUREVIEW, withService(async (_event, setId) => {
+    await service.resolveSetAlbumPath?.(setId);
     const firstMedia = service.listSetMedia(setId, { offset: 0, limit: 1 }).items[0];
     const imagePath = firstMedia ? service.resolveMediaPath(firstMedia.id) : null;
     if (!imagePath) return { success: false, error: '套图没有可打开的在线图片' };

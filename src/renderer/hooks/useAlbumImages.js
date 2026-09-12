@@ -36,6 +36,7 @@ export const useAlbumImages = (albumPath, options = {}) => {
     sortBy = 'name',
     sortDirection = 'asc',
     searchQuery = '',
+    collectionSetId = null,
     pageSize = DEFAULT_ALBUM_PAGE_SIZE
   } = options;
 
@@ -61,8 +62,8 @@ export const useAlbumImages = (albumPath, options = {}) => {
 
   const fetchPage = useCallback(async (offset, locatePath = null, { forceRefresh = false } = {}) => {
     const response = await ipcRenderer.invoke(
-      CHANNELS.GET_ALBUM_IMAGES,
-      albumPath,
+      collectionSetId ? CHANNELS.COS_GET_SET_IMAGES : CHANNELS.GET_ALBUM_IMAGES,
+      collectionSetId || albumPath,
       buildQueryOptions({
         offset,
         limit: pageSize,
@@ -79,7 +80,7 @@ export const useAlbumImages = (albumPath, options = {}) => {
     }
 
     return response;
-  }, [albumPath, pageSize, sortBy, sortDirection, searchQuery]);
+  }, [albumPath, collectionSetId, pageSize, sortBy, sortDirection, searchQuery]);
 
   const applyPageResponse = useCallback((response, append) => {
     const pageImages = Array.isArray(response.images) ? response.images : [];

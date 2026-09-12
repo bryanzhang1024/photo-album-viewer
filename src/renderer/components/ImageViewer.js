@@ -104,6 +104,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [manualRotation, setManualRotation] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [failedPaths, setFailedPaths] = useState(() => new Set());
   const [prevImageDimensions, setPrevImageDimensions] = useState({ width: 0, height: 0 });
   const [prevRotation, setPrevRotation] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -1213,8 +1214,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
               ref={visibleIndex === 0 ? imgRef : null}
               src={getSafeImageUrl(image.path) || ''}
               alt={image.name}
-              onLoad={(event) => handleRenderedImageLoad(index, event)}
+              onLoad={(event) => {
+                setFailedPaths(previous => { const next = new Set(previous); next.delete(image.path); return next; });
+                handleRenderedImageLoad(index, event);
+              }}
               onError={() => {
+                setFailedPaths(previous => new Set([...previous, image.path]));
                 console.error('图片加载失败:', image.path);
                 if (isCurrentVisibleImage) {
                   setImageLoaded(true);
@@ -1230,6 +1235,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
           );
         })}
         
+        {currentImage && failedPaths.has(currentImage.path) ? (
+          <Box sx={{ position: 'absolute', textAlign: 'center', bgcolor: 'background.paper', p: 3, borderRadius: 2 }}>
+            <Typography>此图片无法预览，原文件仍保留</Typography>
+            <Button onClick={handleShowInFolder}>定位原文件</Button>
+          </Box>
+        ) : null}
         {(!imageLoaded || isTransitioning) && currentImage && (
           <Box sx={{
             display: 'flex',

@@ -53,6 +53,7 @@ function AlbumPage({
   sourceBoundary = null,
   sourceBreadcrumbs = null,
   readOnly = false,
+  collectionSetId = null,
   urlMode = false,
   tabsHeaderContent = null,
   tabScrollKey = null,
@@ -151,6 +152,7 @@ function AlbumPage({
     removeImage,
     queryKey
   } = useAlbumImages(decodedAlbumPath, {
+    collectionSetId,
     sortBy,
     sortDirection,
     searchQuery: normalizedSearchQuery

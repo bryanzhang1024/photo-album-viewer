@@ -359,3 +359,10 @@ describe('ImageViewer delete image flow', () => {
     expect(props.onClose).not.toHaveBeenCalled();
   });
 });
+
+test('keeps a failed image visible as an explicit error with a source-location action', async () => {
+  renderViewer({ readOnly: true });
+  fireEvent.error(screen.getByAltText('IMG_0001.jpg'));
+  expect(await screen.findByText('此图片无法预览，原文件仍保留')).toBeInTheDocument();
+  expect(screen.getByRole('button', {name:'定位原文件'})).toBeInTheDocument();
+});

@@ -135,7 +135,7 @@ describe('CosCatalogService', () => {
 
     const cosers = service.listCosers().items;
     expect(cosers.map(({ id, name, setCount }) => [id, name, setCount])).toEqual([
-      [UNKNOWN_COSER_ID, '未知 Coser', 1],
+      [UNKNOWN_COSER_ID, '未署名', 1],
       ['coser:Alice', 'Alice', 2],
       ['coser:Bob', 'Bob', 2]
     ]);
@@ -244,11 +244,10 @@ describe('CosCatalogService', () => {
     const snapshot = service.exportSnapshot();
     expect(JSON.stringify(snapshot)).not.toContain(rootA);
     expect(JSON.stringify(snapshot)).not.toContain(rootB);
-    expect(snapshot.version).toBe(2);
+    expect(snapshot.version).toBe(3);
     expect(snapshot.sets.find((item) => item.id === 'set-single').media).toMatchObject({
       rootId: 'root-a',
-      directory: 'single',
-      names: ['2.jpg', '10.jpg']
+      paths: ['single/2.jpg', 'single/10.jpg']
     });
 
     const restored = new CosCatalogService();

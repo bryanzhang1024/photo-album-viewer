@@ -16,12 +16,16 @@ jest.mock('../../../src/renderer/pages/AlbumPage', () => ({
   embeddedMode,
   headerLeadingContent,
   headerExtraActions,
-  readOnly
+  readOnly,
+  collectionSetId,
+  albumPath
 }) => (
   <div
     data-testid="cos-album-page"
     data-embedded-mode={String(embeddedMode)}
     data-read-only={String(readOnly)}
+    data-set-id={collectionSetId}
+    data-album-path={albumPath}
   >
     {headerLeadingContent}
     {headerExtraActions}
@@ -63,6 +67,7 @@ function readyStatus() {
     },
     cached: true,
     lastIndexedAt: 1234,
+    facets: { types: ['原创写真'], themes: ['公共浴室'] },
     errors: []
   };
 }
@@ -127,9 +132,9 @@ describe('CosLibraryPage', () => {
   test('navigates character to look to a compact set card and opens the existing album view', async () => {
     renderCosPage();
 
-    expect(await screen.findByText('8,891 套')).toBeInTheDocument();
+    expect(await screen.findByText('8,891 项')).toBeInTheDocument();
     expect(screen.getByText('1,287 个角色')).toBeInTheDocument();
-    expect(screen.getByText('587 位 Coser')).toBeInTheDocument();
+    expect(screen.getByText('587 个署名')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /按角色/ }));
     fireEvent.click(await screen.findByRole('button', { name: /初音未来/ }));
     fireEvent.click(await screen.findByRole('button', { name: /兔子洞/ }));
@@ -176,9 +181,9 @@ describe('CosLibraryPage', () => {
   test('shows one Other card for one-set cosers and opens their deduplicated set grid', async () => {
     renderCosPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /按 Coser/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /按署名/ }));
     const otherCard = await screen.findByRole('button', { name: /其他/ });
-    expect(otherCard).toHaveTextContent('292 位 · 279 套');
+    expect(otherCard).toHaveTextContent('292 个署名 · 279 项');
     fireEvent.click(otherCard);
 
     const setCard = await screen.findByRole('button', { name: /兔子洞写真套图/ });
@@ -192,10 +197,10 @@ describe('CosLibraryPage', () => {
   test('keeps a one-set coser directly findable from the Coser search box', async () => {
     renderCosPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /按 Coser/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /按署名/ }));
     fireEvent.change(await screen.findByPlaceholderText('搜索当前分类'), { target: { value: 'Aki' } });
 
-    expect(await screen.findByRole('button', { name: /Aki/ })).toHaveTextContent('1 套');
+    expect(await screen.findByRole('button', { name: /Aki/ })).toHaveTextContent('1 项');
     expect(window.electronAPI.invoke).toHaveBeenCalledWith(
       CHANNELS.COS_LIST_COSERS,
       expect.objectContaining({ query: 'Aki', groupSingletons: true })
@@ -220,7 +225,7 @@ describe('CosLibraryPage', () => {
     renderCosPage(`/cos/album?set=set-one&from=${from}`);
 
     const albumPage = await screen.findByTestId('cos-album-page');
-    expect(albumPage).toHaveTextContent('Cos 图库 / Coser');
+    expect(albumPage).toHaveTextContent('Cos 图库 / 署名');
     expect(albumPage).toHaveTextContent('兔子洞写真套图');
 
     fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
@@ -231,11 +236,11 @@ describe('CosLibraryPage', () => {
   test('uses Backspace for semantic parent navigation outside editable fields', async () => {
     renderCosPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /按 Coser/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /按署名/ }));
     expect(screen.getByTestId('location')).toHaveTextContent('/cos/cosers');
 
     fireEvent.keyDown(window, { key: 'Backspace' });
-    expect(await screen.findByRole('button', { name: /按 Coser/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /按署名/ })).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/cos');
   });
 
@@ -278,13 +283,13 @@ describe('CosLibraryPage', () => {
     renderCosPage('/cos/looks?character=character%3A初音未来&q=没有');
 
     expect(await screen.findByText('没有匹配的项目')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /全部套图/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /全部收藏/ })).not.toBeInTheDocument();
   });
 
   test('resynchronizes density after browser Back returns from an album', async () => {
     renderCosPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /全部套图/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /全部收藏/ }));
     fireEvent.click(await screen.findByRole('button', { name: /兔子洞写真套图/ }));
     await screen.findByTestId('cos-album-page');
     fireEvent.click(screen.getByRole('button', { name: '模拟相簿密度' }));
@@ -294,4 +299,23 @@ describe('CosLibraryPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '视图选项' }));
     expect(screen.getByLabelText('密度')).toHaveTextContent('紧凑');
   });
+  test('restores an old album state by stable identity and uses the collection media provider', async () => {
+    renderCosPage({ pathname: '/cos/album', search: '?set=set-one', state: {
+      cosAlbumPath: '/old/deleted', cosAlbum: { id: 'set-one', displayName: '旧名' }
+    }});
+    const album = await screen.findByTestId('cos-album-page');
+    expect(album).toHaveAttribute('data-set-id', 'set-one');
+    expect(album).toHaveAttribute('data-album-path', '/library/set-one');
+    expect(album).toHaveTextContent('兔子洞写真套图');
+  });
+  test('filters collection category, type and theme while retaining the filters in the URL', async () => {
+    renderCosPage('/cos/sets?context=all');
+    fireEvent.change(await screen.findByLabelText('收藏类别'), { target: { value: 'collections' } });
+    fireEvent.change(screen.getByLabelText('类型'), { target: { value: '原创写真' } });
+    fireEvent.change(screen.getByLabelText('主题'), { target: { value: '公共浴室' } });
+    await waitFor(() => expect(window.electronAPI.invoke).toHaveBeenCalledWith(CHANNELS.COS_LIST_SETS,
+      expect.objectContaining({kind: 'collections', type: '原创写真', theme: '公共浴室'})));
+    expect(screen.getByTestId('location')).toHaveTextContent('kind=collections');
+  });
+
 });

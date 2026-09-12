@@ -83,7 +83,7 @@ class CosCatalogService {
   constructor(options = {}) {
     this.fs = options.fs || fs.promises;
     this.supportedFormats = new Set(
-      (options.supportedFormats || SUPPORTED_FORMATS).map((extension) => extension.toLowerCase())
+      (options.supportedFormats || [...SUPPORTED_FORMATS, '.jfif', '.tif', '.tiff', '.heic', '.heif', '.avif']).map((extension) => extension.toLowerCase())
     );
     this.reset();
   }
@@ -107,7 +107,7 @@ class CosCatalogService {
       try {
         const entries = await this.fs.readdir(root.path, { withFileTypes: true });
         entries
-          .filter((entry) => entry.isDirectory())
+          .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
           .sort((left, right) => naturalCompare(left.name, right.name))
           .forEach((entry) => tasks.push({ root, rootIndex, folderName: entry.name }));
       } catch (error) {
@@ -151,6 +151,7 @@ class CosCatalogService {
       return {
         id,
         path: path.resolve(root.path),
+        kind: root.kind || (path.basename(root.path).startsWith('400') ? 'collections' : 'sets'),
         label: typeof root.label === 'string' && root.label.trim() ? root.label.trim() : path.basename(root.path)
       };
     });
@@ -171,22 +172,30 @@ class CosCatalogService {
       }
 
       const relativePath = folderName;
-      const media = entries
-        .filter((entry) => entry.isFile() && this.supportedFormats.has(path.extname(entry.name).toLowerCase()))
-        .map((entry) => ({
-          id: makeMediaId(root.id, relativePath, entry.name),
-          name: entry.name,
-          rootId: root.id,
-          relativePath: path.join(relativePath, entry.name),
-          absolutePath: path.join(setPath, entry.name)
-        }))
-        .sort((left, right) => naturalCompare(left.name, right.name));
+      const media = [];
+      const visit = async (directory, children) => {
+        for (const entry of children) {
+          if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+          const absolutePath = path.join(directory, entry.name);
+          if (entry.isDirectory()) {
+            await visit(absolutePath, await this.fs.readdir(absolutePath, { withFileTypes: true }));
+          } else if (entry.isFile() && this.supportedFormats.has(path.extname(entry.name).toLowerCase())) {
+            const name = path.relative(setPath, absolutePath);
+            media.push({ id: makeMediaId(root.id, relativePath, name), name, rootId: root.id,
+              relativePath: path.join(relativePath, name), absolutePath });
+          }
+        }
+      };
+      await visit(setPath, entries);
+      media.sort((left, right) => naturalCompare(left.name, right.name));
 
       return {
         id: metadata.id.trim(),
         displayName: typeof metadata.display_name === 'string' && metadata.display_name.trim()
           ? metadata.display_name.trim()
           : folderName,
+        originalName: typeof metadata.original_name === 'string' ? metadata.original_name : '',
+        kinds: [root.kind],
         cosers: uniqueStrings(metadata.cosers),
         characters: uniqueStrings(metadata.characters),
         looks: uniqueStrings(metadata.looks),
@@ -218,7 +227,9 @@ class CosCatalogService {
     const existing = this.sets.get(record.id);
     if (existing) {
       existing.locations.push(...record.locations);
-      if (existing.media.length === 0 && record.media.length > 0) {
+      existing.kinds = uniqueStrings([...existing.kinds, ...record.kinds]);
+      if ((existing.media.length === 0 || existing.status === 'offline') && record.media.length > 0 && record.status === 'online') {
+        existing.status = record.status;
         existing.media = record.media;
         existing.imageCount = record.imageCount;
         existing.coverMediaId = record.coverMediaId;
@@ -229,6 +240,7 @@ class CosCatalogService {
 
     record.searchText = [
       record.displayName,
+      record.originalName,
       ...record.cosers,
       ...record.characters,
       ...record.looks,
@@ -276,24 +288,18 @@ class CosCatalogService {
 
   exportSnapshot() {
     return {
-      version: 2,
-      sets: [...this.sets.values()].map((record) => {
-        const firstMedia = record.media[0];
-        return {
-          ...this.toSetDto(record),
-          media: firstMedia ? {
-            rootId: firstMedia.rootId,
-            directory: path.dirname(firstMedia.relativePath),
-            names: record.media.map((item) => item.name)
-          } : null
-        };
-      }),
+      version: 3,
+      sets: [...this.sets.values()].map((record) => ({
+        ...this.toSetDto(record),
+        media: record.media[0] ? { rootId: record.media[0].rootId,
+          paths: record.media.map((item) => item.relativePath) } : null
+      })),
       errors: this.getErrors()
     };
   }
 
   importSnapshot(snapshot, roots = []) {
-    if (!snapshot || ![1, 2].includes(snapshot.version) || !Array.isArray(snapshot.sets)) {
+    if (!snapshot || ![1, 2, 3].includes(snapshot.version) || !Array.isArray(snapshot.sets)) {
       throw new TypeError('Unsupported Cos catalog snapshot');
     }
 
@@ -313,6 +319,13 @@ class CosCatalogService {
         : [];
       const cachedMedia = Array.isArray(cached.media)
         ? cached.media
+        : cached.media && Array.isArray(cached.media.paths)
+          ? cached.media.paths.map((relativePath) => {
+            const setPath = locations.find((l) => l.rootId === cached.media.rootId)?.relativePath || '';
+            const name = path.relative(setPath, relativePath);
+            return { id: makeMediaId(cached.media.rootId, setPath, name), name,
+              rootId: cached.media.rootId, relativePath };
+          })
         : cached.media && Array.isArray(cached.media.names)
           ? cached.media.names.map((name) => ({
             id: makeMediaId(cached.media.rootId, cached.media.directory, name),
@@ -331,6 +344,11 @@ class CosCatalogService {
       const record = {
         id: cached.id,
         displayName: cached.displayName,
+        originalName: typeof cached.originalName === 'string' ? cached.originalName : '',
+        kinds: uniqueStrings(cached.kinds).length ? uniqueStrings(cached.kinds) : locations.map(l => {
+          const root = rootMap.get(l.rootId);
+          return root?.kind || (path.basename(root?.path || '').startsWith('400') ? 'collections' : 'sets');
+        }),
         cosers: uniqueStrings(cached.cosers),
         characters: uniqueStrings(cached.characters),
         looks: uniqueStrings(cached.looks),
@@ -381,7 +399,7 @@ class CosCatalogService {
         !shouldGroupSingletons || key === UNKNOWN_COSER_ID || setIds.size > 1
       ))
       .map(([key, setIds]) => key === UNKNOWN_COSER_ID
-        ? this.makeEntityCard('coser', '未知 Coser', setIds, UNKNOWN_COSER_ID)
+        ? this.makeEntityCard('coser', '未署名', setIds, UNKNOWN_COSER_ID)
         : this.makeEntityCard('coser', key, setIds))
       .concat(singletonSetIds.size > 0 ? [{
         id: SINGLETON_COSERS_ID,
@@ -423,6 +441,9 @@ class CosCatalogService {
 
   listSets(options = {}) {
     let candidates = [...this.sets.values()];
+    if (options.kind) candidates = candidates.filter(r => r.kinds.includes(options.kind));
+    if (options.type) candidates = candidates.filter(r => r.type === options.type);
+    if (options.theme) candidates = candidates.filter(r => r.themes.includes(options.theme));
     const character = entityName(options.characterId, 'character');
     const isSingletonGroup = options.coserId === SINGLETON_COSERS_ID;
     const coser = options.coserId === UNKNOWN_COSER_ID
@@ -490,6 +511,8 @@ class CosCatalogService {
     return {
       id: record.id,
       displayName: record.displayName,
+      originalName: record.originalName,
+      kinds: [...record.kinds],
       cosers: [...record.cosers],
       characters: [...record.characters],
       looks: [...record.looks],
@@ -517,6 +540,19 @@ class CosCatalogService {
 
   resolveMediaPath(mediaId) {
     return this.mediaPaths.get(mediaId) || null;
+  }
+
+  getFacets() {
+    const records = [...this.sets.values()];
+    return { types: uniqueStrings(records.map(r => r.type)).sort(naturalCompare),
+      themes: uniqueStrings(records.flatMap(r => r.themes)).sort(naturalCompare) };
+  }
+
+  getSummary() {
+    return { setCount: this.sets.size, characterCount: this.characterSets.size,
+      coserCount: this.coserSets.size - (this.coserSets.has(UNKNOWN_COSER_ID) ? 1 : 0),
+      coserCategoryCount: this.coserSets.size, lookCount: this.countDistinctLooks(),
+      imageCount: [...this.sets.values()].reduce((n,r) => n + r.imageCount, 0), errorCount: this.errors.length };
   }
 
   getErrors() {

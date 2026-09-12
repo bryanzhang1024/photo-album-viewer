@@ -114,4 +114,14 @@ describe('CosLibraryIpc', () => {
       .resolves.toEqual({ success: true });
     expect(shell.showItemInFolder).toHaveBeenCalledWith('/library/set');
   });
+  test('serves the collection media page by ID rather than a renderer supplied directory', async () => {
+    const ipcMain = createIpcMain();
+    const service = { initialize: jest.fn(), getSetImagesPage: jest.fn().mockResolvedValue({success:true,totalCount:2}) };
+    registerCosLibraryIpcHandlers({ ipcMain, service });
+    const handler = ipcMain.handlers.get(CHANNELS.COS_GET_SET_IMAGES);
+    expect(typeof handler).toBe('function');
+    expect(await handler(null, 'set-one', {limit:1})).toMatchObject({totalCount:2});
+    expect(service.getSetImagesPage).toHaveBeenCalledWith('set-one',{limit:1});
+  });
+
 });
