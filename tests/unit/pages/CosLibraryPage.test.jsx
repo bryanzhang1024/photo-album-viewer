@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import CHANNELS from '../../../src/common/ipc-channels';
 import CosLibraryPage from '../../../src/renderer/pages/CosLibraryPage';
+import imageCache from '../../../src/renderer/utils/ImageCacheManager';
 
 jest.mock('react-virtuoso', () => ({
   Virtuoso: ({ data = [], itemContent, scrollerRef, style }) => (
@@ -73,8 +74,49 @@ function readyStatus() {
 }
 
 describe('CosLibraryPage', () => {
+  test('reuses loaded covers when returning to a grid', async () => {
+    const first = renderCosPage('/cos/sets?context=all');
+    fireEvent.load(await screen.findByAltText('兔子洞写真套图'));
+    first.unmount();
+    window.electronAPI.invoke.mockClear();
+    renderCosPage('/cos/sets?context=all');
+    expect(await screen.findByAltText('兔子洞写真套图')).toHaveAttribute('src', 'thumbnail-protocol://cover.webp');
+    expect(window.electronAPI.invoke).not.toHaveBeenCalledWith(CHANNELS.COS_GET_MEDIA_THUMBNAIL, 'media:one');
+  });
+
+  test('retries a failed cover once and then displays a failure state', async () => {
+    renderCosPage('/cos/sets?context=all');
+    fireEvent.error(await screen.findByAltText('兔子洞写真套图'));
+    await waitFor(() => {
+      expect(window.electronAPI.invoke.mock.calls.filter(([channel]) => channel === CHANNELS.COS_GET_MEDIA_THUMBNAIL)).toHaveLength(2);
+    });
+    fireEvent.error(await screen.findByAltText('兔子洞写真套图'));
+    expect(await screen.findByText('封面加载失败')).toBeInTheDocument();
+  });
+
+  test('finishes loading when the thumbnail service cannot provide a cover', async () => {
+    const invoke = window.electronAPI.invoke.getMockImplementation();
+    window.electronAPI.invoke.mockImplementation((channel, ...args) => (
+      channel === CHANNELS.COS_GET_MEDIA_THUMBNAIL ? Promise.resolve(null) : invoke(channel, ...args)
+    ));
+    renderCosPage('/cos/sets?context=all');
+    expect(await screen.findByRole('progressbar', { name: '加载封面' })).toBeInTheDocument();
+    expect(await screen.findByText('封面加载失败')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar', { name: '加载封面' })).not.toBeInTheDocument();
+    expect(window.electronAPI.invoke.mock.calls.filter(([channel]) => channel === CHANNELS.COS_GET_MEDIA_THUMBNAIL)).toHaveLength(2);
+  });
+
+  test('does not display a details popup when hovering a set card', async () => {
+    renderCosPage('/cos/sets?context=all');
+    const card = await screen.findByRole('button', { name: /兔子洞写真套图/ });
+    fireEvent.mouseOver(card);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     localStorage.clear();
+    imageCache.deleteEntry('thumbnail', 'media:one');
     window.electronAPI.invoke = jest.fn(async (channel, payload) => {
       switch (channel) {
         case CHANNELS.COS_GET_STATUS:

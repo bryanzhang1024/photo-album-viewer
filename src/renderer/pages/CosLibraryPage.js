@@ -36,6 +36,7 @@ import PageLayout from '../components/PageLayout';
 import { TunePopover } from '../components/GridPageToolbar';
 import { ScrollPositionContext } from '../App';
 import { DEFAULT_DENSITY, GRID_CONFIG, chunkIntoRows, computeGridColumns } from '../utils/virtualGrid';
+import imageCache from '../utils/ImageCacheManager';
 
 const ipcRenderer = window.electronAPI || null;
 const PAGE_SIZE = 200;
@@ -141,21 +142,42 @@ function isEditableTarget(target) {
 }
 
 function CoverImage({ mediaId, alt }) {
-  const [source, setSource] = useState(null);
+  const [source, setSource] = useState(() => imageCache.get('thumbnail', mediaId) || null);
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  const handleError = () => {
+    imageCache.deleteEntry('thumbnail', mediaId);
+    setSource(null);
+    if (attempt === 0) setAttempt(1);
+    else setFailed(true);
+  };
 
   useEffect(() => {
     let active = true;
-    setSource(null);
+    let timer;
+    const cached = imageCache.get('thumbnail', mediaId);
+    setSource(cached || null);
+    setFailed(false);
+    if (cached) return undefined;
     if (!mediaId || !ipcRenderer) return undefined;
-    ipcRenderer.invoke(CHANNELS.COS_GET_MEDIA_THUMBNAIL, mediaId)
-      .then((url) => {
-        if (active) setSource(url || null);
-      })
-      .catch(() => {
-        if (active) setSource(null);
-      });
-    return () => { active = false; };
-  }, [mediaId]);
+    const load = async () => {
+      try {
+        const url = await ipcRenderer.invoke(CHANNELS.COS_GET_MEDIA_THUMBNAIL, mediaId);
+        if (!active) return;
+        if (url) setSource(url);
+        else if (attempt === 0) setAttempt(1);
+        else setFailed(true);
+      } catch {
+        if (!active) return;
+        if (attempt === 0) setAttempt(1);
+        else setFailed(true);
+      }
+    };
+    if (attempt) timer = setTimeout(load, 300);
+    else load();
+    return () => { active = false; clearTimeout(timer); };
+  }, [mediaId, attempt]);
 
   return (
     <Box
@@ -169,7 +191,18 @@ function CoverImage({ mediaId, alt }) {
       }}
     >
       {source ? (
-        <Box component="img" src={source} alt={alt} loading="lazy" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <Box
+          component="img"
+          src={source}
+          alt={alt}
+          onLoad={() => imageCache.set('thumbnail', mediaId, source)}
+          onError={handleError}
+          sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : failed ? (
+        <Typography variant="caption" color="text.secondary">封面加载失败</Typography>
+      ) : mediaId ? (
+        <CircularProgress size={24} aria-label="加载封面" />
       ) : (
         <ImageIcon color="disabled" sx={{ fontSize: 42 }} />
       )}
@@ -201,7 +234,7 @@ function EntityCard({ item, onClick }) {
       onClick={onClick}
       sx={{ width: '100%', display: 'block', textAlign: 'left', overflow: 'hidden', borderRadius: 2 }}
     >
-      <CoverImage mediaId={item.coverMediaId} alt={item.name} />
+      <CoverImage key={item.coverMediaId} mediaId={item.coverMediaId} alt={item.name} />
       <Box sx={{ p: 1.25 }}>
         <Typography noWrap fontWeight={650}>{item.name}</Typography>
         <Typography variant="caption" color="text.secondary">{countLabel}</Typography>
@@ -218,51 +251,39 @@ function SetCard({ item, context, onClick }) {
       : context === 'coser-group'
         ? [...item.cosers, ...item.characters, ...item.looks]
         : [...item.cosers, ...item.characters];
-  const tooltip = [
-    item.displayName,
-    item.cosers?.length ? `署名：${item.cosers.join('、')}` : '',
-    item.characters?.length ? `角色：${item.characters.join('、')}` : '',
-    item.looks?.length ? `造型：${item.looks.join('、')}` : '',
-    item.works?.length ? `作品：${item.works.join('、')}` : '',
-    item.themes?.length ? `主题：${item.themes.join('、')}` : '',
-    item.originalName ? `原名：${item.originalName}` : ''
-  ].filter(Boolean).join('\n');
-
   return (
-    <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{tooltip}</span>} enterDelay={550}>
-      <Paper
-        component={ButtonBase}
-        onClick={onClick}
-        disabled={item.status === 'offline'}
-        sx={{
-          width: '100%',
-          display: 'block',
-          textAlign: 'left',
-          overflow: 'hidden',
-          borderRadius: 2,
-          opacity: item.status === 'offline' ? 0.62 : 1
-        }}
-      >
-        <CoverImage mediaId={item.coverMediaId} alt={item.displayName} />
-        <Box sx={{ p: 1.25, display: 'grid', gap: 0.75 }}>
-          <Typography
-            fontWeight={650}
-            sx={{
-              lineHeight: 1.35,
-              minHeight: '2.7em',
-              display: '-webkit-box',
-              WebkitBoxOrient: 'vertical',
-              WebkitLineClamp: 2,
-              overflow: 'hidden'
-            }}
-          >
-            {item.displayName}
-          </Typography>
-          <MetadataChips values={metadata || []} />
-          <Typography variant="caption" color="text.secondary">{formatCount(item.imageCount)} 张</Typography>
-        </Box>
-      </Paper>
-    </Tooltip>
+    <Paper
+      component={ButtonBase}
+      onClick={onClick}
+      disabled={item.status === 'offline'}
+      sx={{
+        width: '100%',
+        display: 'block',
+        textAlign: 'left',
+        overflow: 'hidden',
+        borderRadius: 2,
+        opacity: item.status === 'offline' ? 0.62 : 1
+      }}
+    >
+      <CoverImage key={item.coverMediaId} mediaId={item.coverMediaId} alt={item.displayName} />
+      <Box sx={{ p: 1.25, display: 'grid', gap: 0.75 }}>
+        <Typography
+          fontWeight={650}
+          sx={{
+            lineHeight: 1.35,
+            minHeight: '2.7em',
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+            overflow: 'hidden'
+          }}
+        >
+          {item.displayName}
+        </Typography>
+        <MetadataChips values={metadata || []} />
+        <Typography variant="caption" color="text.secondary">{formatCount(item.imageCount)} 张</Typography>
+      </Box>
+    </Paper>
   );
 }
 
