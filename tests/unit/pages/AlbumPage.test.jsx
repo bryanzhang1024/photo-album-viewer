@@ -497,6 +497,10 @@ describe('AlbumPage refresh button', () => {
     });
     fireEvent.click(await screen.findByText('1.jpg'));
     expect(screen.getByTestId('image-viewer')).toBeInTheDocument();
+    expect(require('../../../src/renderer/components/ImageViewer')).toHaveBeenCalledWith(
+      expect.objectContaining({ showWrapNotice: true }),
+      expect.anything()
+    );
 
     await act(async () => {
       ['e', 'E', 'r', 'R'].forEach((key) => fireEvent.keyDown(window, { key }));
