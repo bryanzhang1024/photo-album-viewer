@@ -89,7 +89,7 @@ function getResolutionText(dimensions) {
   return `${dimensions.width} x ${dimensions.height}`;
 }
 
-function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted, hasMore = false, onNearEnd, readOnly = false }) {
+function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDeleted, hasMore = false, onNearEnd, readOnly = false, showWrapNotice = false }) {
   // 使用收藏上下文和设置上下文
   const { isImageFavorited, toggleImageFavorite } = useFavorites();
   const { settings } = useSettings();
@@ -113,6 +113,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [dualPageEnabled, setDualPageEnabled] = useState(Boolean(settings.defaultDualPageViewer));
+  const [wrapNoticeOpen, setWrapNoticeOpen] = useState(false);
   const [viewportSize, setViewportSize] = useState(() => ({
     width: typeof window === 'undefined' ? 0 : window.innerWidth,
     height: typeof window === 'undefined' ? 0 : window.innerHeight
@@ -132,6 +133,14 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     () => images.map((image) => image.path).join('\0'),
     [images]
   );
+  useEffect(() => {
+    setWrapNoticeOpen(false);
+  }, [imagesScopeKey]);
+  useEffect(() => {
+    if (!wrapNoticeOpen) return undefined;
+    const timer = setTimeout(() => setWrapNoticeOpen(false), 3000);
+    return () => clearTimeout(timer);
+  }, [wrapNoticeOpen]);
   const { drawNext: drawRandomImageIndex } = useShuffleBag(
     imageIndices,
     imagesScopeKey,
@@ -630,6 +639,18 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
       return;
     }
 
+    const wrappedToFirst = direction === 'next'
+      && showWrapNotice
+      && !hasMore
+      && images.length > 1
+      && visibleImageIndices.includes(images.length - 1)
+      && newIndex === 0;
+    if (!wrappedToFirst) setWrapNoticeOpen(false);
+    const commitNavigation = () => {
+      onIndexChange(newIndex);
+      if (wrappedToFirst) setWrapNoticeOpen(true);
+    };
+
     // 切换图片前重置状态
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
@@ -638,7 +659,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     const targetCache = preloadCache.get(newIndex);
     if (targetCache && targetCache.loaded) {
       // 已预加载完成，立即切换
-      onIndexChange(newIndex);
+      commitNavigation();
     } else {
       // 未预加载完成，显示加载状态并等待
       setIsTransitioning(true);
@@ -660,7 +681,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
           });
 
           // 预加载完成后执行导航
-          onIndexChange(newIndex);
+          commitNavigation();
           setPendingNavigation(null);
         };
         img.onerror = () => {
@@ -671,12 +692,12 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
           });
 
           // 即使加载失败也切换，保持原有行为
-          onIndexChange(newIndex);
+          commitNavigation();
           setPendingNavigation(null);
         };
         const imageSrc = getSafeImageUrl(images[newIndex].path);
         if (!imageSrc) {
-          onIndexChange(newIndex);
+          commitNavigation();
           setPendingNavigation(null);
           return;
         }
@@ -703,6 +724,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
       return;
     }
 
+    setWrapNoticeOpen(false);
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
 
@@ -1186,6 +1208,28 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
           </Tooltip>
         </Toolbar>
       </AppBar>
+
+      <Fade in={wrapNoticeOpen} mountOnEnter unmountOnExit>
+        <Box
+          role="status"
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1301,
+            px: 2,
+            py: 1,
+            borderRadius: 1,
+            bgcolor: 'rgba(24, 24, 24, 0.88)',
+            color: '#fff',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          已到本套末尾，已回到首张
+        </Box>
+      </Fade>
       
       <Box sx={{ 
         height: '100%',

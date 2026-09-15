@@ -60,9 +60,11 @@ function renderViewer(overrides = {}) {
   return props;
 }
 
-function mockLoadedImages() {
+function mockLoadedImages(dimensions = null) {
   jest.spyOn(global, 'Image').mockImplementation(() => {
-    const image = {};
+    const image = dimensions
+      ? { naturalWidth: dimensions.width, naturalHeight: dimensions.height }
+      : {};
     Object.defineProperty(image, 'src', {
       set() {
         image.onload?.();
@@ -161,6 +163,87 @@ describe('ImageViewer owned shortcuts', () => {
     expect(image).toHaveStyle({ transform: 'translate(0px, 0px) rotate(0deg)' });
     expect(props.onIndexChange).not.toHaveBeenCalled();
     editable.remove();
+  });
+});
+
+describe('ImageViewer album wrap reminder', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockLoadedImages();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('shows a reminder after forward navigation wraps from the last image to the first', async () => {
+    const props = renderViewer({ currentIndex: 1, showWrapNotice: true });
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    await waitFor(() => expect(props.onIndexChange).toHaveBeenCalledWith(0));
+    expect(screen.getByRole('status')).toHaveTextContent('已到本套末尾，已回到首张');
+  });
+
+  test('does not remind while more album images remain to load', () => {
+    const onNearEnd = jest.fn();
+    const props = renderViewer({ currentIndex: 1, showWrapNotice: true, hasMore: true, onNearEnd });
+    const previousCalls = onNearEnd.mock.calls.length;
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(onNearEnd).toHaveBeenCalledTimes(previousCalls + 1);
+    expect(props.onIndexChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('does not remind for other image lists', async () => {
+    const props = renderViewer({ currentIndex: 1 });
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    await waitFor(() => expect(props.onIndexChange).toHaveBeenCalledWith(0));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('dismisses the reminder when random navigation leaves the first image', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const props = renderViewer({ currentIndex: 1, showWrapNotice: true });
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /随机图片/i }));
+
+    await waitFor(() => expect(props.onIndexChange).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+  });
+
+  test('reminds when the last image is already visible on the first dual-page spread', async () => {
+    mockLoadedImages({ width: 1000, height: 2000 });
+    useSettings.mockReturnValueOnce({
+      settings: {
+        autoRotateVerticalImages: false,
+        rotationDirection: 'right',
+        defaultDualPageViewer: true
+      }
+    });
+    const props = renderViewer({ showWrapNotice: true });
+    await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(2));
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    await waitFor(() => expect(props.onIndexChange).toHaveBeenCalledWith(0));
+    expect(screen.getByRole('status')).toHaveTextContent('已到本套末尾，已回到首张');
+  });
+
+  test('does not remind when a single-image album stays on its only image', async () => {
+    const props = renderViewer({ images: [images[0]], showWrapNotice: true });
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    await waitFor(() => expect(props.onIndexChange).toHaveBeenCalledWith(0));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });
 

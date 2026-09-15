@@ -836,6 +836,7 @@ function AlbumPage({
           readOnly={readOnly}
           hasMore={hasMore}
           onNearEnd={handleLoadMore}
+          showWrapNotice
         />
       )}
       <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>
