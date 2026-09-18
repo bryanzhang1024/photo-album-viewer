@@ -105,6 +105,34 @@ describe('CosCatalogService', () => {
     fs.rmSync(fixturePath, { recursive: true, force: true });
   });
 
+  test('random candidates cover the complete filtered index and exclude offline or empty sets', () => {
+    const ids = service.listRandomSetIds({ viewKind: 'sets', characterId: 'character:初音未来', lookId: 'look:兔子洞' });
+    expect(ids).toEqual(['set-single']);
+    expect(service.listRandomSetIds({ viewKind: 'sets', query: '韶华' })).toEqual(['set-multi-coser']);
+    expect(service.listRandomSetIds({ viewKind: 'sets', type: '不存在' })).toEqual([]);
+    service.sets.get('set-single').status = 'offline';
+    service.sets.get('set-multi-coser').imageCount = 0;
+    const remaining = service.listRandomSetIds({ viewKind: 'landing' });
+    expect(remaining).not.toContain('set-single');
+    expect(remaining).not.toContain('set-multi-coser');
+  });
+
+  test('classification searches randomize sets belonging to matching entities', () => {
+    expect(service.listRandomSetIds({ viewKind: 'characters', query: '镜音铃' })).toEqual(['set-ambiguous', 'set-no-look']);
+    expect(service.listRandomSetIds({ viewKind: 'cosers', query: 'Alice' }).sort()).toEqual(['set-multi-coser', 'set-single']);
+    expect(service.listRandomSetIds({ viewKind: 'looks', characterId: 'character:初音未来', query: '兔子洞' })).toEqual(['set-single']);
+    expect(service.listRandomSetIds({ viewKind: 'sets', coserId: SINGLETON_COSERS_ID })).toEqual([]);
+  });
+
+  test('random candidates are not limited to the first display page', () => {
+    const template = service.sets.get('set-single');
+    for (let i = 0; i < 210; i += 1) service.sets.set(`extra-${i}`, { ...template, id: `extra-${i}` });
+    const ids = service.listRandomSetIds({ viewKind: 'landing' });
+    expect(ids).toHaveLength(214);
+    expect(new Set(ids).size).toBe(214);
+    expect(ids).toContain('extra-209');
+  });
+
   test('builds one logical record per stable set id and reports bad metadata', () => {
     expect(summary).toMatchObject({
       setCount: 4,

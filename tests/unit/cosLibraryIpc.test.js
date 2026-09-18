@@ -13,6 +13,17 @@ function createIpcMain() {
 }
 
 describe('CosLibraryIpc', () => {
+  test('serves full random candidate ids with the same semantic filters', async () => {
+    const ipcMain = createIpcMain();
+    const service = new CosLibraryService({ configPath: '/unused/config.json', cachePath: '/unused/cache.json' });
+    service.initialized = true;
+    const query = jest.spyOn(service.catalog, 'listRandomSetIds').mockReturnValue(['beyond-page-200']);
+    registerCosLibraryIpcHandlers({ ipcMain, service });
+    const options = { viewKind: 'sets', coserId: 'coser:Alice', theme: '海边', query: '写真' };
+    await expect(ipcMain.handlers.get(CHANNELS.COS_LIST_RANDOM_SET_IDS)(null, options)).resolves.toEqual(['beyond-page-200']);
+    expect(query).toHaveBeenCalledWith(options);
+  });
+
   test('serves ready covers independently without rebuilding whole-library status for each image', async () => {
     const ipcMain = createIpcMain();
     const service = new CosLibraryService({ configPath: '/unused/config.json', cachePath: '/unused/cache.json' });

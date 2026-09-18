@@ -439,7 +439,7 @@ class CosCatalogService {
     return paginate(items, options);
   }
 
-  listSets(options = {}) {
+  matchingSets(options = {}) {
     let candidates = [...this.sets.values()];
     if (options.kind) candidates = candidates.filter(r => r.kinds.includes(options.kind));
     if (options.type) candidates = candidates.filter(r => r.type === options.type);
@@ -455,7 +455,7 @@ class CosCatalogService {
       candidates = candidates.filter((record) => ids.has(record.id));
     }
     if (options.lookId) {
-      if (!character) return paginate([], options);
+      if (!character) return [];
       const ids = this.characterLookSets.get(character)?.get(options.lookId) || new Set();
       candidates = candidates.filter((record) => ids.has(record.id));
     }
@@ -473,11 +473,45 @@ class CosCatalogService {
     }
 
     const query = typeof options.query === 'string' ? options.query.trim().toLocaleLowerCase() : '';
-    const items = candidates
-      .filter((record) => !query || record.searchText.includes(query))
+    return candidates.filter((record) => !query || record.searchText.includes(query));
+  }
+
+  listSets(options = {}) {
+    const items = this.matchingSets(options)
       .sort((left, right) => naturalCompare(left.displayName, right.displayName))
       .map((record) => this.toSetDto(record));
     return paginate(items, options);
+  }
+
+  listRandomSetIds(options = {}) {
+    const classification = ['characters', 'cosers', 'looks'].includes(options.viewKind);
+    let allowedIds = null;
+    if (classification && options.query?.trim()) {
+      const all = { ...options, limit: Number.MAX_SAFE_INTEGER, offset: 0 };
+      let entities;
+      let index;
+      if (options.viewKind === 'characters') {
+        entities = this.listCharacters(all).items;
+        index = this.characterSets;
+      } else if (options.viewKind === 'cosers') {
+        entities = this.listCosers(all).items;
+        index = this.coserSets;
+      } else {
+        entities = this.listLooks(all).items;
+        index = this.characterLookSets.get(entityName(options.characterId, 'character'));
+      }
+      allowedIds = new Set();
+      for (const item of entities) {
+        const key = options.viewKind === 'looks' || item.id === UNKNOWN_COSER_ID
+          ? item.id : entityName(item.id, options.viewKind === 'characters' ? 'character' : 'coser');
+        for (const id of index?.get(key) || []) allowedIds.add(id);
+      }
+    }
+    return this.matchingSets({ ...options, query: classification ? '' : options.query })
+      .filter(record => record.status === 'online' && record.imageCount > 0
+        && (!allowedIds || allowedIds.has(record.id)))
+      .map(record => record.id)
+      .sort();
   }
 
   makeEntityCard(kind, name, setIds, explicitId = null) {

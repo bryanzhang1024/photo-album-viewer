@@ -73,6 +73,9 @@ function registerCosLibraryIpcHandlers({
   ipcMain.handle(CHANNELS.COS_LIST_SETS, withService(async (_event, options) => (
     service.listSets(options)
   )));
+  ipcMain.handle(CHANNELS.COS_LIST_RANDOM_SET_IDS, withService(async (_event, options) => (
+    service.listRandomSetIds(options)
+  )));
   ipcMain.handle(CHANNELS.COS_GET_SET_IMAGES, withService(async (_event, setId, options) => service.getSetImagesPage(setId, options)));
   ipcMain.handle(CHANNELS.COS_GET_SET, withService(async (_event, setId) => service.getSet(setId)));
   ipcMain.handle(CHANNELS.COS_GET_SET_ALBUM_PATH, withService(async (_event, setId) => (
