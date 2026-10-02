@@ -265,6 +265,10 @@ class CosLibraryService {
     return this.catalog.listSets(options);
   }
 
+  listRandomSetIds(options) {
+    return this.catalog.listRandomSetIds(options);
+  }
+
   getSet(setId) {
     return this.catalog.getSet(setId);
   }

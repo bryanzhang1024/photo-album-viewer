@@ -28,6 +28,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import ImageIcon from '@mui/icons-material/Image';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import SearchIcon from '@mui/icons-material/Search';
+import ShuffleIcon from '@mui/icons-material/Shuffle';
 import TheatersIcon from '@mui/icons-material/Theaters';
 import { Virtuoso } from 'react-virtuoso';
 import CHANNELS from '../../common/ipc-channels';
@@ -37,6 +38,7 @@ import { TunePopover } from '../components/GridPageToolbar';
 import { ScrollPositionContext } from '../App';
 import { DEFAULT_DENSITY, GRID_CONFIG, chunkIntoRows, computeGridColumns } from '../utils/virtualGrid';
 import imageCache from '../utils/ImageCacheManager';
+import useCosRandomNavigation from '../hooks/useCosRandomNavigation';
 
 const ipcRenderer = window.electronAPI || null;
 const PAGE_SIZE = 200;
@@ -138,7 +140,7 @@ function fallbackParentView(view) {
 function isEditableTarget(target) {
   if (!target) return false;
   const tagName = target.tagName;
-  return tagName === 'INPUT' || tagName === 'TEXTAREA' || target.isContentEditable;
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target.isContentEditable;
 }
 
 function CoverImage({ mediaId, alt }) {
@@ -336,6 +338,29 @@ function CosLibraryPage({ colorMode }) {
     return savedDensity && GRID_CONFIG[savedDensity] ? savedDensity : DEFAULT_DENSITY;
   });
 
+  // Keep the original semantic list URL through every random album transition.
+  const randomOrigin = useMemo(() => {
+    if (!isAlbumRoute) return { pathname: location.pathname, search: location.search, state: location.state };
+    if (location.state?.returnLocation) return location.state.returnLocation;
+    const from = new URLSearchParams(location.search).get('from');
+    const url = new URL(from?.startsWith('/cos') && !from.startsWith('/cos/album') ? from : '/cos', 'http://cos.local');
+    return { pathname: url.pathname, search: url.search, state: null };
+  }, [isAlbumRoute, location.pathname, location.search, location.state]);
+  const randomScope = useMemo(() => {
+    const originView = readLocationView(randomOrigin);
+    const params = new URLSearchParams(randomOrigin.search);
+    return {
+      viewKind: originView.kind,
+      query: params.get('q') || '',
+      kind: params.get('kind') || '',
+      type: params.get('type') || '',
+      theme: params.get('theme') || '',
+      characterId: originView.character?.id,
+      lookId: originView.look?.id,
+      coserId: originView.coser?.id
+    };
+  }, [randomOrigin]);
+
   const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
   const columns = useMemo(
     () => computeGridColumns(windowWidth, userDensity, { isSmallScreen }),
@@ -348,6 +373,45 @@ function CosLibraryPage({ colorMode }) {
       scrollContext.savePosition(scrollPositionKey, scrollElement.scrollTop);
     }
   }, [scrollContext, scrollPositionKey]);
+
+  const navigateSet = useCallback((setItem, albumPath) => {
+    if (!isAlbumRoute) saveScrollPosition();
+    const params = new URLSearchParams({
+      set: setItem.id,
+      from: `${randomOrigin.pathname}${randomOrigin.search || ''}`
+    });
+    navigate({ pathname: '/cos/album', search: `?${params}` }, {
+      replace: isAlbumRoute,
+      state: {
+        cosView: readLocationView(randomOrigin),
+        cosAlbum: setItem,
+        cosAlbumPath: albumPath,
+        returnLocation: randomOrigin
+      }
+    });
+  }, [isAlbumRoute, navigate, randomOrigin, saveScrollPosition]);
+
+  const randomNavigation = useCosRandomNavigation({
+    scope: randomScope,
+    locationIdentity: `${location.key}:${location.pathname}${location.search}`,
+    currentSetId: isAlbumRoute ? new URLSearchParams(location.search).get('set') : null,
+    available: Boolean(ipcRenderer && status?.roots?.some(root => root.status === 'online') && !loading),
+    ipcRenderer,
+    onOpen: navigateSet,
+    onError: setError
+  });
+
+  useEffect(() => {
+    if (isAlbumRoute) return undefined;
+    const handleKeyDown = event => {
+      if (event.key.toLowerCase() !== 'e' || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+      if (isEditableTarget(document.activeElement) || randomNavigation.randomBrowseDisabled) return;
+      event.preventDefault();
+      randomNavigation.handleRandomBrowse();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAlbumRoute, randomNavigation.handleRandomBrowse, randomNavigation.randomBrowseDisabled]);
 
   const bindVirtualScroller = useCallback((node) => {
     virtualScrollerRef.current = node;
@@ -539,6 +603,7 @@ function CosLibraryPage({ colorMode }) {
 
   const handleSelectRoot = async () => {
     try {
+      randomNavigation.clearRandomState();
       setLoading(true);
       const nextStatus = await ipcRenderer.invoke(CHANNELS.COS_SELECT_ROOT);
       setStatus(nextStatus);
@@ -551,6 +616,7 @@ function CosLibraryPage({ colorMode }) {
 
   const handleRefresh = async () => {
     try {
+      randomNavigation.clearRandomState();
       setLoading(true);
       const nextStatus = await ipcRenderer.invoke(CHANNELS.COS_REFRESH);
       setStatus(nextStatus);
@@ -564,9 +630,13 @@ function CosLibraryPage({ colorMode }) {
 
   const handleRemoveRoot = async (rootId) => {
     try {
+      randomNavigation.clearRandomState();
+      setLoading(true);
       setStatus(await ipcRenderer.invoke(CHANNELS.COS_REMOVE_ROOT, rootId));
     } catch (reason) {
       setError(reason?.message || '移除图库根目录失败');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -577,23 +647,7 @@ function CosLibraryPage({ colorMode }) {
         setError('套图所在磁盘当前不可用');
         return;
       }
-      saveScrollPosition();
-      const params = new URLSearchParams({
-        set: setItem.id,
-        from: `${location.pathname}${location.search}`
-      });
-      navigate({ pathname: '/cos/album', search: `?${params.toString()}` }, {
-        state: {
-          cosView: view,
-          cosAlbum: setItem,
-          cosAlbumPath: albumPath,
-          returnLocation: {
-            pathname: location.pathname,
-            search: location.search,
-            state: location.state
-          }
-        }
-      });
+      navigateSet(setItem, albumPath);
     } catch (reason) {
       setError(reason?.message || '打开套图失败');
     }
@@ -651,35 +705,44 @@ function CosLibraryPage({ colorMode }) {
 
   if (isAlbumRoute && album) {
     return (
-      <AlbumPage
-        colorMode={colorMode}
-        albumPath={album.albumPath}
-        readOnly={true}
-        collectionSetId={album.set.id}
-        urlMode={true}
-        onGoBack={goBack}
-        embeddedMode={true}
-        headerLeadingContent={(
-          <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-            <Tooltip title="返回上一级">
-              <IconButton onClick={goBack} aria-label="返回上一级"><ArrowBackIcon /></IconButton>
-            </Tooltip>
-            <Typography noWrap fontWeight={700} sx={{ ml: 1 }}>
-              Cos 图库 / {view.title} / {album.set.displayName}
-            </Typography>
-          </Box>
-        )}
-        headerExtraActions={(
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Button size="small" startIcon={<TheatersIcon />} onClick={() => runSetAction(CHANNELS.COS_OPEN_IN_PICTUREVIEW)}>
-              用 PictureView 打开
-            </Button>
-            <Button size="small" startIcon={<FolderOpenIcon />} onClick={() => runSetAction(CHANNELS.COS_SHOW_SET_IN_FOLDER)}>
-              在 Finder 中显示
-            </Button>
-          </Box>
-        )}
-      />
+      <>
+        <AlbumPage
+          colorMode={colorMode}
+          albumPath={album.albumPath}
+          readOnly={true}
+          collectionSetId={album.set.id}
+          urlMode={true}
+          onGoBack={goBack}
+          embeddedMode={true}
+          onRandomBrowse={randomNavigation.handleRandomBrowse}
+          randomBrowseLoading={randomNavigation.randomBrowseLoading}
+          randomBrowseDisabled={randomNavigation.randomBrowseDisabled}
+          randomBrowseTooltip="随机套图 (E)"
+          headerLeadingContent={(
+            <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+              <Tooltip title="返回上一级">
+                <IconButton onClick={goBack} aria-label="返回上一级"><ArrowBackIcon /></IconButton>
+              </Tooltip>
+              <Typography noWrap fontWeight={700} sx={{ ml: 1 }}>
+                Cos 图库 / {view.title} / {album.set.displayName}
+              </Typography>
+            </Box>
+          )}
+          headerExtraActions={(
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Button size="small" startIcon={<TheatersIcon />} onClick={() => runSetAction(CHANNELS.COS_OPEN_IN_PICTUREVIEW)}>
+                用 PictureView 打开
+              </Button>
+              <Button size="small" startIcon={<FolderOpenIcon />} onClick={() => runSetAction(CHANNELS.COS_SHOW_SET_IN_FOLDER)}>
+                在 Finder 中显示
+              </Button>
+            </Box>
+          )}
+        />
+        <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError('')}>
+          <Alert severity="error" onClose={() => setError('')}>{error}</Alert>
+        </Snackbar>
+      </>
     );
   }
 
@@ -851,6 +914,13 @@ function CosLibraryPage({ colorMode }) {
           showRandom={false}
         />
       ) : null}
+      <Tooltip title="随机当前范围的套图 (E)">
+        <span><Button size="small" startIcon={<ShuffleIcon />}
+          aria-label="随机套图 (E)" onClick={randomNavigation.handleRandomBrowse}
+          disabled={randomNavigation.randomBrowseDisabled}>
+          {randomNavigation.randomBrowseLoading ? '正在随机…' : '随机套图'}
+        </Button></span>
+      </Tooltip>
       <Tooltip title="刷新 Cos 索引">
         <span><IconButton onClick={handleRefresh} disabled={!status?.roots?.length || loading}><AutorenewIcon /></IconButton></span>
       </Tooltip>

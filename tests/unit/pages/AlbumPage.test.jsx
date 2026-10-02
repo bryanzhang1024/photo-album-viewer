@@ -515,6 +515,28 @@ describe('AlbumPage refresh button', () => {
     expect(onGoBack).not.toHaveBeenCalled();
   });
 
+  test('supports injected Cos random navigation in embedded mode and leaves E to an open viewer', async () => {
+    const onRandomBrowse = jest.fn();
+    const { rerender } = render(
+      <AlbumPage albumPath="/albums/trip" embeddedMode={true} urlMode={true}
+        onRandomBrowse={onRandomBrowse} randomBrowseTooltip="随机套图 (E)" />
+    );
+    await act(async () => { fireEvent.keyDown(window, { key: 'e' }); });
+    expect(onRandomBrowse).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '随机套图 (E)' })); });
+    expect(onRandomBrowse).toHaveBeenCalledTimes(2);
+    rerender(<AlbumPage albumPath="/albums/trip" embeddedMode={true} urlMode={true}
+      onRandomBrowse={onRandomBrowse} randomBrowseDisabled={true} />);
+    await act(async () => { fireEvent.keyDown(window, { key: 'e' }); });
+    expect(onRandomBrowse).toHaveBeenCalledTimes(2);
+    rerender(<AlbumPage albumPath="/albums/trip" embeddedMode={true} urlMode={true}
+      onRandomBrowse={onRandomBrowse} />);
+    fireEvent.click(screen.getByTestId('image-card'));
+    await act(async () => { fireEvent.keyDown(window, { key: 'e' }); });
+    expect(onRandomBrowse).toHaveBeenCalledTimes(2);
+  });
+
   test('uses one semantic header and only Backspace navigation in embedded mode', async () => {
     const onGoBack = jest.fn();
     const onAlbumClick = jest.fn();

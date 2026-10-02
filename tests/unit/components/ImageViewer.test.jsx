@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ImageViewer from '../../../src/renderer/components/ImageViewer';
 import CHANNELS from '../../../src/common/ipc-channels';
 
@@ -173,6 +173,7 @@ describe('ImageViewer album wrap reminder', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
@@ -183,6 +184,12 @@ describe('ImageViewer album wrap reminder', () => {
 
     await waitFor(() => expect(props.onIndexChange).toHaveBeenCalledWith(0));
     expect(screen.getByRole('status')).toHaveTextContent('已到本套末尾，已回到首张');
+    expect(screen.getByRole('status')).toHaveStyle({
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      'pointer-events': 'none'
+    });
   });
 
   test('does not remind while more album images remain to load', () => {
@@ -206,17 +213,50 @@ describe('ImageViewer album wrap reminder', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  test('dismisses the reminder when random navigation leaves the first image', async () => {
+  test.each(['ArrowRight', 'ArrowLeft', 'r'])('keeps the reminder for three seconds across %s navigation', (key) => {
+    jest.useFakeTimers();
     jest.spyOn(Math, 'random').mockReturnValue(0);
-    const props = renderViewer({ currentIndex: 1, showWrapNotice: true });
+    function ViewerSession() {
+      const [index, setIndex] = React.useState(2);
+      return <ImageViewer images={shortcutImages} currentIndex={index} onIndexChange={setIndex} onClose={jest.fn()} showWrapNotice />;
+    }
+    render(<ViewerSession />);
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
-    await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
+    expect(screen.getByAltText('IMG_0001.jpg')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveStyle({ opacity: 1 });
 
-    fireEvent.click(screen.getByRole('button', { name: /随机图片/i }));
+    act(() => jest.advanceTimersByTime(500));
+    fireEvent.keyDown(window, { key });
+    if (key === 'r') {
+      expect(screen.queryByAltText('IMG_0001.jpg')).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByAltText(key === 'ArrowLeft' ? 'IMG_0003.jpg' : 'IMG_0002.jpg')).toBeInTheDocument();
+    }
+    act(() => jest.advanceTimersByTime(2499));
+    expect(screen.getByRole('status')).toHaveStyle({ opacity: 1 });
 
-    await waitFor(() => expect(props.onIndexChange).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByRole('status')).toHaveStyle({ opacity: 0 });
+    act(() => jest.advanceTimersByTime(200));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('starts a new three-second interval when another wrap occurs before the reminder expires', () => {
+    jest.useFakeTimers();
+    function ViewerSession() {
+      const [index, setIndex] = React.useState(1);
+      return <ImageViewer images={images} currentIndex={index} onIndexChange={setIndex} onClose={jest.fn()} showWrapNotice />;
+    }
+    render(<ViewerSession />);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    act(() => jest.advanceTimersByTime(2000));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    act(() => jest.advanceTimersByTime(2999));
+    expect(screen.getByRole('status')).toHaveStyle({ opacity: 1 });
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByRole('status')).toHaveStyle({ opacity: 0 });
   });
 
   test('reminds when the last image is already visible on the first dual-page spread', async () => {

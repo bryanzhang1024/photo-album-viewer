@@ -113,7 +113,7 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [dualPageEnabled, setDualPageEnabled] = useState(Boolean(settings.defaultDualPageViewer));
-  const [wrapNoticeOpen, setWrapNoticeOpen] = useState(false);
+  const [wrapNoticeSequence, setWrapNoticeSequence] = useState(0);
   const [viewportSize, setViewportSize] = useState(() => ({
     width: typeof window === 'undefined' ? 0 : window.innerWidth,
     height: typeof window === 'undefined' ? 0 : window.innerHeight
@@ -134,13 +134,13 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
     [images]
   );
   useEffect(() => {
-    setWrapNoticeOpen(false);
+    setWrapNoticeSequence(0);
   }, [imagesScopeKey]);
   useEffect(() => {
-    if (!wrapNoticeOpen) return undefined;
-    const timer = setTimeout(() => setWrapNoticeOpen(false), 3000);
+    if (!wrapNoticeSequence) return undefined;
+    const timer = setTimeout(() => setWrapNoticeSequence(0), 3000);
     return () => clearTimeout(timer);
-  }, [wrapNoticeOpen]);
+  }, [wrapNoticeSequence]);
   const { drawNext: drawRandomImageIndex } = useShuffleBag(
     imageIndices,
     imagesScopeKey,
@@ -645,10 +645,9 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
       && images.length > 1
       && visibleImageIndices.includes(images.length - 1)
       && newIndex === 0;
-    if (!wrappedToFirst) setWrapNoticeOpen(false);
     const commitNavigation = () => {
       onIndexChange(newIndex);
-      if (wrappedToFirst) setWrapNoticeOpen(true);
+      if (wrappedToFirst) setWrapNoticeSequence(sequence => sequence + 1);
     };
 
     // 切换图片前重置状态
@@ -724,7 +723,6 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
       return;
     }
 
-    setWrapNoticeOpen(false);
     setZoomLevel(1);
     setDragOffset({ x: 0, y: 0 });
 
@@ -1209,14 +1207,14 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
         </Toolbar>
       </AppBar>
 
-      <Fade in={wrapNoticeOpen} mountOnEnter unmountOnExit>
+      <Fade in={Boolean(wrapNoticeSequence)} mountOnEnter unmountOnExit>
         <Box
           role="status"
           sx={{
             position: 'fixed',
-            bottom: 24,
+            top: '50%',
             left: '50%',
-            transform: 'translateX(-50%)',
+            transform: 'translate(-50%, -50%)',
             zIndex: 1301,
             px: 2,
             py: 1,

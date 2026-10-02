@@ -84,6 +84,7 @@ describe('preload IPC allowlist', () => {
     'COS_LIST_LOOKS',
     'COS_LIST_COSERS',
     'COS_LIST_SETS',
+    'COS_LIST_RANDOM_SET_IDS',
     'COS_GET_SET',
     'COS_GET_SET_ALBUM_PATH',
     'COS_GET_MEDIA_THUMBNAIL',

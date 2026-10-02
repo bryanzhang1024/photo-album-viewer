@@ -48,6 +48,7 @@ function AlbumPage({
   onGoBack = null,
   onOpenFavoritesInNewTab = null,
   onRandomBrowse = null,
+  randomBrowseTooltip = undefined,
   randomBrowseLoading = false,
   randomBrowseDisabled = false,
   sourceBoundary = null,
@@ -585,6 +586,12 @@ function AlbumPage({
         return;
       }
 
+      if (embeddedMode && (event.key === 'e' || event.key === 'E') && onRandomBrowse
+          && !randomBrowseDisabled && !randomBrowseLoading && !viewerOpen
+          && !event.ctrlKey && !event.altKey && !event.metaKey && !event.repeat) {
+        event.preventDefault();
+        handleRandomAlbum();
+      }
       if (embeddedMode) return;
 
       // 按下 e 键触发随机选择相簿
@@ -656,6 +663,9 @@ function AlbumPage({
     embeddedMode,
     searchHasFocus,
     handleRandomAlbum,
+    onRandomBrowse,
+    randomBrowseDisabled,
+    randomBrowseLoading,
     handleRefreshAlbum,
     handleBack,
     handleHome,
@@ -699,7 +709,8 @@ function AlbumPage({
         }}
         onRandomAlbum={handleRandomAlbum}
         randomDisabled={randomDisabled}
-        showRandom={!embeddedMode}
+        showRandom={!embeddedMode || Boolean(onRandomBrowse)}
+        randomTooltip={randomBrowseTooltip}
         onRefresh={handleRefreshAlbum}
         refreshDisabled={!canRefreshAlbum}
         refreshAriaLabel="刷新当前相簿"

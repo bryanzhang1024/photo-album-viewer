@@ -19,7 +19,9 @@ jest.mock('../../../src/renderer/pages/AlbumPage', () => ({
   headerExtraActions,
   readOnly,
   collectionSetId,
-  albumPath
+  albumPath,
+  onRandomBrowse,
+  randomBrowseDisabled
 }) => (
   <div
     data-testid="cos-album-page"
@@ -30,7 +32,8 @@ jest.mock('../../../src/renderer/pages/AlbumPage', () => ({
   >
     {headerLeadingContent}
     {headerExtraActions}
-    <button type="button" onClick={() => localStorage.setItem('userDensity', 'compact')}>模拟相簿密度</button>
+    <button onClick={onRandomBrowse} disabled={randomBrowseDisabled}>随机下一套</button>
+    <button type="button" onClick={() => globalThis.localStorage.setItem('userDensity', 'compact')}>模拟相簿密度</button>
   </div>
 ));
 
@@ -169,6 +172,77 @@ describe('CosLibraryPage', () => {
     });
     window.electronAPI.on = jest.fn();
     window.electronAPI.removeListener = jest.fn();
+  });
+
+  test('randomizes beyond loaded cards, continues without repeats and returns to the filtered list', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    window.electronAPI.invoke.mockImplementation(async (channel, payload) => {
+      if (channel === 'cos-list-random-set-ids') return ['set-one', 'set-two', 'set-three'];
+      if (channel === CHANNELS.COS_GET_SET) return { id: payload, displayName: payload };
+      if (channel === CHANNELS.COS_GET_SET_ALBUM_PATH) return `/library/${payload}`;
+      return base(channel, payload);
+    });
+    const origin = '/cos/sets?context=all&q=写真&type=原创写真&theme=公共浴室';
+    renderCosPage(origin);
+    await screen.findByAltText('兔子洞写真套图');
+    fireEvent.click(screen.getByRole('button', { name: '随机套图 (E)' }));
+    const first = (await screen.findByTestId('cos-album-page')).dataset.setId;
+    const selected = new Set([first]);
+    for (let i = 0; i < 2; i += 1) {
+      fireEvent.click(screen.getByRole('button', { name: '随机下一套' }));
+      await waitFor(() => expect(screen.getByTestId('cos-album-page').dataset.setId).not.toBe(first));
+      await waitFor(() => expect(screen.getByRole('button', { name: '随机下一套' })).toBeEnabled());
+      selected.add(screen.getByTestId('cos-album-page').dataset.setId);
+    }
+    expect(selected.size).toBe(3);
+    expect(window.electronAPI.invoke).toHaveBeenCalledWith('cos-list-random-set-ids', expect.objectContaining({
+      viewKind: 'sets', query: '写真', type: '原创写真', theme: '公共浴室'
+    }));
+    expect(new URLSearchParams(screen.getByTestId('location').textContent.split('?')[1]).get('from')).toBe(origin);
+    fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(origin));
+  });
+
+  test('offers random on the landing page and ignores E while editing a classification search', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    window.electronAPI.invoke.mockImplementation(async (channel, payload) => channel === 'cos-list-random-set-ids'
+      ? ['set-one'] : base(channel, payload));
+    renderCosPage();
+    await screen.findByRole('button', { name: /按角色/ });
+    fireEvent.click(screen.getByRole('button', { name: '随机套图 (E)' }));
+    await screen.findByTestId('cos-album-page');
+    fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
+    fireEvent.click(await screen.findByRole('button', { name: /按角色/ }));
+    const search = await screen.findByPlaceholderText('搜索当前分类');
+    act(() => search.focus());
+    window.electronAPI.invoke.mockClear();
+    fireEvent.keyDown(window, { key: 'e' });
+    expect(window.electronAPI.invoke).not.toHaveBeenCalledWith('cos-list-random-set-ids', expect.anything());
+    act(() => search.blur());
+    fireEvent.keyDown(window, { key: 'e' });
+    await screen.findByTestId('cos-album-page');
+  });
+
+  test('does not randomize while editing a native filter', async () => {
+    renderCosPage('/cos/sets?context=all');
+    await screen.findByAltText('兔子洞写真套图');
+    act(() => screen.getByRole('combobox', { name: '类型' }).focus());
+    window.electronAPI.invoke.mockClear();
+    fireEvent.keyDown(window, { key: 'e' });
+    expect(window.electronAPI.invoke).not.toHaveBeenCalledWith('cos-list-random-set-ids', expect.anything());
+  });
+
+  test('disables random while a library root is being removed', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    let finish;
+    window.electronAPI.invoke.mockImplementation((channel, payload) => channel === CHANNELS.COS_REMOVE_ROOT
+      ? new Promise(resolve => { finish = resolve; }) : base(channel, payload));
+    renderCosPage();
+    await screen.findByRole('button', { name: /按角色/ });
+    fireEvent.click(screen.getByTestId('CancelIcon'));
+    expect(screen.getByRole('button', { name: '随机套图 (E)' })).toBeDisabled();
+    await act(async () => { finish({ state: 'empty', roots: [], summary: {} }); });
+    expect(screen.getByRole('button', { name: '随机套图 (E)' })).toBeDisabled();
   });
 
   test('navigates character to look to a compact set card and opens the existing album view', async () => {
