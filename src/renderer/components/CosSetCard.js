@@ -83,7 +83,7 @@ function CosSetCard({ item, context, currentCoser, cover, metadata, onClick, onE
       if (!event.target.closest('[data-cos-favorite]')) onClick?.(event);
     }}
       sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
-        overflow: 'hidden', borderRadius: 2, border: '1px solid', borderColor: 'divider',
+        overflow: 'hidden', borderRadius: 2,
         bgcolor: 'background.paper', backgroundImage: 'none', opacity: isOffline ? 0.62 : 1,
         cursor: isOffline ? 'default' : 'pointer' }}>
       <ButtonBase disabled={isOffline} aria-label={item.displayName} title={item.displayName}

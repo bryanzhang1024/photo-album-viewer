@@ -37,3 +37,13 @@
 - 本机安装到 `/Applications/Photo Album Viewer.app`，版本 3.7.0。旧 3.6.1 正常退出后复制并核验 Info.plist/app.asar，备份位于 `/Volumes/1TB/99-管理/临时/backups/cos-set-cards-20261003/Photo Album Viewer 3.6.1.app`。
 - 前后实测截图和自包含对比页：`/Volumes/1TB/99-管理/报告/cos-set-cards-20261003/compare.html`；原始 QA 启动脚本、日志及独立 profile 在同任务管理目录。
 - 10 套样张源 JSON 指纹复核一致；源图库未改，字段清洗、Cos 入口性能及其他交互继续暂缓。
+
+## 2026-10-03 · 卡片描边反馈与需求归档（3.7.1）
+
+- 用户明确不要上一版新加的细线。仅去掉 CosSetCard 的 border/borderColor，保留背景、圆角、阴影、文字与收藏布局、键盘焦点提示。
+- 新增 cos-requirements.md，以最初确认、后续补充/改口、实现状态、当前与后续范围四个维度整理；spec.md 与 cos-browsing-spec.md 顶部标为历史，project.md 指向统一清单。没有把建议优先级、后台预加载或旧版全新主窗口写成用户已定方案。
+- 在原对比分支 codex/cos-set-cards 继续处理审阅反馈，未合并、未 push。版本与 lock/CHANGELOG 同步到 3.7.1。
+- 相关 2 套件 33 项测试通过；npm run build 成功，仍有既有 bundle 体积提示与无 Developer ID 签名提示。
+- 旧 3.7.0 正常退出后复制并核验 app.asar/Info.plist，备份：/Volumes/1TB/99-管理/临时/backups/cos-card-no-outline-20261003/Photo Album Viewer 3.7.0.app。新 .app 安装到当前 Mac-Studio.local 的 /Applications/Photo Album Viewer.app，版本与 app.asar 指纹核对通过。
+- 安装包代码通过独立 userData 副本启动并进入真实 Cos 署名套图列表；原生工具出现旧画面缓存和失效窗口句柄，未用该截图声称描边通过。补以实际 CosSetCard 模块渲染检查：三套真实内容，暗/浅色 computed border 为 0px、背景与圆角保留，截图在 /Volumes/1TB/99-管理/报告/cos-card-no-outline-20261003/dark-no-outline.jpg。无新增依赖，临时预览绑定 127.0.0.1，结束后停止并关闭测试页。
+- 未修改源 JSON、目录、媒体或真实收藏。固定入口、加载等待、滚动恢复、Esc、左右换套和套图排序仍列为待办。
