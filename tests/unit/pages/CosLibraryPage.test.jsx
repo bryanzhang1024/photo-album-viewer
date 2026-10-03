@@ -1,9 +1,10 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import CHANNELS from '../../../src/common/ipc-channels';
 import CosLibraryPage from '../../../src/renderer/pages/CosLibraryPage';
 import imageCache from '../../../src/renderer/utils/ImageCacheManager';
+import { FavoritesContext } from '../../../src/renderer/contexts/FavoritesContext';
 
 jest.mock('react-virtuoso', () => ({
   Virtuoso: ({ data = [], itemContent, scrollerRef, style }) => (
@@ -77,6 +78,103 @@ function readyStatus() {
 }
 
 describe('CosLibraryPage', () => {
+  const cardItem = {
+    id: 'set-one', displayName: 'Alice｜初音未来·原皮（VOCALOID）',
+    originalName: 'Alice - Miku', cosers: ['Alice'], characters: ['初音未来'],
+    looks: ['原皮', '角色服装'], works: ['VOCALOID'], themes: ['角色Cos'],
+    type: '角色Cos', imageCount: 48, coverMediaId: 'media:one', status: 'online',
+    favoriteTargets: [{ path: '/library/set-one', online: true, previewImagePath: '/library/set-one/01.jpg' }]
+  };
+
+  function renderCoserCard(item = cardItem, albums = [], toggleAlbumFavorite = jest.fn()) {
+    const original = window.electronAPI.invoke.getMockImplementation();
+    window.electronAPI.invoke.mockImplementation((channel, ...args) => channel === CHANNELS.COS_LIST_SETS
+      ? Promise.resolve({ items: [item], total: 1 }) : original(channel, ...args));
+    render(
+      <FavoritesContext.Provider value={{ favorites: { albums }, isLoading: false, toggleAlbumFavorite }}>
+        <MemoryRouter initialEntries={['/cos/sets?context=coser&coser=coser%3AAlice']}>
+          <CosLibraryPage />
+          <LocationProbe />
+        </MemoryRouter>
+      </FavoritesContext.Provider>
+    );
+    return toggleAlbumFavorite;
+  }
+
+  test('uses concise identity and work text under a coser without repeating the filing name or generic look labels', async () => {
+    renderCoserCard();
+    await screen.findByAltText(cardItem.displayName);
+    expect(screen.queryByText(cardItem.displayName)).not.toBeInTheDocument();
+    expect(screen.getByText('初音未来')).toBeInTheDocument();
+    expect(screen.getByText('VOCALOID')).toBeInTheDocument();
+    expect(screen.queryByText('原皮')).not.toBeInTheDocument();
+    expect(screen.queryByText('角色服装')).not.toBeInTheDocument();
+    expect(screen.getByText('48 张')).toBeInTheDocument();
+  });
+
+  test('favorites from the text footer without opening the album, using its verified path and existing favorite system', async () => {
+    const toggle = renderCoserCard();
+    const favorite = await screen.findByRole('button', { name: '添加收藏' });
+    const footer = favorite.parentElement;
+    expect(within(footer).getByText('48 张')).toBeInTheDocument();
+    expect(within(footer).queryByRole('img')).not.toBeInTheDocument();
+    fireEvent.click(favorite);
+    await waitFor(() => expect(toggle).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/library/set-one', name: cardItem.displayName, imageCount: 48,
+      previewImagePath: '/library/set-one/01.jpg'
+    })));
+    expect(screen.getByTestId('location')).toHaveTextContent('/cos/sets');
+    expect(window.electronAPI.invoke).toHaveBeenCalledWith(CHANNELS.COS_GET_SET_ALBUM_PATH, 'set-one');
+  });
+
+  test('reflects and removes an existing album favorite, including when the Cos location is offline', async () => {
+    const existing = { path: '/library/set-one', name: 'original favorite', kind: 'photoSet' };
+    const toggle = renderCoserCard({ ...cardItem, status: 'offline', favoriteTargets: [{ path: existing.path, online: false }] }, [existing]);
+    const favorite = await screen.findByRole('button', { name: '取消收藏' });
+    expect(favorite).toBeEnabled();
+    fireEvent.click(favorite);
+    await waitFor(() => expect(toggle).toHaveBeenCalledWith(existing));
+    expect(window.electronAPI.invoke).not.toHaveBeenCalledWith(CHANNELS.COS_GET_SET_ALBUM_PATH, 'set-one');
+    expect(screen.getByTestId('location')).toHaveTextContent('/cos/sets');
+  });
+
+  test('waits for path verification and prevents repeated favorite requests', async () => {
+    const invoke = window.electronAPI.invoke.getMockImplementation();
+    let finish;
+    window.electronAPI.invoke.mockImplementation((channel, ...args) => channel === CHANNELS.COS_GET_SET_ALBUM_PATH
+      ? new Promise(resolve => { finish = resolve; }) : invoke(channel, ...args));
+    const toggle = renderCoserCard();
+    const favorite = await screen.findByRole('button', { name: '添加收藏' });
+    fireEvent.click(favorite);
+    fireEvent.click(favorite);
+    expect(favorite).toBeDisabled();
+    expect(toggle).not.toHaveBeenCalled();
+    expect(window.electronAPI.invoke.mock.calls.filter(([channel]) => channel === CHANNELS.COS_GET_SET_ALBUM_PATH)).toHaveLength(1);
+    await act(async () => { finish('/library/set-one'); });
+    expect(toggle).toHaveBeenCalledTimes(1);
+    expect(favorite).toBeEnabled();
+  });
+
+  test('reports an unavailable set without adding a favorite or leaving the list', async () => {
+    const invoke = window.electronAPI.invoke.getMockImplementation();
+    window.electronAPI.invoke.mockImplementation((channel, ...args) => channel === CHANNELS.COS_GET_SET_ALBUM_PATH
+      ? Promise.resolve(null) : invoke(channel, ...args));
+    const toggle = renderCoserCard();
+    fireEvent.click(await screen.findByRole('button', { name: '添加收藏' }));
+    expect(await screen.findByText('套图所在目录当前不可用')).toBeInTheDocument();
+    expect(toggle).not.toHaveBeenCalled();
+    expect(screen.getByTestId('location')).toHaveTextContent('/cos/sets');
+  });
+
+  test('keeps a no-character photo release name and shows collaborators without repeating the current coser', async () => {
+    renderCoserCard({ ...cardItem, displayName: 'Alice＋Bob｜Maid姉妹（原创写真）',
+      cosers: ['Alice', 'Bob'], characters: [], looks: [], works: [], type: '原创写真' });
+    await screen.findByAltText('Alice＋Bob｜Maid姉妹（原创写真）');
+    expect(screen.getByText('Maid姉妹')).toBeInTheDocument();
+    expect(screen.getByText('原创写真 · 与 Bob 合作')).toBeInTheDocument();
+    expect(screen.queryByText('角色Cos')).not.toBeInTheDocument();
+  });
+
   test('reuses loaded covers when returning to a grid', async () => {
     const first = renderCosPage('/cos/sets?context=all');
     fireEvent.load(await screen.findByAltText('兔子洞写真套图'));
@@ -256,7 +354,7 @@ describe('CosLibraryPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /兔子洞/ }));
 
     const setCard = await screen.findByRole('button', { name: /兔子洞写真套图/ });
-    expect(setCard).toHaveTextContent('48 张');
+    expect(setCard.closest('article')).toHaveTextContent('48 张');
     expect(setCard).toHaveTextContent('Alice');
     expect(setCard).toHaveTextContent('Bob');
     expect(setCard).toHaveTextContent('+1');

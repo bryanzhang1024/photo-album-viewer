@@ -262,7 +262,8 @@ class CosLibraryService {
   }
 
   listSets(options) {
-    return this.catalog.listSets(options);
+    const result = this.catalog.listSets(options);
+    return { ...result, items: result.items.map(item => this.withFavoriteTargets(item)) };
   }
 
   listRandomSetIds(options) {
@@ -270,7 +271,24 @@ class CosLibraryService {
   }
 
   getSet(setId) {
-    return this.catalog.getSet(setId);
+    return this.withFavoriteTargets(this.catalog.getSet(setId));
+  }
+
+  // Runtime-only paths connect Cos cards to ordinary album favorites. Keep the
+  // catalog snapshot portable and avoid filesystem queries for every card.
+  withFavoriteTargets(item) {
+    if (!item) return null;
+    const record = this.catalog.sets.get(item.id);
+    const favoriteTargets = item.locations.flatMap(location => {
+      const root = this.roots.find(candidate => candidate.id === location.rootId);
+      if (!root) return [];
+      const albumPath = path.resolve(root.path, location.relativePath);
+      if (!albumPath.startsWith(`${root.path}${path.sep}`)) return [];
+      const online = root.status === 'online' && location.status === 'online';
+      const preview = online ? record?.media.find(media => media.rootId === root.id)?.absolutePath : null;
+      return [{ path: albumPath, online, previewImagePath: preview || null }];
+    });
+    return { ...item, favoriteTargets };
   }
 
   listSetMedia(setId, options) {

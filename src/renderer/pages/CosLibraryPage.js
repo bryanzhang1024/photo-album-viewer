@@ -39,6 +39,7 @@ import { ScrollPositionContext } from '../App';
 import { DEFAULT_DENSITY, GRID_CONFIG, chunkIntoRows, computeGridColumns } from '../utils/virtualGrid';
 import imageCache from '../utils/ImageCacheManager';
 import useCosRandomNavigation from '../hooks/useCosRandomNavigation';
+import CosSetCard from '../components/CosSetCard';
 
 const ipcRenderer = window.electronAPI || null;
 const PAGE_SIZE = 200;
@@ -245,7 +246,7 @@ function EntityCard({ item, onClick }) {
   );
 }
 
-function SetCard({ item, context, onClick }) {
+function SetCard({ item, context, currentCoser, onClick, onError }) {
   const metadata = context === 'character'
     ? item.cosers
     : context === 'coser'
@@ -254,38 +255,9 @@ function SetCard({ item, context, onClick }) {
         ? [...item.cosers, ...item.characters, ...item.looks]
         : [...item.cosers, ...item.characters];
   return (
-    <Paper
-      component={ButtonBase}
-      onClick={onClick}
-      disabled={item.status === 'offline'}
-      sx={{
-        width: '100%',
-        display: 'block',
-        textAlign: 'left',
-        overflow: 'hidden',
-        borderRadius: 2,
-        opacity: item.status === 'offline' ? 0.62 : 1
-      }}
-    >
-      <CoverImage key={item.coverMediaId} mediaId={item.coverMediaId} alt={item.displayName} />
-      <Box sx={{ p: 1.25, display: 'grid', gap: 0.75 }}>
-        <Typography
-          fontWeight={650}
-          sx={{
-            lineHeight: 1.35,
-            minHeight: '2.7em',
-            display: '-webkit-box',
-            WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: 2,
-            overflow: 'hidden'
-          }}
-        >
-          {item.displayName}
-        </Typography>
-        <MetadataChips values={metadata || []} />
-        <Typography variant="caption" color="text.secondary">{formatCount(item.imageCount)} 张</Typography>
-      </Box>
-    </Paper>
+    <CosSetCard item={item} context={context} currentCoser={currentCoser} onClick={onClick} onError={onError}
+      cover={<CoverImage key={item.coverMediaId} mediaId={item.coverMediaId} alt={item.displayName} />}
+      metadata={<MetadataChips values={metadata || []} />} />
   );
 }
 
@@ -841,7 +813,8 @@ function CosLibraryPage({ colorMode }) {
                   return <EntityCard key={item.id} item={item} onClick={() => pushView({ kind: 'sets', title: `${view.character.name} · 全部收藏`, character: view.character, context: 'character' })} />;
                 }
                 if (view.kind === 'sets') {
-                  return <SetCard key={item.id} item={item} context={view.context} onClick={() => openSet(item)} />;
+                  return <SetCard key={item.id} item={item} context={view.context} currentCoser={view.coser?.name}
+                    onClick={() => openSet(item)} onError={setError} />;
                 }
                 return (
                   <EntityCard

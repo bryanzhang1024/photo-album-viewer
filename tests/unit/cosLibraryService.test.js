@@ -36,6 +36,27 @@ describe('CosLibraryService', () => {
     fs.rmSync(fixturePath, { recursive: true, force: true });
   });
 
+  test('supplies runtime favorite paths and cover previews without persisting absolute paths in the catalog cache', async () => {
+    const service = new CosLibraryService({ configPath, cachePath });
+    await service.initialize();
+    await service.addRoot(rootPath);
+    const before = fs.readFileSync(cachePath, 'utf8');
+    const list = service.listSets({});
+    const expected = [{ path: path.join(rootPath, 'set-one'), online: true,
+      previewImagePath: path.join(rootPath, 'set-one', '01.jpg') }];
+    expect(list.items[0].favoriteTargets).toEqual(expected);
+    expect(service.getSet('set-one').favoriteTargets).toEqual(expected);
+    expect(fs.readFileSync(cachePath, 'utf8')).toBe(before);
+    expect(before).not.toContain(rootPath);
+
+    fs.renameSync(rootPath, `${rootPath}-offline`);
+    const restored = new CosLibraryService({ configPath, cachePath });
+    await restored.initialize();
+    expect(restored.getSet('set-one').favoriteTargets).toEqual([
+      { path: path.join(rootPath, 'set-one'), online: false, previewImagePath: null }
+    ]);
+  });
+
   test('persists roots and a path-free cache, then keeps cached sets when the root is offline', async () => {
     const service = new CosLibraryService({ configPath, cachePath, now: () => 1234 });
     await service.initialize();
