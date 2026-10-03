@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- 当前小片：署名下套图卡片与收藏
+- 当前小片：Cos 固定入口与连续浏览，入口布局 C（3.8.1）
 - 状态：完成
 
 ## 实现记录
@@ -62,3 +62,13 @@
 - 真实生产 renderer 经 localhost QA 接口适配验证虚拟列表：模式来回前后均 1057px；全库随机第 8204 套后返回定位其附近，随后手动打开再返回均为 513896px；按图片数降序 52→51 张，搜索/类型/排序保留；QA 副本收藏、紧凑密度与 880px 窄窗口检查通过。此验证不冒充原生 Finder/PictureView 外部动作。
 - 审计及验证材料在 /Volumes/1TB/99-管理/{任务,报告}/cos-continuous-browsing-20261003；管理卷布局检查通过。临时 localhost 测试服务及浏览器页在讨论样张完成后停止/关闭。三种入口位置讨论稿另存 entry-options/，未修改软件。
 - 最新用户反馈：独立模式栏占了一整排空间，不是最优设计。A01 的入口视觉布局回到讨论，功能保存为 3.8.0 初版，不把已有测试通过描述成用户接受该布局。
+
+## 2026-10-04 · C：窗口标题栏入口（3.8.1）
+
+- 用户“选C”：Mac 入口合入窗口标题栏右侧，移除独立模式行；32px 标题栏、24px 紧凑双标签，左侧保留原生窗口控件及 80px 空间。非 Mac 继续原生框架和初版模式行，不新增依赖。
+- 保留卡片、连续换套、Esc 和各模式位置保存；查看器覆盖模式区，顶部预留三色按钮空间。实际宽窗口发现 MUI sm padding 覆盖，补媒体查询级回归并修正；1280/520px renderer 实测均为 80px。
+- RED→GREEN：窗口配置、标题栏导航、大图避让；宽窗口回归先为 24px 失败。最终 57 套件、725 项全量测试通过，完整 npm run build 成功，仍有既有 bundle 体积和缺 Developer ID 签名提示。
+- 已正常退出旧版、保留可恢复副本，再安装到本轮主机 Mac-Studio.local 的 /Applications/Photo Album Viewer.app，版本 3.8.1。最终 app.asar SHA256 1d681fd0e139b4d61d934ffd45951a8ffca0dcd1ffb1d6dbe2746203efcbe471，与最终构建相同。旧 3.8.0：/Volumes/1TB/99-管理/临时/backups/cos-titlebar-20261004/Photo Album Viewer 3.8.0.app。
+- 原生启动、文件夹/Cos 一键入口、窗口全屏进出、最小化后 Window 菜单恢复 Cos 页面、照片 F 进出及 Esc 返回已核对。标题栏拖拽已执行且无导航，但工具不返回窗口坐标；窄窗口用生产 renderer 核对 520/360px，不冒充 native resize 验证。
+- 原生工具在全屏后偶有旧画面和窗口句柄失效，最终重启后截图/AX 一致。实际安装图 native-final.jpg；真实套图 renderer-sets.jpg；窄窗口 renderer-narrow-520.jpg。材料在 /Volumes/1TB/99-管理/{任务,报告}/cos-titlebar-20261004。
+- 运行不修改源 cosset.json、图片或视频；收藏未作为本轮写入目标。临时 QA 用缓存副本，浏览器页已关闭，服务交付前停止；继续 codex/cos-continuous-browsing 保留对比，不合并、不推送。

@@ -2,6 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
 const http = require('http');
+const { MAC_TRAFFIC_LIGHT_POSITION } = require('../../common/window-chrome');
 const {
   validateNavigationTargetV1
 } = require('../../common/contracts/navigation-contract-v1');
@@ -74,6 +75,12 @@ function createWindow(launchTarget = null) {
   const newWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    ...(process.platform === 'darwin' ? {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION,
+      minWidth: 360,
+      minHeight: 320
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       sandbox: false,

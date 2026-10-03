@@ -50,6 +50,7 @@ const setupWindowService = ({ isDev = true, httpImpl } = {}) => {
 };
 
 describe('WindowService', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
   let consoleLogSpy;
   let consoleErrorSpy;
   let consoleWarnSpy;
@@ -66,6 +67,25 @@ describe('WindowService', () => {
     consoleErrorSpy.mockRestore();
     consoleWarnSpy.mockRestore();
     jest.resetModules();
+    Object.defineProperty(process, 'platform', platformDescriptor);
+  });
+
+  test('uses inset native macOS controls so renderer mode controls share the window titlebar', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    const { WindowService, electron } = setupWindowService({ isDev: false });
+    WindowService.createWindow();
+    expect(electron.BrowserWindow).toHaveBeenCalledWith(expect.objectContaining({
+      titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 9 }
+    }));
+    expect(electron.BrowserWindow.mock.calls[0][0].frame).not.toBe(false);
+  });
+
+  test.each(['win32', 'linux'])('retains the standard native window frame on %s', platform => {
+    Object.defineProperty(process, 'platform', { value: platform });
+    const { WindowService, electron } = setupWindowService({ isDev: false });
+    WindowService.createWindow();
+    expect(electron.BrowserWindow.mock.calls[0][0].titleBarStyle).toBeUndefined();
+    expect(electron.BrowserWindow.mock.calls[0][0].frame).not.toBe(false);
   });
 
   test('dev mode loads dev server url and sets main window', async () => {

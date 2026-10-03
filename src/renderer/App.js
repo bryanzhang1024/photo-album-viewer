@@ -11,7 +11,8 @@ import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import CHANNELS from '../common/ipc-channels';
 import Box from '@mui/material/Box';
-import BrowseModeTabs from './components/BrowseModeTabs';
+import AppTitleBar from './components/AppTitleBar';
+import { MAC_TITLEBAR_HEIGHT } from '../common/window-chrome';
 
 const ipcRenderer = window.electronAPI || null;
 const PERFORMANCE_SETTINGS_KEY = 'performance_settings';
@@ -195,8 +196,9 @@ function App() {
       <SettingsProvider>
         <FavoritesProvider>
           <ScrollPositionContext.Provider value={scrollContext}>
-            <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', '--app-modebar-height': '36px' }}>
-            <BrowseModeTabs />
+            <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column',
+              '--app-chrome-height': window.electronAPI?.platform === 'darwin' ? `${MAC_TITLEBAR_HEIGHT}px` : '36px' }}>
+            <AppTitleBar />
             <Box sx={{ flex: 1, minHeight: 0 }}>
             <Routes>
               <Route path="/" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />

@@ -10,7 +10,7 @@ import {
 
 function PageLayout({ loading, error, headerContent, subHeaderContent = null, children, scrollContainerRef }) {
   return (
-    <Box sx={{ flexGrow: 1, height: 'calc(100vh - var(--app-modebar-height, 0px))', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ flexGrow: 1, height: 'calc(100vh - var(--app-chrome-height, 0px))', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar variant="dense" sx={{ flexWrap: 'wrap', gap: 0.5, rowGap: 1.5, pt: 1.5, pb: 0.5 }}>
           {headerContent}

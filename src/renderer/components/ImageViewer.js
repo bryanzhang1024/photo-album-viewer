@@ -39,6 +39,7 @@ import {
   getVisibleImageIndices
 } from '../utils/viewerPages';
 import CHANNELS from '../../common/ipc-channels';
+import { MAC_WINDOW_CONTROLS_WIDTH } from '../../common/window-chrome';
 
 const ipcRenderer = window.electronAPI || null;
 
@@ -1048,10 +1049,16 @@ function ImageViewer({ images, currentIndex, onClose, onIndexChange, onImageDele
           transform: toolbarVisible ? 'translateY(0)' : 'translateY(-100%)',
           pointerEvents: toolbarVisible ? 'auto' : 'none',
           backdropFilter: 'blur(5px)',
-          WebkitBackdropFilter: 'blur(5px)'
+          WebkitBackdropFilter: 'blur(5px)',
+          WebkitAppRegion: ipcRenderer?.platform === 'darwin' ? 'drag' : undefined,
+          '& button': { WebkitAppRegion: 'no-drag' }
         }}
       >
-        <Toolbar variant="dense" sx={{ minHeight: '40px' }}>
+        <Toolbar variant="dense" sx={theme => ({ minHeight: '40px',
+          ...(ipcRenderer?.platform === 'darwin' ? {
+            pl: `${MAC_WINDOW_CONTROLS_WIDTH}px`,
+            [theme.breakpoints.up('sm')]: { pl: `${MAC_WINDOW_CONTROLS_WIDTH}px` }
+          } : {}) })}>
           <IconButton 
             edge="start" 
             color="inherit" 
