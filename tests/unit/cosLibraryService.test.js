@@ -36,6 +36,22 @@ describe('CosLibraryService', () => {
     fs.rmSync(fixturePath, { recursive: true, force: true });
   });
 
+  test('serves a usable cached index before the online refresh finishes', async () => {
+    const seeded = new CosLibraryService({ configPath, cachePath });
+    await seeded.initialize();
+    await seeded.addRoot(rootPath);
+    const service = new CosLibraryService({ configPath, cachePath });
+    let finish;
+    jest.spyOn(service, 'refresh').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    let ready = false;
+    const initialization = service.initialize().then(status => { ready = true; return status; });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(ready).toBe(true);
+    expect(service.listSets({}).total).toBe(1);
+    finish?.({ ok: true });
+    await initialization;
+  });
+
   test('supplies runtime favorite paths and cover previews without persisting absolute paths in the catalog cache', async () => {
     const service = new CosLibraryService({ configPath, cachePath });
     await service.initialize();

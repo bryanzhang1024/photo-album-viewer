@@ -46,11 +46,11 @@ jest.mock('../../../src/renderer/components/ImageViewer', () =>
 );
 
 jest.mock('../../../src/renderer/components/PageLayout', () =>
-  jest.fn(({ headerContent, subHeaderContent, children }) => (
+  jest.fn(({ headerContent, subHeaderContent, children, scrollContainerRef }) => (
     <div>
       <div data-testid="page-header">{headerContent}</div>
       {subHeaderContent ? <div data-testid="page-subheader">{subHeaderContent}</div> : null}
-      <div>{children}</div>
+      <div ref={scrollContainerRef} data-testid="page-scroll">{children}</div>
     </div>
   ))
 );
@@ -206,6 +206,17 @@ describe('AlbumPage refresh button', () => {
       breadcrumbs: [],
       metadata: { totalNodes: 0 }
     });
+  });
+
+  test('captures the photo thumbnail scroll before switching browse modes', async () => {
+    const savePosition = jest.fn();
+    render(<ScrollPositionContext.Provider value={{ savePosition, getPosition: () => 0 }}>
+      <AlbumPage colorMode={{ mode: 'light' }} albumPath="/albums/trip" urlMode={true} />
+    </ScrollPositionContext.Provider>);
+    await screen.findByTestId('image-card');
+    screen.getByTestId('page-scroll').scrollTop = 876;
+    fireEvent(window, new Event('browse-mode-leave'));
+    expect(savePosition).toHaveBeenCalledWith(expect.any(String), 876);
   });
 
   test('places refresh first and random lives in tune popover', async () => {
@@ -575,6 +586,27 @@ describe('AlbumPage refresh button', () => {
     expect(onGoBack).toHaveBeenCalledTimes(1);
     expect(onAlbumClick).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  test('uses Escape to leave an embedded Cos album but keeps viewer keys inside the viewer', async () => {
+    const onGoBack = jest.fn();
+    render(<AlbumPage albumPath="/albums/trip" urlMode={true} embeddedMode={true} onGoBack={onGoBack} />);
+    await act(async () => { fireEvent.keyDown(window, { key: 'Escape' }); });
+    expect(onGoBack).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('image-card'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses semantic set navigation for embedded arrows only outside the viewer', async () => {
+    const onAdjacentBrowse = jest.fn();
+    render(<AlbumPage albumPath="/albums/trip" urlMode={true} embeddedMode={true}
+      onAdjacentBrowse={onAdjacentBrowse} />);
+    await act(async () => { fireEvent.keyDown(window, { key: 'ArrowRight' }); });
+    expect(onAdjacentBrowse).toHaveBeenCalledWith('next');
+    fireEvent.click(screen.getByTestId('image-card'));
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(onAdjacentBrowse).toHaveBeenCalledTimes(1);
   });
 
   test.each(SOURCE_BOUNDARY_CASES)(

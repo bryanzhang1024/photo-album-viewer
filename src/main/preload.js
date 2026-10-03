@@ -47,6 +47,7 @@ try {
     COS_LIST_LOOKS: 'cos-list-looks',
     COS_LIST_COSERS: 'cos-list-cosers',
     COS_LIST_SETS: 'cos-list-sets',
+    COS_LIST_SET_IDS: 'cos-list-set-ids',
     COS_LIST_RANDOM_SET_IDS: 'cos-list-random-set-ids',
     COS_GET_SET: 'cos-get-set',
     COS_GET_SET_IMAGES: 'cos-get-set-images',
@@ -54,7 +55,8 @@ try {
     COS_GET_MEDIA_THUMBNAIL: 'cos-get-media-thumbnail',
     COS_SHOW_SET_IN_FOLDER: 'cos-show-set-in-folder',
     COS_OPEN_IN_PICTUREVIEW: 'cos-open-in-pictureview',
-    COS_INDEX_PROGRESS: 'cos-index-progress'
+    COS_INDEX_PROGRESS: 'cos-index-progress',
+    COS_LIBRARY_UPDATED: 'cos-library-updated'
   };
 }
 
@@ -92,6 +94,7 @@ const INVOKE_CHANNELS = new Set([
   CHANNELS.COS_LIST_LOOKS,
   CHANNELS.COS_LIST_COSERS,
   CHANNELS.COS_LIST_SETS,
+  CHANNELS.COS_LIST_SET_IDS,
   CHANNELS.COS_LIST_RANDOM_SET_IDS,
   CHANNELS.COS_GET_SET,
   CHANNELS.COS_GET_SET_IMAGES,
@@ -104,7 +107,8 @@ const INVOKE_CHANNELS = new Set([
 const LISTEN_CHANNELS = new Set([
   CHANNELS.FAVORITES_UPDATED,
   CHANNELS.SCAN_NAVIGATION_PROGRESS,
-  CHANNELS.COS_INDEX_PROGRESS
+  CHANNELS.COS_INDEX_PROGRESS,
+  CHANNELS.COS_LIBRARY_UPDATED
 ]);
 
 function ensureInvokeChannel(channel) {

@@ -47,3 +47,18 @@
 - 旧 3.7.0 正常退出后复制并核验 app.asar/Info.plist，备份：/Volumes/1TB/99-管理/临时/backups/cos-card-no-outline-20261003/Photo Album Viewer 3.7.0.app。新 .app 安装到当前 Mac-Studio.local 的 /Applications/Photo Album Viewer.app，版本与 app.asar 指纹核对通过。
 - 安装包代码通过独立 userData 副本启动并进入真实 Cos 署名套图列表；原生工具出现旧画面缓存和失效窗口句柄，未用该截图声称描边通过。补以实际 CosSetCard 模块渲染检查：三套真实内容，暗/浅色 computed border 为 0px、背景与圆角保留，截图在 /Volumes/1TB/99-管理/报告/cos-card-no-outline-20261003/dark-no-outline.jpg。无新增依赖，临时预览绑定 127.0.0.1，结束后停止并关闭测试页。
 - 未修改源 JSON、目录、媒体或真实收藏。固定入口、加载等待、滚动恢复、Esc、左右换套和套图排序仍列为待办。
+
+
+## 2026-10-03 · Cos 固定入口与连续浏览初版（3.8.0）
+
+- 用户授权 C03–C06、A01、A02，并最初选择顶部两模式标签。开发分支 codex/cos-continuous-browsing 基于 71df502，原卡片对比分支保留；未合并、未推送。
+- 完整集合排序后分页，缩略图页左右键和按钮换套；大图继续照片导航，Esc 逐层返回。顺序/随机导航共用互斥请求，位置/范围或索引代次变化时丢弃旧结果。
+- Cos 返回保存已加载数据和 Virtuoso 测量快照；换过套图或从列表随机打开后，用完整显示顺序补齐分页再定位最后看的套图。模式切换保存普通文件夹、照片页和 Cos 列表的位置，恢复等待内容加载。
+- 补名称、图片数量、文件夹修改时间升降序，兼容原相对路径缓存；保留随机、原收藏系统、三档密度及 ImageViewer。源 JSON/媒体未写，真实收藏未用作测试目标。
+- 缓存先恢复再后台刷新，启动 renderer 后预热。9361 套、109608312 字节缓存的单次可用状态等待：基线 10868.76ms，最终 3592.73ms；最终后台完成 13208.62ms。数据量相同，时间仅说明前台解除等待，不表示总扫描加速。
+- 测试先复现缓存阻塞、分页恢复、Esc、旧范围请求、虚拟列表 undefined 初始索引、失败加载和首页随机禁用问题，再修复。最终 57 套件、720 项全量通过；npm run build 成功生成 arm64 .app。未新增依赖；保留既有 bundle 体积与无 Developer ID 签名提示。
+- 安装目标当前 Mac-Studio.local 的 /Applications/Photo Album Viewer.app，版本 3.8.0；app.asar SHA256 3ce164ad2de3ae652ff251234bde1eb6348fb8b5aea8bb1c3be11c05a09c99b5，与最终构建一致。3.7.1 旧版备份位于 /Volumes/1TB/99-管理/临时/backups/cos-continuous-browsing-20261003/Photo Album Viewer 3.7.1.app。
+- 安装版验证真实半半子列表、2/120→3/120 换套及反向换套；大图 1/44→2/44 仍在同一套，Esc 仅关闭大图，再次 Esc 返回列表；首页返回后随机可用。暗色截图 installed-dark.jpg 保存在本轮报告目录。
+- 真实生产 renderer 经 localhost QA 接口适配验证虚拟列表：模式来回前后均 1057px；全库随机第 8204 套后返回定位其附近，随后手动打开再返回均为 513896px；按图片数降序 52→51 张，搜索/类型/排序保留；QA 副本收藏、紧凑密度与 880px 窄窗口检查通过。此验证不冒充原生 Finder/PictureView 外部动作。
+- 审计及验证材料在 /Volumes/1TB/99-管理/{任务,报告}/cos-continuous-browsing-20261003；管理卷布局检查通过。临时 localhost 测试服务及浏览器页在讨论样张完成后停止/关闭。三种入口位置讨论稿另存 entry-options/，未修改软件。
+- 最新用户反馈：独立模式栏占了一整排空间，不是最优设计。A01 的入口视觉布局回到讨论，功能保存为 3.8.0 初版，不把已有测试通过描述成用户接受该布局。

@@ -305,7 +305,7 @@ describe('SourceRoot V1 IPC', () => {
       sourceRootService: { resolveNavigationTarget }
     });
     const WindowService = require('../../src/main/services/WindowService');
-    WindowService.createWindow.mockReturnValue({ id: 703 });
+    WindowService.createWindow.mockReturnValue({ id: 703, webContents: { once: jest.fn() } });
 
     const result = await electron.ipcMain.invoke(CHANNELS.CREATE_NEW_WINDOW, payload);
 
@@ -334,7 +334,7 @@ describe('SourceRoot V1 IPC', () => {
         }
       });
       const WindowService = require('../../src/main/services/WindowService');
-      WindowService.createWindow.mockReturnValue({ id: 703 });
+      WindowService.createWindow.mockReturnValue({ id: 703, webContents: { once: jest.fn() } });
 
       await flushMainReady();
 
@@ -376,7 +376,7 @@ describe('SourceRoot V1 IPC', () => {
         }
       });
       const WindowService = require('../../src/main/services/WindowService');
-      WindowService.createWindow.mockReturnValue({ id: 704 });
+      WindowService.createWindow.mockReturnValue({ id: 704, webContents: { once: jest.fn() } });
 
       await flushMainReady();
 
@@ -411,7 +411,7 @@ describe('SourceRoot V1 IPC', () => {
         }
       });
       const WindowService = require('../../src/main/services/WindowService');
-      WindowService.createWindow.mockReturnValue({ id: 706 });
+      WindowService.createWindow.mockReturnValue({ id: 706, webContents: { once: jest.fn() } });
 
       await flushMainReady();
 

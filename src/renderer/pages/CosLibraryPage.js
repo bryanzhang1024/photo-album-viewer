@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -34,7 +34,7 @@ import { Virtuoso } from 'react-virtuoso';
 import CHANNELS from '../../common/ipc-channels';
 import AlbumPage from './AlbumPage';
 import PageLayout from '../components/PageLayout';
-import { TunePopover } from '../components/GridPageToolbar';
+import { SortControls, TunePopover } from '../components/GridPageToolbar';
 import { ScrollPositionContext } from '../App';
 import { DEFAULT_DENSITY, GRID_CONFIG, chunkIntoRows, computeGridColumns } from '../utils/virtualGrid';
 import imageCache from '../utils/ImageCacheManager';
@@ -261,13 +261,13 @@ function SetCard({ item, context, currentCoser, onClick, onError }) {
   );
 }
 
-function LandingCard({ icon, title, count, unit = '项', subtitle, onClick }) {
+function LandingCard({ icon, title, count, unit = '项', subtitle, onClick, disabled }) {
   return (
-    <Paper component={ButtonBase} onClick={onClick} sx={{ p: 2.5, textAlign: 'left', justifyContent: 'flex-start', borderRadius: 2 }}>
+    <Paper component={ButtonBase} onClick={onClick} disabled={disabled} sx={{ p: 2.5, textAlign: 'left', justifyContent: 'flex-start', borderRadius: 2 }}>
       <Box sx={{ display: 'grid', gap: 0.75 }}>
         <Box sx={{ color: 'primary.main' }}>{icon}</Box>
         <Typography variant="h6" fontWeight={700}>{title}</Typography>
-        <Typography variant="h5">{formatCount(count)} {unit}</Typography>
+        <Typography variant="h5">{count == null ? '读取中' : `${formatCount(count)} ${unit}`}</Typography>
         <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
       </Box>
     </Paper>
@@ -282,6 +282,9 @@ function CosLibraryPage({ colorMode }) {
   const scrollContext = useContext(ScrollPositionContext);
   const scrollContainerRef = useRef(null);
   const virtualScrollerRef = useRef(null);
+  const virtuosoRef = useRef(null);
+  const localViewStates = useRef(new Map());
+  const viewStates = scrollContext.cosViewStates || localViewStates.current;
   const view = useMemo(
     () => readLocationView(location),
     [location.pathname, location.search, location.state]
@@ -296,6 +299,16 @@ function CosLibraryPage({ colorMode }) {
   }, [location.search]);
   const isAlbumRoute = location.pathname === '/cos/album';
   const scrollPositionKey = `${location.pathname}${location.search}`;
+  const keyRef = useRef(scrollPositionKey);
+  keyRef.current = scrollPositionKey;
+  const viewKindRef = useRef(view.kind);
+  viewKindRef.current = view.kind;
+  const queryEpochRef = useRef(0);
+  const savedView = useMemo(() => viewStates.get(scrollPositionKey), [viewStates, scrollPositionKey]);
+  const sortParams = new URLSearchParams(location.search);
+  const sortBy = ['imageCount', 'lastModified'].includes(sortParams.get('sort')) ? sortParams.get('sort') : 'name';
+  const sortDirection = sortParams.get('direction') === 'desc' ? 'desc' : 'asc';
+  const sortSelectId = useId();
   const [status, setStatus] = useState(null);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -304,6 +317,7 @@ function CosLibraryPage({ colorMode }) {
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(null);
   const [album, setAlbum] = useState(null);
+  const [restoreAnchorIndex, setRestoreAnchorIndex] = useState(null);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [userDensity, setUserDensityState] = useState(() => {
     const savedDensity = localStorage.getItem('userDensity');
@@ -329,9 +343,12 @@ function CosLibraryPage({ colorMode }) {
       theme: params.get('theme') || '',
       characterId: originView.character?.id,
       lookId: originView.look?.id,
-      coserId: originView.coser?.id
+      coserId: originView.coser?.id,
+      sortBy: ['imageCount', 'lastModified'].includes(params.get('sort')) ? params.get('sort') : 'name',
+      sortDirection: params.get('direction') === 'desc' ? 'desc' : 'asc',
+      revision: status?.revision || 0
     };
-  }, [randomOrigin]);
+  }, [randomOrigin, status?.revision]);
 
   const densityConfig = GRID_CONFIG[userDensity] || GRID_CONFIG[DEFAULT_DENSITY];
   const columns = useMemo(
@@ -340,14 +357,28 @@ function CosLibraryPage({ colorMode }) {
   );
 
   const saveScrollPosition = useCallback(() => {
+    if (isAlbumRoute) return;
     const scrollElement = virtualScrollerRef.current || scrollContainerRef.current;
     if (scrollElement) {
       scrollContext.savePosition(scrollPositionKey, scrollElement.scrollTop);
+      const entry = { items, total, scrollTop: scrollElement.scrollTop, columns,
+        loaded: !loading, snapshot: null, focusAnchor: false };
+      viewStates.set(scrollPositionKey, entry);
+      virtuosoRef.current?.getState(snapshot => { entry.snapshot = snapshot; });
     }
-  }, [scrollContext, scrollPositionKey]);
+  }, [scrollContext, scrollPositionKey, isAlbumRoute, items, total, columns, loading, viewStates]);
+  const saveRef = useRef(saveScrollPosition);
+  saveRef.current = saveScrollPosition;
+  // Layout cleanup runs before the virtual scroller ref is detached on mode switch.
+  useLayoutEffect(() => () => saveRef.current(), []);
 
-  const navigateSet = useCallback((setItem, albumPath) => {
+  const navigateSet = useCallback((setItem, albumPath, focusOnReturn = false) => {
     if (!isAlbumRoute) saveScrollPosition();
+    if (isAlbumRoute || focusOnReturn) {
+      const key = `${randomOrigin.pathname}${randomOrigin.search || ''}`;
+      const saved = viewStates.get(key) || {};
+      viewStates.set(key, { ...saved, anchorId: setItem.id, focusAnchor: true });
+    }
     const params = new URLSearchParams({
       set: setItem.id,
       from: `${randomOrigin.pathname}${randomOrigin.search || ''}`
@@ -361,7 +392,9 @@ function CosLibraryPage({ colorMode }) {
         returnLocation: randomOrigin
       }
     });
-  }, [isAlbumRoute, navigate, randomOrigin, saveScrollPosition]);
+  }, [isAlbumRoute, navigate, randomOrigin, saveScrollPosition, viewStates]);
+
+  const openNavigatedSet = useCallback((setItem, albumPath) => navigateSet(setItem, albumPath, true), [navigateSet]);
 
   const randomNavigation = useCosRandomNavigation({
     scope: randomScope,
@@ -369,7 +402,7 @@ function CosLibraryPage({ colorMode }) {
     currentSetId: isAlbumRoute ? new URLSearchParams(location.search).get('set') : null,
     available: Boolean(ipcRenderer && status?.roots?.some(root => root.status === 'online') && !loading),
     ipcRenderer,
-    onOpen: navigateSet,
+    onOpen: openNavigatedSet,
     onError: setError
   });
 
@@ -387,10 +420,7 @@ function CosLibraryPage({ colorMode }) {
 
   const bindVirtualScroller = useCallback((node) => {
     virtualScrollerRef.current = node;
-    if (node) {
-      node.scrollTop = scrollContext.getPosition(scrollPositionKey);
-    }
-  }, [scrollContext, scrollPositionKey]);
+  }, []);
 
   const setUserDensity = useCallback((density) => {
     if (!GRID_CONFIG[density]) return;
@@ -441,10 +471,11 @@ function CosLibraryPage({ colorMode }) {
   }, [isAlbumRoute, location.search, location.state, navigate, saveScrollPosition, view]);
 
   const updateFilter = useCallback((key, value) => {
+    saveScrollPosition();
     const params = new URLSearchParams(location.search);
     if (value) params.set(key, value); else params.delete(key);
     navigate({ pathname: location.pathname, search: `?${params}` }, { replace: true, state: location.state });
-  }, [location, navigate]);
+  }, [location, navigate, saveScrollPosition]);
   const updateQuery = (value) => updateFilter('q', value);
 
   useEffect(() => {
@@ -460,19 +491,9 @@ function CosLibraryPage({ colorMode }) {
   }, [isAlbumRoute, location.pathname]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const scrollElement = virtualScrollerRef.current || scrollContainerRef.current;
-      if (scrollElement) {
-        scrollElement.scrollTop = scrollContext.getPosition(scrollPositionKey);
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [scrollContext, scrollPositionKey]);
-
-  useEffect(() => {
     if (isAlbumRoute) return undefined;
     const handleKeyDown = (event) => {
-      if (event.key !== 'Backspace' || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.defaultPrevented || !['Backspace', 'Escape'].includes(event.key) || event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditableTarget(document.activeElement)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -482,10 +503,20 @@ function CosLibraryPage({ colorMode }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goBack, isAlbumRoute]);
 
-  useEffect(() => {
-    setItems([]);
-    setTotal(0);
-  }, [location.pathname, location.search]);
+  useLayoutEffect(() => {
+    if (isAlbumRoute) return;
+    if (view.kind === 'landing') {
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+    const saved = viewStates.get(scrollPositionKey);
+    setItems(saved?.items || []);
+    setTotal(saved?.total || 0);
+    setLoading(!saved?.loaded || (saved?.focusAnchor && !saved.items?.some(item => item.id === saved.anchorId)));
+    setLoadingMore(false);
+    setRestoreAnchorIndex(saved?.focusAnchor ? saved.items?.findIndex(item => item.id === saved.anchorId) ?? -1 : null);
+  }, [scrollPositionKey, isAlbumRoute, view.kind, viewStates]);
 
   useEffect(() => {
     let active = true;
@@ -499,12 +530,26 @@ function CosLibraryPage({ colorMode }) {
         if (active) setStatus(result);
       })
       .catch((reason) => {
-        if (active) setError(reason?.message || '无法载入 Cos 图库');
+        if (active) {
+          setError(reason?.message || '无法载入 Cos 图库');
+          setLoading(false);
+        }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && viewKindRef.current === 'landing') setLoading(false);
       });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!ipcRenderer?.on) return undefined;
+    const listener = (_event, nextStatus) => {
+      setStatus(nextStatus);
+      if (!nextStatus.refreshing) setProgress(null);
+      if (nextStatus.refreshError) setError(nextStatus.refreshError);
+    };
+    ipcRenderer.on(CHANNELS.COS_LIBRARY_UPDATED, listener);
+    return () => ipcRenderer.removeListener?.(CHANNELS.COS_LIBRARY_UPDATED, listener);
   }, []);
 
   useEffect(() => {
@@ -516,7 +561,7 @@ function CosLibraryPage({ colorMode }) {
 
   const requestForView = useCallback((offset = 0) => {
     if (isAlbumRoute) return null;
-    const common = { query, offset, limit: PAGE_SIZE };
+    const common = { query, offset, limit: PAGE_SIZE, sortBy, sortDirection };
     if (view.kind === 'characters') return [CHANNELS.COS_LIST_CHARACTERS, common];
     if (view.kind === 'cosers') return [CHANNELS.COS_LIST_COSERS, { ...common, groupSingletons: true }];
     if (view.kind === 'looks') {
@@ -532,17 +577,40 @@ function CosLibraryPage({ colorMode }) {
       }];
     }
     return null;
-  }, [isAlbumRoute, query, view, filters]);
+  }, [isAlbumRoute, query, view, filters, sortBy, sortDirection]);
 
   useEffect(() => {
     const request = requestForView(0);
-    if (!request || !ipcRenderer || status?.state === 'empty') return undefined;
+    if (!request || !ipcRenderer || !status) return undefined;
+    if (status.state === 'empty') {
+      queryEpochRef.current += 1;
+      viewStates.clear();
+      setItems([]);
+      setTotal(0);
+      setLoading(false);
+      return undefined;
+    }
+    if (status.state === 'indexing') return undefined;
     let active = true;
+    queryEpochRef.current += 1;
     const timer = setTimeout(() => {
-      setLoading(true);
-      ipcRenderer.invoke(...request)
+      const saved = viewStates.get(scrollPositionKey);
+      const loadingAnchor = saved?.focusAnchor && !saved.items?.some(item => item.id === saved.anchorId);
+      setLoading(!saved?.loaded || loadingAnchor);
+      const fetch = async () => {
+        let limit = Math.max(PAGE_SIZE, saved?.items?.length || 0);
+        if (saved?.focusAnchor && view.kind === 'sets') {
+          const ids = await ipcRenderer.invoke(CHANNELS.COS_LIST_SET_IDS, { ...request[1], includeUnavailable: true });
+          if (!active) return null;
+          const index = (ids || []).indexOf(saved.anchorId);
+          setRestoreAnchorIndex(index >= 0 ? index : null);
+          if (index >= 0) limit = Math.max(limit, Math.ceil((index + 1) / PAGE_SIZE) * PAGE_SIZE);
+        }
+        return ipcRenderer.invoke(request[0], { ...request[1], limit });
+      };
+      fetch()
         .then((result) => {
-          if (!active) return;
+          if (!active || !result) return;
           setItems(result?.items || []);
           setTotal(result?.total || 0);
         })
@@ -557,21 +625,24 @@ function CosLibraryPage({ colorMode }) {
       active = false;
       clearTimeout(timer);
     };
-  }, [requestForView, status?.state]);
+  }, [requestForView, status?.state, status?.revision, scrollPositionKey, viewStates]);
 
   const loadMore = useCallback(() => {
     if (loading || loadingMore || items.length >= total) return;
     const request = requestForView(items.length);
     if (!request) return;
     setLoadingMore(true);
+    const epoch = queryEpochRef.current;
+    const key = scrollPositionKey;
     ipcRenderer.invoke(...request)
       .then((result) => {
+        if (epoch !== queryEpochRef.current || key !== keyRef.current) return;
         setItems((current) => [...current, ...(result?.items || [])]);
         setTotal(result?.total || 0);
       })
-      .catch((reason) => setError(reason?.message || '载入更多失败'))
-      .finally(() => setLoadingMore(false));
-  }, [items.length, loading, loadingMore, requestForView, total]);
+      .catch((reason) => { if (epoch === queryEpochRef.current && key === keyRef.current) setError(reason?.message || '载入更多失败'); })
+      .finally(() => { if (epoch === queryEpochRef.current && key === keyRef.current) setLoadingMore(false); });
+  }, [items.length, loading, loadingMore, requestForView, total, scrollPositionKey]);
 
   const handleSelectRoot = async () => {
     try {
@@ -644,6 +715,7 @@ function CosLibraryPage({ colorMode }) {
     }
 
     let active = true;
+    setAlbum(null);
     setLoading(true);
     Promise.all([
       ipcRenderer.invoke(CHANNELS.COS_GET_SET, setId),
@@ -675,7 +747,7 @@ function CosLibraryPage({ colorMode }) {
     coverMediaId: view.character.coverMediaId
   } : null;
 
-  if (isAlbumRoute && album) {
+  if (isAlbumRoute && album && album.set.id === new URLSearchParams(location.search).get('set')) {
     return (
       <>
         <AlbumPage
@@ -686,6 +758,8 @@ function CosLibraryPage({ colorMode }) {
           urlMode={true}
           onGoBack={goBack}
           embeddedMode={true}
+          onAdjacentBrowse={randomNavigation.handleAdjacentBrowse}
+          setNavigation={randomNavigation.setNavigation}
           onRandomBrowse={randomNavigation.handleRandomBrowse}
           randomBrowseLoading={randomNavigation.randomBrowseLoading}
           randomBrowseDisabled={randomNavigation.randomBrowseDisabled}
@@ -739,14 +813,15 @@ function CosLibraryPage({ colorMode }) {
         <Box>
           <Typography variant="h4" fontWeight={750}>Cos 图库</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {formatCount(summary.setCount)} 项 · {formatCount(summary.imageCount)} 张图片
+            {status ? `${formatCount(summary.setCount)} 项 · ${formatCount(summary.imageCount)} 张图片` : '正在读取图库缓存…'}
           </Typography>
         </Box>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' }, gap: 2 }}>
           <LandingCard
             icon={<BadgeIcon fontSize="large" />}
             title="按角色"
-            count={summary.characterCount}
+            count={status?.cached ? summary.characterCount : null}
+            disabled={status?.state === 'indexing'}
             unit="个角色"
             subtitle="角色 → 服装/造型 → 套图"
             onClick={() => pushView({ kind: 'characters', title: '角色' })}
@@ -754,7 +829,8 @@ function CosLibraryPage({ colorMode }) {
           <LandingCard
             icon={<PersonSearchIcon fontSize="large" />}
             title="按署名"
-            count={summary.coserCount}
+            count={status?.cached ? summary.coserCount : null}
+            disabled={status?.state === 'indexing'}
             unit="个署名"
             subtitle="人物、组织与发行来源"
             onClick={() => pushView({ kind: 'cosers', title: '署名' })}
@@ -762,7 +838,8 @@ function CosLibraryPage({ colorMode }) {
           <LandingCard
             icon={<CollectionsIcon fontSize="large" />}
             title="全部收藏"
-            count={summary.setCount}
+            count={status?.cached ? summary.setCount : null}
+            disabled={status?.state === 'indexing'}
             subtitle="名称、原名、署名、角色与主题搜索"
             onClick={() => pushView({ kind: 'sets', title: '全部收藏', context: 'all' })}
           />
@@ -794,8 +871,16 @@ function CosLibraryPage({ colorMode }) {
           {formatCount(total + (allSetsCard ? 1 : 0))} 项
         </Typography>
         <Virtuoso
+          key={scrollPositionKey}
+          ref={virtuosoRef}
           style={{ flex: 1, minHeight: 0 }}
           data={visibleRows}
+          {...(!savedView?.focusAnchor && savedView?.columns === columns && savedView.snapshot
+            ? { restoreStateFrom: savedView.snapshot } : {})}
+          {...(!savedView?.focusAnchor && !(savedView?.snapshot && savedView?.columns === columns) && savedView?.scrollTop
+            ? { initialScrollTop: savedView.scrollTop } : {})}
+          {...(restoreAnchorIndex != null && restoreAnchorIndex >= 0
+            ? { initialTopMostItemIndex: { index: Math.floor(restoreAnchorIndex / columns) + (allSetsCard ? 1 : 0), align: 'center' } } : {})}
           scrollerRef={bindVirtualScroller}
           endReached={loadMore}
           overscan={800}
@@ -880,6 +965,11 @@ function CosLibraryPage({ colorMode }) {
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
         />
       ) : null}
+      {view.kind === 'sets' ? <SortControls sortSelectId={sortSelectId} sortBy={sortBy} sortDirection={sortDirection}
+        sortOptions={[{ value: 'name', label: '名称' }, { value: 'imageCount', label: '图片数量' },
+          { value: 'lastModified', label: '修改时间' }]}
+        onSortChange={event => updateFilter('sort', event.target.value)}
+        onSortDirectionChange={() => updateFilter('direction', sortDirection === 'asc' ? 'desc' : 'asc')} /> : null}
       {view.kind !== 'landing' ? (
         <TunePopover
           userDensity={userDensity}
@@ -901,13 +991,15 @@ function CosLibraryPage({ colorMode }) {
   );
 
   return (
-    <PageLayout loading={loading} error="" headerContent={header} scrollContainerRef={scrollContainerRef}>
-      {progress?.total ? (
-        <Box sx={{ mb: 2 }}>
-          <LinearProgress variant="determinate" value={(progress.processed / progress.total) * 100} />
-          <Typography variant="caption" color="text.secondary">正在索引 {progress.processed} / {progress.total}</Typography>
-        </Box>
-      ) : null}
+    <PageLayout loading={loading && view.kind !== 'landing'} error="" headerContent={header} scrollContainerRef={scrollContainerRef}
+      subHeaderContent={status?.refreshing || progress?.total ? <Box sx={{ px: 1, py: 0.25 }}>
+        <Typography variant="caption" color="text.secondary">
+          {status?.cached ? '后台更新索引，可继续浏览' : '首次建立索引…'}
+          {progress?.total ? ` ${progress.processed} / ${progress.total}` : ''}
+        </Typography>
+        <LinearProgress variant={progress?.total ? 'determinate' : 'indeterminate'}
+          value={progress?.total ? (progress.processed / progress.total) * 100 : undefined} />
+      </Box> : null}>
       {isAlbumRoute ? (
         <Box sx={{ minHeight: 240, display: 'grid', placeItems: 'center' }}>
           <CircularProgress />

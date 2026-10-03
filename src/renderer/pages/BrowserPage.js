@@ -1145,6 +1145,7 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       </Tooltip>
 
       <Tabs
+        aria-label="文件夹标签页"
         value={activeTabId}
         onChange={handleTabChange}
         variant="scrollable"

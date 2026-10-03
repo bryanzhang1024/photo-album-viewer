@@ -185,7 +185,7 @@ function SettingsPage({ colorMode }) {
   }, []);
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: 'calc(100vh - var(--app-modebar-height, 0px))', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" elevation={0}>
         <Toolbar>
           <IconButton

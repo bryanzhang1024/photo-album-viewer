@@ -48,10 +48,10 @@ jest.mock('../../../src/renderer/components/BreadcrumbNavigation', () =>
 );
 
 jest.mock('../../../src/renderer/components/PageLayout', () =>
-  jest.fn(({ headerContent, children }) => (
+  jest.fn(({ headerContent, children, scrollContainerRef }) => (
     <div>
       <div data-testid="page-header">{headerContent}</div>
-      <div>{children}</div>
+      <div ref={scrollContainerRef} data-testid="page-scroll">{children}</div>
     </div>
   ))
 );
@@ -179,7 +179,7 @@ describe('HomePage refresh button', () => {
     });
   });
 
-  test('opens the dedicated Cos library from the home toolbar', async () => {
+  test('leaves the permanent mode entry to the app shell instead of duplicating it in the home toolbar', async () => {
     const navigate = jest.fn();
     reactRouter.useNavigate.mockReturnValue(navigate);
 
@@ -191,8 +191,19 @@ describe('HomePage refresh button', () => {
       </ScrollPositionContext.Provider>
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Cos 图库' }));
-    expect(navigate).toHaveBeenCalledWith('/cos');
+    expect(screen.queryByRole('button', { name: 'Cos 图库' })).not.toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalledWith('/cos');
+  });
+
+  test('captures the folder scroll before switching to the other browse mode', async () => {
+    const savePosition = jest.fn();
+    render(<ScrollPositionContext.Provider value={{ savePosition, getPosition: () => 0 }}>
+      <HomePage colorMode={{ mode: 'light' }} currentPath="/photos" urlMode={true} />
+    </ScrollPositionContext.Provider>);
+    await waitFor(() => expect(ipcRenderer.invoke).toHaveBeenCalledWith(CHANNELS.SCAN_NAVIGATION_LEVEL, '/photos'));
+    screen.getByTestId('page-scroll').scrollTop = 2345;
+    fireEvent(window, new Event('browse-mode-leave'));
+    expect(savePosition).toHaveBeenCalledWith(expect.any(String), 2345);
   });
 
   test('refreshes current folder in url mode', async () => {

@@ -689,7 +689,7 @@ describe('BrowserPage real random-navigation integration', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '新建标签页' }));
     await waitFor(() => {
-      const tabs = screen.getAllByRole('tab');
+      const tabs = within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab');
       expect(tabs).toHaveLength(2);
       expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
     });
@@ -705,30 +705,30 @@ describe('BrowserPage real random-navigation integration', () => {
     await pressBackspace();
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe(''));
 
-    fireEvent.click(screen.getAllByRole('tab')[0]);
+    fireEvent.click(within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab')[0]);
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')[0]).toHaveAttribute('aria-selected', 'true');
+      expect(within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab')[0]).toHaveAttribute('aria-selected', 'true');
     });
     await clickRandomBrowse();
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe('B'));
     await pressBackspace();
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe(''));
 
-    fireEvent.click(screen.getAllByRole('tab')[1]);
+    fireEvent.click(within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab')[1]);
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
+      expect(within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
     });
     await clickRandomBrowse();
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe('B'));
     await pressBackspace();
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe(''));
 
-    const activeSecondTab = screen.getAllByRole('tab')[1];
+    const activeSecondTab = within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab')[1];
     fireEvent.click(within(activeSecondTab).getByRole('button', { name: /关闭标签页/ }));
-    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(1));
+    await waitFor(() => expect(within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab')).toHaveLength(1));
 
     fireEvent.click(screen.getByRole('button', { name: '新建标签页' }));
-    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2));
+    await waitFor(() => expect(within(screen.getByRole('tablist', { name: '文件夹标签页' })).getAllByRole('tab')).toHaveLength(2));
     await clickRandomBrowse();
     await waitFor(() => expect(readCanonicalRoute().relativePath).toBe('A'));
 

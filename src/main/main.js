@@ -74,7 +74,12 @@ registerCosLibraryIpcHandlers({
   thumbnailService: ThumbnailService,
   registerApprovedRoot,
   getMainWindow,
-  thumbnailResolution: () => performanceSettings.thumbnailResolution
+  thumbnailResolution: () => performanceSettings.thumbnailResolution,
+  broadcast: (channel, payload) => {
+    for (const window of windows) {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(channel, payload);
+    }
+  }
 });
 
 const thumbnailProtocolStats = {
@@ -469,7 +474,10 @@ app.whenReady().then(async () => {
     dialog.showErrorBox?.('打开来源失败', '无法建立照片来源，应用将打开空白主页。');
   }
 
-  createWindow(launchTarget);
+  const initialWindow = createWindow(launchTarget);
+  initialWindow.webContents.once('did-finish-load', () => {
+    cosLibraryService.initialize().catch(error => console.warn('[Cos] 缓存预热失败:', error?.message));
+  });
   
   // 启动收藏数据文件监听
   await FavoritesService.startFavoritesWatcher();

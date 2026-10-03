@@ -105,6 +105,34 @@ describe('CosCatalogService', () => {
     fs.rmSync(fixturePath, { recursive: true, force: true });
   });
 
+  test('sorts the complete filtered set list before pagination and uses that order for navigation', () => {
+    const options = { coserId: 'coser:Alice', sortBy: 'imageCount', sortDirection: 'desc' };
+    expect(service.listSets({ ...options, limit: 1 }).items.map(item => item.id)).toEqual(['set-single']);
+    expect(service.listSets({ ...options, offset: 1, limit: 1 }).items.map(item => item.id)).toEqual(['set-multi-coser']);
+    expect(service.listSetIds(options)).toEqual(['set-single', 'set-multi-coser']);
+    expect(service.listSetIds({ ...options, sortDirection: 'asc' })).toEqual(['set-multi-coser', 'set-single']);
+  });
+
+  test('orders sets by folder modification time and preserves it through a cache round trip', async () => {
+    fs.utimesSync(path.join(rootA, 'single'), new Date(100000), new Date(100000));
+    fs.utimesSync(path.join(rootA, 'multi-coser'), new Date(200000), new Date(200000));
+    await service.buildIndex([{ id: 'root-a', path: rootA, label: 'A' }]);
+    expect(service.getSet('set-single').lastModified).toBe(100000);
+    const options = { coserId: 'coser:Alice', sortBy: 'lastModified', sortDirection: 'desc' };
+    expect(service.listSets(options).items.map(item => item.id)).toEqual(['set-multi-coser', 'set-single']);
+    const restored = new CosCatalogService();
+    restored.importSnapshot(service.exportSnapshot(), [{ id: 'root-a', path: rootA, status: 'online' }]);
+    expect(restored.listSetIds(options)).toEqual(['set-multi-coser', 'set-single']);
+  });
+
+  test('return anchors include unavailable cards in their displayed positions', () => {
+    service.sets.get('set-single').status = 'offline';
+    const options = { sortBy: 'imageCount', sortDirection: 'desc' };
+    expect(service.listSetIds({ ...options, includeUnavailable: true })).toEqual(
+      service.listSets(options).items.map(item => item.id));
+    expect(service.listSetIds(options)).not.toContain('set-single');
+  });
+
   test('random candidates cover the complete filtered index and exclude offline or empty sets', () => {
     const ids = service.listRandomSetIds({ viewKind: 'sets', characterId: 'character:初音未来', lookId: 'look:兔子洞' });
     expect(ids).toEqual(['set-single']);

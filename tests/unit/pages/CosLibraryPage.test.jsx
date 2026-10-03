@@ -5,14 +5,34 @@ import CHANNELS from '../../../src/common/ipc-channels';
 import CosLibraryPage from '../../../src/renderer/pages/CosLibraryPage';
 import imageCache from '../../../src/renderer/utils/ImageCacheManager';
 import { FavoritesContext } from '../../../src/renderer/contexts/FavoritesContext';
+import { ScrollPositionContext } from '../../../src/renderer/App';
 
-jest.mock('react-virtuoso', () => ({
-  Virtuoso: ({ data = [], itemContent, scrollerRef, style }) => (
-    <div ref={scrollerRef} data-testid="cos-virtual-grid" style={style}>
+jest.mock('react-virtuoso', () => {
+  const React = require('react');
+  return { Virtuoso: React.forwardRef((props, ref) => {
+    const { data = [], itemContent, scrollerRef, style, endReached, restoreStateFrom } = props;
+    // Virtuoso publishes explicitly supplied undefined into its initial-index stream.
+    if ('initialTopMostItemIndex' in props && props.initialTopMostItemIndex === undefined) {
+      throw new Error('initialTopMostItemIndex must be omitted or a valid index');
+    }
+    const nodeRef = React.useRef(null);
+    React.useImperativeHandle(ref, () => ({ getState: callback => callback({ ranges: [], scrollTop: nodeRef.current?.scrollTop || 0 }),
+      scrollToIndex: ({ index }) => { if (nodeRef.current) nodeRef.current.scrollTop = index * 100; } }));
+    React.useLayoutEffect(() => { if (nodeRef.current && restoreStateFrom) nodeRef.current.scrollTop = restoreStateFrom.scrollTop; }, [restoreStateFrom]);
+    return <div ref={node => {
+      nodeRef.current = node;
+      if (node) {
+        let value = node.scrollTop || 0;
+        Object.defineProperty(node, 'scrollTop', { configurable: true, get: () => value,
+          set: next => { value = Math.min(Number(next), Math.max(0, data.length * 100)); } });
+      }
+      scrollerRef?.(node);
+    }} data-testid="cos-virtual-grid" style={style}>
       {data.map((item, index) => <div key={index}>{itemContent(index, item)}</div>)}
-    </div>
-  )
-}));
+      <button onClick={() => endReached?.()}>加载下一批测试数据</button>
+    </div>;
+  }) };
+});
 
 jest.mock('../../../src/renderer/pages/AlbumPage', () => ({
   embeddedMode,
@@ -260,7 +280,7 @@ describe('CosLibraryPage', () => {
         case CHANNELS.COS_GET_SET_ALBUM_PATH:
           return '/library/set-one';
         case CHANNELS.COS_GET_SET:
-          return { id: 'set-one', displayName: '兔子洞写真套图' };
+          return { id: payload, displayName: '兔子洞写真套图' };
         case CHANNELS.COS_OPEN_IN_PICTUREVIEW:
         case CHANNELS.COS_SHOW_SET_IN_FOLDER:
           return { success: true };
@@ -307,6 +327,7 @@ describe('CosLibraryPage', () => {
       ? ['set-one'] : base(channel, payload));
     renderCosPage();
     await screen.findByRole('button', { name: /按角色/ });
+    await waitFor(() => expect(screen.getByRole('button', { name: '随机套图 (E)' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '随机套图 (E)' }));
     await screen.findByTestId('cos-album-page');
     fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
@@ -317,6 +338,7 @@ describe('CosLibraryPage', () => {
     fireEvent.keyDown(window, { key: 'e' });
     expect(window.electronAPI.invoke).not.toHaveBeenCalledWith('cos-list-random-set-ids', expect.anything());
     act(() => search.blur());
+    await waitFor(() => expect(screen.getByRole('button', { name: '随机套图 (E)' })).toBeEnabled());
     fireEvent.keyDown(window, { key: 'e' });
     await screen.findByTestId('cos-album-page');
   });
@@ -457,6 +479,128 @@ describe('CosLibraryPage', () => {
     expect(await screen.findByRole('button', { name: /按署名/ })).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/cos');
   });
+
+  test('uses Escape for one semantic parent level without consuming a focused search field', async () => {
+    renderCosPage('/cos/cosers');
+    const search = await screen.findByPlaceholderText('搜索当前分类');
+    act(() => search.focus());
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByTestId('location')).toHaveTextContent('/cos/cosers');
+    act(() => search.blur());
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(await screen.findByRole('button', { name: /按署名/ })).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/cos');
+  });
+
+  test('enables the landing random button after returning from a loaded category', async () => {
+    renderCosPage('/cos/cosers');
+    await screen.findByRole('button', { name: /其他/ });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(await screen.findByRole('button', { name: '随机套图 (E)' })).toBeEnabled();
+  });
+
+  test('shows the three entrances immediately while initial status is still being read', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    let finish;
+    window.electronAPI.invoke.mockImplementation((channel, ...args) => channel === CHANNELS.COS_GET_STATUS
+      ? new Promise(resolve => { finish = resolve; }) : base(channel, ...args));
+    renderCosPage();
+    expect(screen.getByRole('button', { name: /按署名/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /按角色/ })).toBeInTheDocument();
+    await act(async () => { finish(readyStatus()); });
+  });
+
+  test('finishes a category deep link with no configured roots instead of spinning forever', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    window.electronAPI.invoke.mockImplementation((channel, ...args) => channel === CHANNELS.COS_GET_STATUS
+      ? Promise.resolve({ state: 'empty', roots: [], summary: {}, revision: 0 }) : base(channel, ...args));
+    renderCosPage('/cos/sets?context=all');
+    expect(await screen.findByText('没有匹配的项目')).toBeInTheDocument();
+  });
+
+  test('stops the loading indicator when initial status fails on a category deep link', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    window.electronAPI.invoke.mockImplementation((channel, ...args) => channel === CHANNELS.COS_GET_STATUS
+      ? Promise.reject(new Error('缓存读取失败')) : base(channel, ...args));
+    renderCosPage('/cos/sets?context=all');
+    expect(await screen.findByText('缓存读取失败')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  test('restores a scrolled list beyond the first page after returning from its album', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    const items = Array.from({ length: 400 }, (_, index) => ({ ...cardItem, id: `set-${index}`,
+      displayName: `套图 ${index}`, coverMediaId: null }));
+    window.electronAPI.invoke.mockImplementation((channel, options) => channel === CHANNELS.COS_LIST_SETS
+      ? Promise.resolve({ items: items.slice(options.offset, options.offset + options.limit), total: items.length }) : base(channel, options));
+    const positions = new Map();
+    render(<ScrollPositionContext.Provider value={{ savePosition: (key, value) => positions.set(key, value), getPosition: key => positions.get(key) || 0 }}>
+      <MemoryRouter initialEntries={['/cos/sets?context=all&q=套图']}><CosLibraryPage /><LocationProbe /></MemoryRouter>
+    </ScrollPositionContext.Provider>);
+    await screen.findByRole('button', { name: '套图 199' });
+    fireEvent.click(screen.getByRole('button', { name: '加载下一批测试数据' }));
+    const target = await screen.findByRole('button', { name: '套图 320' });
+    screen.getByTestId('cos-virtual-grid').scrollTop = 8000;
+    fireEvent.click(target);
+    await screen.findByTestId('cos-album-page');
+    // Record the offset observed immediately before the album transition.
+    // A real browser clamps it if only the first 200 items have been restored.
+    expect(positions.get('/cos/sets?context=all&q=套图')).toBe(8000);
+    fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
+    expect(await screen.findByRole('button', { name: '套图 320' })).toBeInTheDocument();
+    expect(screen.getByTestId('cos-virtual-grid').scrollTop).toBe(8000);
+  }, 15000);
+
+  test('returns to the last random set beyond loaded pages with search filters and sort intact', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    const items = Array.from({ length: 400 }, (_, index) => ({ ...cardItem, id: `set-${index}`,
+      displayName: `套图 ${index}`, coverMediaId: null }));
+    window.electronAPI.invoke.mockImplementation((channel, options) => {
+      if (channel === CHANNELS.COS_LIST_SETS) return Promise.resolve({
+        items: items.slice(options.offset, options.offset + options.limit), total: items.length });
+      if (channel === CHANNELS.COS_LIST_SET_IDS) return Promise.resolve(items.map(item => item.id));
+      if (channel === CHANNELS.COS_LIST_RANDOM_SET_IDS) return Promise.resolve(['set-0', 'set-320']);
+      return base(channel, options);
+    });
+    const origin = '/cos/sets?context=all&q=套图&type=原创写真&sort=imageCount&direction=desc';
+    renderCosPage(origin);
+    fireEvent.click(await screen.findByRole('button', { name: '套图 0', exact: true }));
+    await screen.findByTestId('cos-album-page');
+    const random = screen.getByRole('button', { name: '随机下一套' });
+    await waitFor(() => expect(random).toBeEnabled());
+    fireEvent.click(random);
+    await waitFor(() => expect(screen.getByTestId('cos-album-page')).toHaveAttribute('data-set-id', 'set-320'));
+    fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
+    expect(await screen.findByRole('button', { name: '套图 320', exact: true })).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent(origin);
+    expect(screen.getByPlaceholderText('搜索当前分类')).toHaveValue('套图');
+    expect(screen.getByLabelText('类型')).toHaveValue('原创写真');
+    expect(screen.getByLabelText('排序')).toHaveTextContent('图片数量');
+    expect(screen.getByRole('button', { name: '切换为升序' })).toBeInTheDocument();
+    expect(window.electronAPI.invoke).toHaveBeenCalledWith(CHANNELS.COS_LIST_SET_IDS,
+      expect.objectContaining({ includeUnavailable: true, sortBy: 'imageCount', sortDirection: 'desc' }));
+    expect(window.electronAPI.invoke).toHaveBeenCalledWith(CHANNELS.COS_LIST_SETS,
+      expect.objectContaining({ limit: 400, sortBy: 'imageCount', sortDirection: 'desc' }));
+  }, 15000);
+
+  test('locates a random set opened directly from the list beyond the first page on return', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    const items = Array.from({ length: 400 }, (_, index) => ({ ...cardItem, id: `set-${index}`,
+      displayName: `套图 ${index}`, coverMediaId: null }));
+    window.electronAPI.invoke.mockImplementation((channel, options) => {
+      if (channel === CHANNELS.COS_LIST_SETS) return Promise.resolve({
+        items: items.slice(options.offset, options.offset + options.limit), total: items.length });
+      if (channel === CHANNELS.COS_LIST_SET_IDS) return Promise.resolve(items.map(item => item.id));
+      if (channel === CHANNELS.COS_LIST_RANDOM_SET_IDS) return Promise.resolve(['set-320']);
+      return base(channel, options);
+    });
+    renderCosPage('/cos/sets?context=all');
+    await screen.findByRole('button', { name: '套图 0', exact: true });
+    fireEvent.click(screen.getByRole('button', { name: '随机套图 (E)' }));
+    await waitFor(() => expect(screen.getByTestId('cos-album-page')).toHaveAttribute('data-set-id', 'set-320'));
+    fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
+    expect(await screen.findByRole('button', { name: '套图 320', exact: true })).toBeInTheDocument();
+  }, 15000);
 
   test('does not navigate on Backspace while the Cos search field is focused', async () => {
     renderCosPage('/cos/cosers');

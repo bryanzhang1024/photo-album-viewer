@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, createContext } from 'react';
+import React, { useState, useEffect, useMemo, useRef, createContext } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -10,6 +10,8 @@ import CosLibraryPage from './pages/CosLibraryPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import CHANNELS from '../common/ipc-channels';
+import Box from '@mui/material/Box';
+import BrowseModeTabs from './components/BrowseModeTabs';
 
 const ipcRenderer = window.electronAPI || null;
 const PERFORMANCE_SETTINGS_KEY = 'performance_settings';
@@ -75,6 +77,7 @@ function App() {
 
   // 保存滚动位置的状态
   const [scrollPositions, setScrollPositions] = useState({});
+  const cosViewStates = useRef(new Map());
 
   // 动态设置CSS变量以支持主题切换的滚动条样式
   useEffect(() => {
@@ -176,6 +179,7 @@ function App() {
   // 滚动位置上下文
   const scrollContext = useMemo(() => ({
     positions: scrollPositions,
+    cosViewStates: cosViewStates.current,
     savePosition: (path, position) => {
       setScrollPositions(prev => ({
         ...prev,
@@ -191,6 +195,9 @@ function App() {
       <SettingsProvider>
         <FavoritesProvider>
           <ScrollPositionContext.Provider value={scrollContext}>
+            <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', '--app-modebar-height': '36px' }}>
+            <BrowseModeTabs />
+            <Box sx={{ flex: 1, minHeight: 0 }}>
             <Routes>
               <Route path="/" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
@@ -199,6 +206,8 @@ function App() {
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
               <Route path="/cos/*" element={<CosLibraryPage colorMode={colorMode} />} />
             </Routes>
+            </Box>
+            </Box>
           </ScrollPositionContext.Provider>
         </FavoritesProvider>
       </SettingsProvider>

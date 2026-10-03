@@ -12,10 +12,15 @@ export default function useCosRandomNavigation({
   const mountedRef = useRef(true);
   const locationRef = useRef(locationIdentity);
   const [randomBrowseLoading, setLoading] = useState(false);
+  const [adjacentBrowseLoading, setAdjacentLoading] = useState(false);
+  const orderedScopesRef = useRef(new Map());
+  const [orderedState, setOrderedState] = useState({ key: null, ids: [] });
   const [, setRevision] = useState(0);
   const scopeKey = JSON.stringify(scope);
-  if (locationRef.current !== locationIdentity) {
+  const scopeRef = useRef(scopeKey);
+  if (locationRef.current !== locationIdentity || scopeRef.current !== scopeKey) {
     locationRef.current = locationIdentity;
+    scopeRef.current = scopeKey;
     epochRef.current += 1;
   }
   const availableRef = useRef(available);
@@ -30,9 +35,67 @@ export default function useCosRandomNavigation({
     epochRef.current += 1;
     ownerRef.current = null;
     scopesRef.current.clear();
+    orderedScopesRef.current.clear();
+    setOrderedState({ key: null, ids: [] });
+    setAdjacentLoading(false);
     setLoading(false);
     setRevision(value => value + 1);
   }, []);
+
+  const loadOrderedIds = useCallback(async () => {
+    let entry = orderedScopesRef.current.get(scopeKey);
+    if (!entry) {
+      entry = { promise: ipcRenderer.invoke(CHANNELS.COS_LIST_SET_IDS, scope)
+        .then(ids => [...new Set(Array.isArray(ids) ? ids : [])]) };
+      orderedScopesRef.current.set(scopeKey, entry);
+    }
+    return entry.promise;
+  }, [scopeKey, scope, ipcRenderer]);
+
+  useEffect(() => {
+    if (!available || !currentSetId) return undefined;
+    let active = true;
+    loadOrderedIds().then(ids => { if (active) setOrderedState({ key: scopeKey, ids }); })
+      .catch(reason => { if (active) onError(reason?.message || '无法读取换套范围'); });
+    return () => { active = false; };
+  }, [available, currentSetId, loadOrderedIds, scopeKey, onError]);
+
+  const handleAdjacentBrowse = useCallback(async direction => {
+    if (!available || !currentSetId || ownerRef.current || !['prev', 'next'].includes(direction)) return false;
+    const owner = {};
+    ownerRef.current = owner;
+    const epoch = epochRef.current;
+    const stillCurrent = () => mountedRef.current && availableRef.current
+      && epochRef.current === epoch && ownerRef.current === owner;
+    setAdjacentLoading(true);
+    try {
+      const ids = await loadOrderedIds();
+      const currentIndex = ids.indexOf(currentSetId);
+      if (!stillCurrent() || currentIndex < 0) return false;
+      const step = direction === 'prev' ? -1 : 1;
+      for (let index = currentIndex + step; index >= 0 && index < ids.length; index += step) {
+        const id = ids[index];
+        const [setItem, albumPath] = await Promise.all([
+          ipcRenderer.invoke(CHANNELS.COS_GET_SET, id),
+          ipcRenderer.invoke(CHANNELS.COS_GET_SET_ALBUM_PATH, id)
+        ]);
+        if (!stillCurrent()) return false;
+        if (!setItem || !albumPath || setItem.status === 'offline' || setItem.imageCount === 0) continue;
+        onOpen(setItem, albumPath);
+        return true;
+      }
+      onError(direction === 'prev' ? '当前范围没有可打开的上一套' : '当前范围没有可打开的下一套');
+      return false;
+    } catch (reason) {
+      if (stillCurrent()) onError(reason?.message || '切换套图失败');
+      return false;
+    } finally {
+      if (ownerRef.current === owner) {
+        ownerRef.current = null;
+        if (mountedRef.current) setAdjacentLoading(false);
+      }
+    }
+  }, [available, currentSetId, loadOrderedIds, ipcRenderer, onOpen, onError]);
 
   const handleRandomBrowse = useCallback(async () => {
     if (!available || ownerRef.current) return false;
@@ -97,11 +160,21 @@ export default function useCosRandomNavigation({
   }, [available, scopeKey, scope, currentSetId, ipcRenderer, onOpen, onError]);
 
   const knownTargets = scopesRef.current.get(scopeKey)?.targets;
+  const orderedIds = orderedState.key === scopeKey ? orderedState.ids : [];
+  const currentIndex = orderedIds.indexOf(currentSetId);
+  const navigationBusy = randomBrowseLoading || adjacentBrowseLoading || !available;
   return {
     handleRandomBrowse,
     clearRandomState,
     randomBrowseLoading,
-    randomBrowseDisabled: !available || randomBrowseLoading
-      || (Array.isArray(knownTargets) && !knownTargets.some(item => item.candidateKey !== currentSetId))
+    randomBrowseDisabled: navigationBusy
+      || (Array.isArray(knownTargets) && !knownTargets.some(item => item.candidateKey !== currentSetId)),
+    handleAdjacentBrowse,
+    adjacentBrowseLoading,
+    setNavigation: { currentIndex, total: orderedIds.length,
+      prev: !navigationBusy && currentIndex > 0 ? { name: '当前范围上一套' } : null,
+      next: !navigationBusy && currentIndex >= 0 && currentIndex < orderedIds.length - 1 ? { name: '当前范围下一套' } : null,
+      onPrev: () => handleAdjacentBrowse('prev'), onNext: () => handleAdjacentBrowse('next'),
+      noun: '套图' }
   };
 }
