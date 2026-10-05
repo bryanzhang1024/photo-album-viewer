@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- 当前小片：Coser 单套长尾收纳
+- 当前小片：Cos 固定入口与连续浏览，入口布局 C（3.8.1）
 - 状态：完成
 
 ## 实现记录
@@ -25,3 +25,59 @@
 ## 风险动作批准
 
 暂无。仅写入应用自己的 `userData` 根目录配置与索引缓存；没有修改图库、部署服务或开放网络端口。
+
+## 2026-10-03 · 署名下套图卡片
+
+- 用户要求独立分支便于对比：`codex/cos-set-cards`，基线 `4d9de7ab091a244fecef1bbaac8084b9f749a134`，保留原分支，本轮不合并、不 push。
+- 保留卡片底色、边框与 3:4 封面；署名下主行改为角色与现有有用造型，次行显示作品或类别、合作署名、张数。原完整名称作为原生悬停提示与可访问名称；其他上下文保留原两行完整标题与标签。
+- 收藏按钮置于文字区，复用原相簿收藏。稳定 ID 核验当前目录后添加；同路径收藏状态共享，离线已有收藏可取消，重复点击不穿透打开套图。运行时路径不进入持久索引缓存。
+- RED 阶段五项新增测试失败、原有 26 项通过；实现后针对卡片/服务 33 项通过，全量 57 套件、700 项通过。最后恢复其他上下文标题的两行展示后，针对性 33 项再次通过。
+- `npm run build` 成功生成 arm64 `.app`；既有 bundle 体积提示与缺 Developer ID 签名提示仍存在，本次未新增依赖。
+- 使用生产包的独立 userData 副本验证真实半半子 120 套：暗色/浅色显示、缩放后较窄空间、收藏添加、重启恢复、取消、点击封面进入 44 张照片套图。真实收藏未作为测试写入目标。
+- 本机安装到 `/Applications/Photo Album Viewer.app`，版本 3.7.0。旧 3.6.1 正常退出后复制并核验 Info.plist/app.asar，备份位于 `/Volumes/1TB/99-管理/临时/backups/cos-set-cards-20261003/Photo Album Viewer 3.6.1.app`。
+- 前后实测截图和自包含对比页：`/Volumes/1TB/99-管理/报告/cos-set-cards-20261003/compare.html`；原始 QA 启动脚本、日志及独立 profile 在同任务管理目录。
+- 10 套样张源 JSON 指纹复核一致；源图库未改，字段清洗、Cos 入口性能及其他交互继续暂缓。
+
+## 2026-10-03 · 卡片描边反馈与需求归档（3.7.1）
+
+- 用户明确不要上一版新加的细线。仅去掉 CosSetCard 的 border/borderColor，保留背景、圆角、阴影、文字与收藏布局、键盘焦点提示。
+- 新增 cos-requirements.md，以最初确认、后续补充/改口、实现状态、当前与后续范围四个维度整理；spec.md 与 cos-browsing-spec.md 顶部标为历史，project.md 指向统一清单。没有把建议优先级、后台预加载或旧版全新主窗口写成用户已定方案。
+- 在原对比分支 codex/cos-set-cards 继续处理审阅反馈，未合并、未 push。版本与 lock/CHANGELOG 同步到 3.7.1。
+- 相关 2 套件 33 项测试通过；npm run build 成功，仍有既有 bundle 体积提示与无 Developer ID 签名提示。
+- 旧 3.7.0 正常退出后复制并核验 app.asar/Info.plist，备份：/Volumes/1TB/99-管理/临时/backups/cos-card-no-outline-20261003/Photo Album Viewer 3.7.0.app。新 .app 安装到当前 Mac-Studio.local 的 /Applications/Photo Album Viewer.app，版本与 app.asar 指纹核对通过。
+- 安装包代码通过独立 userData 副本启动并进入真实 Cos 署名套图列表；原生工具出现旧画面缓存和失效窗口句柄，未用该截图声称描边通过。补以实际 CosSetCard 模块渲染检查：三套真实内容，暗/浅色 computed border 为 0px、背景与圆角保留，截图在 /Volumes/1TB/99-管理/报告/cos-card-no-outline-20261003/dark-no-outline.jpg。无新增依赖，临时预览绑定 127.0.0.1，结束后停止并关闭测试页。
+- 未修改源 JSON、目录、媒体或真实收藏。固定入口、加载等待、滚动恢复、Esc、左右换套和套图排序仍列为待办。
+
+
+## 2026-10-03 · Cos 固定入口与连续浏览初版（3.8.0）
+
+- 用户授权 C03–C06、A01、A02，并最初选择顶部两模式标签。开发分支 codex/cos-continuous-browsing 基于 71df502，原卡片对比分支保留；未合并、未推送。
+- 完整集合排序后分页，缩略图页左右键和按钮换套；大图继续照片导航，Esc 逐层返回。顺序/随机导航共用互斥请求，位置/范围或索引代次变化时丢弃旧结果。
+- Cos 返回保存已加载数据和 Virtuoso 测量快照；换过套图或从列表随机打开后，用完整显示顺序补齐分页再定位最后看的套图。模式切换保存普通文件夹、照片页和 Cos 列表的位置，恢复等待内容加载。
+- 补名称、图片数量、文件夹修改时间升降序，兼容原相对路径缓存；保留随机、原收藏系统、三档密度及 ImageViewer。源 JSON/媒体未写，真实收藏未用作测试目标。
+- 缓存先恢复再后台刷新，启动 renderer 后预热。9361 套、109608312 字节缓存的单次可用状态等待：基线 10868.76ms，最终 3592.73ms；最终后台完成 13208.62ms。数据量相同，时间仅说明前台解除等待，不表示总扫描加速。
+- 测试先复现缓存阻塞、分页恢复、Esc、旧范围请求、虚拟列表 undefined 初始索引、失败加载和首页随机禁用问题，再修复。最终 57 套件、720 项全量通过；npm run build 成功生成 arm64 .app。未新增依赖；保留既有 bundle 体积与无 Developer ID 签名提示。
+- 安装目标当前 Mac-Studio.local 的 /Applications/Photo Album Viewer.app，版本 3.8.0；app.asar SHA256 3ce164ad2de3ae652ff251234bde1eb6348fb8b5aea8bb1c3be11c05a09c99b5，与最终构建一致。3.7.1 旧版备份位于 /Volumes/1TB/99-管理/临时/backups/cos-continuous-browsing-20261003/Photo Album Viewer 3.7.1.app。
+- 安装版验证真实半半子列表、2/120→3/120 换套及反向换套；大图 1/44→2/44 仍在同一套，Esc 仅关闭大图，再次 Esc 返回列表；首页返回后随机可用。暗色截图 installed-dark.jpg 保存在本轮报告目录。
+- 真实生产 renderer 经 localhost QA 接口适配验证虚拟列表：模式来回前后均 1057px；全库随机第 8204 套后返回定位其附近，随后手动打开再返回均为 513896px；按图片数降序 52→51 张，搜索/类型/排序保留；QA 副本收藏、紧凑密度与 880px 窄窗口检查通过。此验证不冒充原生 Finder/PictureView 外部动作。
+- 审计及验证材料在 /Volumes/1TB/99-管理/{任务,报告}/cos-continuous-browsing-20261003；管理卷布局检查通过。临时 localhost 测试服务及浏览器页在讨论样张完成后停止/关闭。三种入口位置讨论稿另存 entry-options/，未修改软件。
+- 最新用户反馈：独立模式栏占了一整排空间，不是最优设计。A01 的入口视觉布局回到讨论，功能保存为 3.8.0 初版，不把已有测试通过描述成用户接受该布局。
+
+## 2026-10-04 · C：窗口标题栏入口（3.8.1）
+
+- 用户“选C”：Mac 入口合入窗口标题栏右侧，移除独立模式行；32px 标题栏、24px 紧凑双标签，左侧保留原生窗口控件及 80px 空间。非 Mac 继续原生框架和初版模式行，不新增依赖。
+- 保留卡片、连续换套、Esc 和各模式位置保存；查看器覆盖模式区，顶部预留三色按钮空间。实际宽窗口发现 MUI sm padding 覆盖，补媒体查询级回归并修正；1280/520px renderer 实测均为 80px。
+- RED→GREEN：窗口配置、标题栏导航、大图避让；宽窗口回归先为 24px 失败。最终 57 套件、725 项全量测试通过，完整 npm run build 成功，仍有既有 bundle 体积和缺 Developer ID 签名提示。
+- 已正常退出旧版、保留可恢复副本，再安装到本轮主机 Mac-Studio.local 的 /Applications/Photo Album Viewer.app，版本 3.8.1。最终 app.asar SHA256 1d681fd0e139b4d61d934ffd45951a8ffca0dcd1ffb1d6dbe2746203efcbe471，与最终构建相同。旧 3.8.0：/Volumes/1TB/99-管理/临时/backups/cos-titlebar-20261004/Photo Album Viewer 3.8.0.app。
+- 原生启动、文件夹/Cos 一键入口、窗口全屏进出、最小化后 Window 菜单恢复 Cos 页面、照片 F 进出及 Esc 返回已核对。标题栏拖拽已执行且无导航，但工具不返回窗口坐标；窄窗口用生产 renderer 核对 520/360px，不冒充 native resize 验证。
+- 原生工具在全屏后偶有旧画面和窗口句柄失效，最终重启后截图/AX 一致。实际安装图 native-final.jpg；真实套图 renderer-sets.jpg；窄窗口 renderer-narrow-520.jpg。材料在 /Volumes/1TB/99-管理/{任务,报告}/cos-titlebar-20261004。
+- 运行不修改源 cosset.json、图片或视频；收藏未作为本轮写入目标。临时 QA 用缓存副本，浏览器页已关闭，服务交付前停止；继续 codex/cos-continuous-browsing 保留对比，不合并、不推送。
+
+## 2026-10-06 · 合并前范围与返回定位回归（3.8.2）
+
+- 用户明确要求合并、推送，覆盖此前暂保留分支的安排。检查发现分类搜索的随机/顺序换套范围不一致，以及已缓存锚点在 Virtuoso 挂载后才到达。分别复现 3 个分类范围失败和缓存定位 0px/期望3000px 失败，再修复。
+- 随机与顺序导航共用分类成员筛选，顺序仍按当前排序；Virtuoso key 纳入锚点索引，有效索引到达时重新初始化。分页外定位与普通滚动快照恢复保持原契约。
+- 针对性 2 套件55项通过；最终57套件729项全量通过，完整 npm run build 成功；版本、lock和CHANGELOG 同步3.8.2。原有 bundle 体积与缺 Developer ID 签名提示保留。
+- 当前主机 Mac-Studio.local 正常退出3.8.1并备份，安装 /Applications/Photo Album Viewer.app 3.8.2；安装与构建 asar 指纹相同 d98c981d0f239d5258c8a961c0d17ba2fa3fe6f14cba463ce1a02fbdf0f22cb0。启动日志确认 DOM就绪、窗口显示、原普通文件夹扫描完成。旧版位于 /Volumes/1TB/99-管理/临时/backups/cos-merge-20261006/Photo Album Viewer 3.8.1.app。
+- 使用生产 renderer 与真实缓存副本、真实 Virtuoso，在半半子120套中从2/120连续到22/120后返回：scrollTop1341px，最后套图卡片 top363.92/bottom713.56，处于963px视口内。记录 cached-anchor-runtime.json；截图捕获超时，不以截图证明此行为。原生界面工具本轮不可用，运行证据区分安装版启动与浏览器 renderer。
+- 元数据与媒体未写，真实收藏未用于测试。Ego临时页面已关闭、8754服务已停止；架构与安全复核的两处问题均闭环，未发现新的阻断。日志/报告位于 /Volumes/1TB/99-管理/{任务,报告}/cos-merge-20261006。

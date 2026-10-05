@@ -122,7 +122,7 @@ function SearchOverlay({
   );
 }
 
-function SortControls({
+export function SortControls({
   sortBy,
   sortDirection,
   sortOptions,
@@ -157,7 +157,8 @@ function SortControls({
           ))}
         </Select>
       </FormControl>
-      <IconButton color="inherit" onClick={onSortDirectionChange} size="small" sx={{ mx: 0.5 }}>
+      <IconButton color="inherit" onClick={onSortDirectionChange} size="small" sx={{ mx: 0.5 }}
+        aria-label={sortDirection === 'asc' ? '切换为降序' : '切换为升序'}>
         <SortIcon
           sx={{
             transform: sortDirection === 'desc' ? 'rotate(180deg)' : 'none',
@@ -258,11 +259,12 @@ function AlbumNavigation({ navigation }) {
     return null;
   }
 
-  const { prev, next, currentIndex, total, onPrev, onNext } = navigation;
+  const { prev, next, currentIndex, total, onPrev, onNext, noun = '相簿' } = navigation;
 
   return (
     <>
-      <Tooltip title={prev ? `上一个相簿: ${prev.name}` : '已是第一个相簿'}>
+      <Tooltip title={noun === '相簿' ? (prev ? `上一个相簿: ${prev.name}` : '已是第一个相簿')
+        : prev ? '当前范围上一套图（←）' : '已是当前范围第一套图'}>
         <span>
           <IconButton
             color="inherit"
@@ -270,7 +272,7 @@ function AlbumNavigation({ navigation }) {
             disabled={!prev}
             size="small"
             sx={{ mx: 0.5 }}
-            aria-label="上一个相簿"
+            aria-label={noun === '相簿' ? '上一个相簿' : '上一套图'}
           >
             <ChevronLeftIcon />
           </IconButton>
@@ -281,7 +283,8 @@ function AlbumNavigation({ navigation }) {
           {currentIndex + 1}/{total}
         </Typography>
       )}
-      <Tooltip title={next ? `下一个相簿: ${next.name}` : '已是最后一个相簿'}>
+      <Tooltip title={noun === '相簿' ? (next ? `下一个相簿: ${next.name}` : '已是最后一个相簿')
+        : next ? '当前范围下一套图（→）' : '已是当前范围最后一套图'}>
         <span>
           <IconButton
             color="inherit"
@@ -289,7 +292,7 @@ function AlbumNavigation({ navigation }) {
             disabled={!next}
             size="small"
             sx={{ mx: 0.5 }}
-            aria-label="下一个相簿"
+            aria-label={noun === '相簿' ? '下一个相簿' : '下一套图'}
           >
             <ChevronRightIcon />
           </IconButton>

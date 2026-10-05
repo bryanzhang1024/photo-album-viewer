@@ -51,6 +51,8 @@ function AlbumPage({
   randomBrowseTooltip = undefined,
   randomBrowseLoading = false,
   randomBrowseDisabled = false,
+  onAdjacentBrowse = null,
+  setNavigation = null,
   sourceBoundary = null,
   sourceBreadcrumbs = null,
   readOnly = false,
@@ -97,6 +99,11 @@ function AlbumPage({
       scrollContext.savePosition(scrollPositionKey, scrollContainerRef.current.scrollTop);
     }
   }, [scrollContext, scrollPositionKey]);
+
+  useEffect(() => {
+    window.addEventListener('browse-mode-leave', saveScrollPosition);
+    return () => window.removeEventListener('browse-mode-leave', saveScrollPosition);
+  }, [saveScrollPosition]);
 
   const navigateToFolderPath = useCallback((targetPath, options = {}) => {
     saveScrollPosition();
@@ -273,6 +280,7 @@ function AlbumPage({
   }, []);
 
   useEffect(() => {
+    if (loading) return undefined;
     const timer = setTimeout(() => {
       if (!scrollContainerRef.current) {
         return;
@@ -283,7 +291,7 @@ function AlbumPage({
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [scrollContext, scrollPositionKey]);
+  }, [scrollContext, scrollPositionKey, loading]);
 
   // 从localStorage中读取密度设置
   useEffect(() => {
@@ -571,6 +579,7 @@ function AlbumPage({
   // 添加键盘事件监听
   useEffect(() => {
     const handleKeyDown = (event) => {
+      if (event.defaultPrevented) return;
       const activeElement = document.activeElement;
       if (searchHasFocus || activeElement?.tagName === 'INPUT' ||
           activeElement?.tagName === 'TEXTAREA' || activeElement?.isContentEditable) {
@@ -578,7 +587,7 @@ function AlbumPage({
       }
 
       // 如果按下ESC或Backspace键且没有打开查看器
-      const isBackKey = event.key === 'Backspace' || (!embeddedMode && event.key === 'Escape');
+      const isBackKey = event.key === 'Backspace' || event.key === 'Escape';
       if (isBackKey && !viewerOpen) {
         event.preventDefault();
         event.stopPropagation();
@@ -592,7 +601,14 @@ function AlbumPage({
         event.preventDefault();
         handleRandomAlbum();
       }
-      if (embeddedMode) return;
+      if (embeddedMode) {
+        if (!viewerOpen && onAdjacentBrowse && !event.ctrlKey && !event.altKey && !event.metaKey
+          && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+          event.preventDefault();
+          onAdjacentBrowse(event.key === 'ArrowLeft' ? 'prev' : 'next');
+        }
+        return;
+      }
 
       // 按下 e 键触发随机选择相簿
       if ((event.key === 'e' || event.key === 'E') && !event.ctrlKey && !event.altKey && !event.metaKey) {
@@ -661,6 +677,7 @@ function AlbumPage({
     viewerOpen,
     neighboringAlbums,
     embeddedMode,
+    onAdjacentBrowse,
     searchHasFocus,
     handleRandomAlbum,
     onRandomBrowse,
@@ -714,7 +731,7 @@ function AlbumPage({
         onRefresh={handleRefreshAlbum}
         refreshDisabled={!canRefreshAlbum}
         refreshAriaLabel="刷新当前相簿"
-        navigation={embeddedMode ? null : {
+        navigation={embeddedMode ? setNavigation : {
           prev: neighboringAlbums.prev,
           next: neighboringAlbums.next,
           currentIndex: neighboringAlbums.currentIndex,

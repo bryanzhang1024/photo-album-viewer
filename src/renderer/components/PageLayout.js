@@ -10,9 +10,9 @@ import {
 
 function PageLayout({ loading, error, headerContent, subHeaderContent = null, children, scrollContainerRef }) {
   return (
-    <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ flexGrow: 1, height: 'calc(100vh - var(--app-chrome-height, 0px))', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar variant="dense">
+        <Toolbar variant="dense" sx={{ flexWrap: 'wrap', gap: 0.5, rowGap: 1.5, pt: 1.5, pb: 0.5 }}>
           {headerContent}
         </Toolbar>
         {subHeaderContent ? (
@@ -24,7 +24,7 @@ function PageLayout({ loading, error, headerContent, subHeaderContent = null, ch
 
       <Box
         ref={scrollContainerRef}
-        sx={{ flexGrow: 1, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
+        sx={{ flexGrow: 1, minHeight: 0, overflow: 'auto', py: 2, px: { xs: 1, sm: 2, md: 3 } }}
         className="scroll-container"
       >
         {error ? (

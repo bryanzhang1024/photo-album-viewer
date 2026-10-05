@@ -19,8 +19,12 @@ function registerCosLibraryIpcHandlers({
   registerApprovedRoot,
   getMainWindow,
   openPictureView = openPictureViewWithSystem,
-  thumbnailResolution = () => 600
+  thumbnailResolution = () => 600,
+  broadcast = () => {}
 }) {
+  service.subscribe?.(({ type, payload }) => {
+    broadcast(type === 'progress' ? CHANNELS.COS_INDEX_PROGRESS : CHANNELS.COS_LIBRARY_UPDATED, payload);
+  });
   const withService = (handler) => async (...args) => {
     // initialize() returns a full status summary even when already ready.
     // Repeating that work per cover blocks the main thread and delays image responses.
@@ -73,6 +77,7 @@ function registerCosLibraryIpcHandlers({
   ipcMain.handle(CHANNELS.COS_LIST_SETS, withService(async (_event, options) => (
     service.listSets(options)
   )));
+  ipcMain.handle(CHANNELS.COS_LIST_SET_IDS, withService(async (_event, options) => service.listSetIds(options)));
   ipcMain.handle(CHANNELS.COS_LIST_RANDOM_SET_IDS, withService(async (_event, options) => (
     service.listRandomSetIds(options)
   )));

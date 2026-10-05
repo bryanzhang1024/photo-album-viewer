@@ -32,6 +32,23 @@ test('retains a round across locations and excludes the current set without rese
   expect(props.onOpen.mock.calls[3][0].id).not.toBe(seen[2]);
 });
 
+test('navigates in the complete sorted semantic range and skips a stale set without wrapping', async () => {
+  const { result, rerender, props, ipcRenderer } = setup();
+  const invoke = ipcRenderer.invoke.getMockImplementation();
+  ipcRenderer.invoke.mockImplementation(async (channel, id) => {
+    if (channel === 'cos-list-set-ids') return ['a', 'stale', 'beyond-page-200'];
+    if (channel === CHANNELS.COS_GET_SET_ALBUM_PATH && id === 'stale') return null;
+    return invoke(channel, id);
+  });
+  rerender({ ...props, currentSetId: 'a', locationIdentity: '/cos/album?set=a' });
+  expect(typeof result.current.handleAdjacentBrowse).toBe('function');
+  await act(async () => { await result.current.handleAdjacentBrowse('next'); });
+  expect(props.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'beyond-page-200' }), '/library/beyond-page-200');
+  rerender({ ...props, currentSetId: 'beyond-page-200', locationIdentity: '/cos/album?set=beyond-page-200' });
+  await act(async () => { await result.current.handleAdjacentBrowse('next'); });
+  expect(props.onOpen).toHaveBeenCalledTimes(1);
+});
+
 test('skips unavailable paths and reports an empty pool', async () => {
   const { result, props, ipcRenderer } = setup(['a']);
   ipcRenderer.invoke.mockImplementation(async channel => channel === CHANNELS.COS_LIST_RANDOM_SET_IDS
@@ -73,6 +90,17 @@ test('locks repeated clicks and discards results after refresh', async () => {
   expect(props.onOpen).not.toHaveBeenCalled();
   await draw(result);
   expect(props.onOpen).toHaveBeenCalledTimes(1);
+});
+
+test('discards an in-flight draw when only the catalog revision changes', async () => {
+  const { result, rerender, props, ipcRenderer } = setup();
+  let finish;
+  ipcRenderer.invoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  let pending;
+  act(() => { pending = result.current.handleRandomBrowse(); });
+  rerender({ ...props, scope: { ...props.scope, revision: 2 } });
+  await act(async () => { finish(['a']); await pending; });
+  expect(props.onOpen).not.toHaveBeenCalled();
 });
 
 test('reports query errors and releases the loading state for retry', async () => {

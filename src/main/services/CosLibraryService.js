@@ -50,6 +50,8 @@ class CosLibraryService {
     this.lastIndexedAt = null;
     this.cached = false;
     this.initialized = false;
+    this.listeners = new Set();
+    this.revision = 0;
   }
 
   async initialize() {
@@ -97,8 +99,24 @@ class CosLibraryService {
       }
     }
     this.initialized = true;
-    if (this.roots.some(root => root.status === 'online')) await this.refresh();
+    if (this.roots.some(root => root.status === 'online')) {
+      this.backgroundRefresh = this.refresh().catch(error => {
+        this.refreshError = error?.message || '无法更新 Cos 索引';
+      }).finally(() => {
+        this.backgroundRefresh = null;
+        this.publish('status', this.getStatus());
+      });
+    }
     return this.getStatus();
+  }
+
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  publish(type, payload) {
+    for (const listener of this.listeners) listener({ type, payload });
   }
 
   async updateRootStatuses() {
@@ -113,6 +131,7 @@ class CosLibraryService {
   }
 
   async addRoot(rootPath, options = {}) {
+    if (this.refreshing) await this.refreshing;
     const normalizedPath = path.resolve(rootPath || '');
     if (!path.isAbsolute(rootPath || '')) throw new TypeError('Cos library root must be absolute');
     const stats = await this.fs.stat(normalizedPath);
@@ -129,6 +148,7 @@ class CosLibraryService {
   }
 
   async removeRoot(rootId) {
+    if (this.refreshing) await this.refreshing;
     this.roots = this.roots.filter((root) => root.id !== rootId);
     this.rootCatalogs.delete(rootId);
     this.rebuildCatalog();
@@ -148,7 +168,12 @@ class CosLibraryService {
   async refresh(options = {}) {
     if (this.refreshing) return this.refreshing;
     this.refreshing = this.refreshOnce(options);
-    try { return await this.refreshing; } finally { this.refreshing = null; }
+    this.refreshError = null;
+    this.publish('status', this.getStatus());
+    try { return await this.refreshing; } finally {
+      this.refreshing = null;
+      this.publish('status', this.getStatus());
+    }
   }
 
   async refreshOnce(options = {}) {
@@ -158,7 +183,12 @@ class CosLibraryService {
     for (const root of this.roots) {
       if (root.status !== 'online') continue;
       const next = new CosCatalogService({ fs: this.fs });
-      await next.buildIndex([root], options);
+      await next.buildIndex([root], { ...options, onProgress: progress => {
+        if (progress.processed === 1 || progress.processed === progress.total || progress.processed % 50 === 0) {
+          options.onProgress?.(progress);
+          this.publish('progress', progress);
+        }
+      } });
       const errors = next.getErrors();
       // An incomplete read cannot erase a previously usable root snapshot.
       if (errors.length && this.rootCatalogs.has(root.id)) {
@@ -193,6 +223,7 @@ class CosLibraryService {
     }
     this.catalog = next;
     this.summary = { ...EMPTY_SUMMARY, ...next.getSummary() };
+    this.revision += 1;
   }
 
   async saveConfig() {
@@ -216,6 +247,7 @@ class CosLibraryService {
     let state = 'ready';
     if (this.roots.length === 0) state = 'empty';
     else if (this.roots.some((root) => root.status !== 'online')) state = 'partial';
+    if (!this.cached && this.refreshing) state = 'indexing';
 
     const labelCounts = new Map();
     for (const root of this.roots) {
@@ -244,6 +276,9 @@ class CosLibraryService {
       summary: { ...this.summary },
       lastIndexedAt: this.lastIndexedAt,
       cached: this.cached,
+      refreshing: Boolean(this.refreshing),
+      refreshError: this.refreshError || null,
+      revision: this.revision,
       facets: this.catalog.getFacets(),
       errors: this.catalog.getErrors()
     };
@@ -262,7 +297,12 @@ class CosLibraryService {
   }
 
   listSets(options) {
-    return this.catalog.listSets(options);
+    const result = this.catalog.listSets(options);
+    return { ...result, items: result.items.map(item => this.withFavoriteTargets(item)) };
+  }
+
+  listSetIds(options) {
+    return this.catalog.listSetIds(options);
   }
 
   listRandomSetIds(options) {
@@ -270,7 +310,24 @@ class CosLibraryService {
   }
 
   getSet(setId) {
-    return this.catalog.getSet(setId);
+    return this.withFavoriteTargets(this.catalog.getSet(setId));
+  }
+
+  // Runtime-only paths connect Cos cards to ordinary album favorites. Keep the
+  // catalog snapshot portable and avoid filesystem queries for every card.
+  withFavoriteTargets(item) {
+    if (!item) return null;
+    const record = this.catalog.sets.get(item.id);
+    const favoriteTargets = item.locations.flatMap(location => {
+      const root = this.roots.find(candidate => candidate.id === location.rootId);
+      if (!root) return [];
+      const albumPath = path.resolve(root.path, location.relativePath);
+      if (!albumPath.startsWith(`${root.path}${path.sep}`)) return [];
+      const online = root.status === 'online' && location.status === 'online';
+      const preview = online ? record?.media.find(media => media.rootId === root.id)?.absolutePath : null;
+      return [{ path: albumPath, online, previewImagePath: preview || null }];
+    });
+    return { ...item, favoriteTargets };
   }
 
   listSetMedia(setId, options) {

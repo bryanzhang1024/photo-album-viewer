@@ -162,9 +162,10 @@ class CosCatalogService {
     const metadataPath = path.join(setPath, 'cosset.json');
 
     try {
-      const [rawMetadata, entries] = await Promise.all([
+      const [rawMetadata, entries, folderStat] = await Promise.all([
         this.fs.readFile(metadataPath, 'utf8'),
-        this.fs.readdir(setPath, { withFileTypes: true })
+        this.fs.readdir(setPath, { withFileTypes: true }),
+        this.fs.stat?.(setPath).catch(() => null)
       ]);
       const metadata = JSON.parse(rawMetadata);
       if (!metadata || metadata.schema !== 'cosset/1' || typeof metadata.id !== 'string' || !metadata.id.trim()) {
@@ -204,6 +205,7 @@ class CosCatalogService {
         type: typeof metadata.type === 'string' ? metadata.type : '',
         locations: [{ rootId: root.id, relativePath, status: 'online' }],
         imageCount: media.length,
+        lastModified: folderStat?.mtimeMs || 0,
         coverMediaId: media[0]?.id || null,
         status: 'online',
         media
@@ -226,6 +228,7 @@ class CosCatalogService {
   ingestRecord(record) {
     const existing = this.sets.get(record.id);
     if (existing) {
+      existing.lastModified = Math.max(existing.lastModified || 0, record.lastModified || 0);
       existing.locations.push(...record.locations);
       existing.kinds = uniqueStrings([...existing.kinds, ...record.kinds]);
       if ((existing.media.length === 0 || existing.status === 'offline') && record.media.length > 0 && record.status === 'online') {
@@ -357,6 +360,7 @@ class CosCatalogService {
         type: typeof cached.type === 'string' ? cached.type : '',
         locations,
         imageCount: Number.isFinite(cached.imageCount) ? cached.imageCount : media.length,
+        lastModified: Number.isFinite(cached.lastModified) ? cached.lastModified : 0,
         coverMediaId: cached.coverMediaId || media[0]?.id || null,
         status: locations.some((location) => location.status === 'online') ? 'online' : 'offline',
         media
@@ -476,14 +480,29 @@ class CosCatalogService {
     return candidates.filter((record) => !query || record.searchText.includes(query));
   }
 
+  orderedSets(options = {}, candidates = this.matchingSets(options)) {
+    const direction = options.sortDirection === 'desc' ? -1 : 1;
+    return candidates.sort((left, right) => {
+      const primary = options.sortBy === 'imageCount' ? left.imageCount - right.imageCount
+        : options.sortBy === 'lastModified' ? (left.lastModified || 0) - (right.lastModified || 0)
+        : naturalCompare(left.displayName, right.displayName);
+      return direction * (primary || naturalCompare(left.displayName, right.displayName) || naturalCompare(left.id, right.id));
+    });
+  }
+
   listSets(options = {}) {
-    const items = this.matchingSets(options)
-      .sort((left, right) => naturalCompare(left.displayName, right.displayName))
+    const items = this.orderedSets(options)
       .map((record) => this.toSetDto(record));
     return paginate(items, options);
   }
 
-  listRandomSetIds(options = {}) {
+  listSetIds(options = {}) {
+    // Navigation skips unavailable sets; return anchors use the complete displayed order.
+    return this.orderedSets(options, this.matchingNavigationSets(options)).filter(record => options.includeUnavailable === true
+      || record.status === 'online' && record.imageCount > 0).map(record => record.id);
+  }
+
+  matchingNavigationSets(options = {}) {
     const classification = ['characters', 'cosers', 'looks'].includes(options.viewKind);
     let allowedIds = null;
     if (classification && options.query?.trim()) {
@@ -508,8 +527,12 @@ class CosCatalogService {
       }
     }
     return this.matchingSets({ ...options, query: classification ? '' : options.query })
-      .filter(record => record.status === 'online' && record.imageCount > 0
-        && (!allowedIds || allowedIds.has(record.id)))
+      .filter(record => !allowedIds || allowedIds.has(record.id));
+  }
+
+  listRandomSetIds(options = {}) {
+    return this.matchingNavigationSets(options)
+      .filter(record => record.status === 'online' && record.imageCount > 0)
       .map(record => record.id)
       .sort();
   }
@@ -555,6 +578,7 @@ class CosCatalogService {
       type: record.type,
       locations: record.locations.map((location) => ({ ...location })),
       imageCount: record.imageCount,
+      lastModified: record.lastModified || 0,
       coverMediaId: record.coverMediaId,
       status: record.status
     };

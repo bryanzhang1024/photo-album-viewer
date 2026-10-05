@@ -74,6 +74,29 @@ function mockLoadedImages(dimensions = null) {
   });
 }
 
+test('leaves space for native macOS window controls in the full image viewer toolbar', async () => {
+  const previousPlatform = window.electronAPI.platform;
+  window.electronAPI.platform = 'darwin';
+  try {
+    renderViewer();
+    const heading = await screen.findByRole('heading', { name: /IMG_0001.jpg/ });
+    const toolbar = heading.closest('.MuiToolbar-root');
+    expect(toolbar).toHaveStyle({ paddingLeft: '80px' });
+    // jsdom does not apply media queries. Inspect the actual desktop cascade:
+    // MUI's default sm padding must not put the close button under native controls.
+    const desktopPadding = [...document.styleSheets].flatMap(sheet => [...sheet.cssRules])
+      .filter(rule => rule.conditionText === '(min-width:600px)')
+      .flatMap(rule => [...rule.cssRules])
+      .filter(rule => rule.selectorText && toolbar.matches(rule.selectorText))
+      .map(rule => rule.style.getPropertyValue('padding-left'))
+      .filter(Boolean);
+    expect(desktopPadding[desktopPadding.length - 1]).toBe('80px');
+  } finally {
+    if (previousPlatform === undefined) delete window.electronAPI.platform;
+    else window.electronAPI.platform = previousPlatform;
+  }
+});
+
 describe('ImageViewer owned shortcuts', () => {
   beforeEach(() => {
     jest.clearAllMocks();

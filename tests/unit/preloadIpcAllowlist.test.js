@@ -84,6 +84,7 @@ describe('preload IPC allowlist', () => {
     'COS_LIST_LOOKS',
     'COS_LIST_COSERS',
     'COS_LIST_SETS',
+    'COS_LIST_SET_IDS',
     'COS_LIST_RANDOM_SET_IDS',
     'COS_GET_SET',
     'COS_GET_SET_ALBUM_PATH',
@@ -103,6 +104,8 @@ describe('preload IPC allowlist', () => {
       const listener = jest.fn();
       expect(() => api.on(CHANNELS.COS_INDEX_PROGRESS, listener)).not.toThrow();
       expect(electron.ipcRenderer.on).toHaveBeenCalledWith('cos-index-progress', listener);
+      expect(() => api.on(CHANNELS.COS_LIBRARY_UPDATED, listener)).not.toThrow();
+      expect(electron.ipcRenderer.on).toHaveBeenCalledWith('cos-library-updated', listener);
     }
   });
 });
