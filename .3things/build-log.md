@@ -72,3 +72,12 @@
 - 原生启动、文件夹/Cos 一键入口、窗口全屏进出、最小化后 Window 菜单恢复 Cos 页面、照片 F 进出及 Esc 返回已核对。标题栏拖拽已执行且无导航，但工具不返回窗口坐标；窄窗口用生产 renderer 核对 520/360px，不冒充 native resize 验证。
 - 原生工具在全屏后偶有旧画面和窗口句柄失效，最终重启后截图/AX 一致。实际安装图 native-final.jpg；真实套图 renderer-sets.jpg；窄窗口 renderer-narrow-520.jpg。材料在 /Volumes/1TB/99-管理/{任务,报告}/cos-titlebar-20261004。
 - 运行不修改源 cosset.json、图片或视频；收藏未作为本轮写入目标。临时 QA 用缓存副本，浏览器页已关闭，服务交付前停止；继续 codex/cos-continuous-browsing 保留对比，不合并、不推送。
+
+## 2026-10-06 · 合并前范围与返回定位回归（3.8.2）
+
+- 用户明确要求合并、推送，覆盖此前暂保留分支的安排。检查发现分类搜索的随机/顺序换套范围不一致，以及已缓存锚点在 Virtuoso 挂载后才到达。分别复现 3 个分类范围失败和缓存定位 0px/期望3000px 失败，再修复。
+- 随机与顺序导航共用分类成员筛选，顺序仍按当前排序；Virtuoso key 纳入锚点索引，有效索引到达时重新初始化。分页外定位与普通滚动快照恢复保持原契约。
+- 针对性 2 套件55项通过；最终57套件729项全量通过，完整 npm run build 成功；版本、lock和CHANGELOG 同步3.8.2。原有 bundle 体积与缺 Developer ID 签名提示保留。
+- 当前主机 Mac-Studio.local 正常退出3.8.1并备份，安装 /Applications/Photo Album Viewer.app 3.8.2；安装与构建 asar 指纹相同 d98c981d0f239d5258c8a961c0d17ba2fa3fe6f14cba463ce1a02fbdf0f22cb0。启动日志确认 DOM就绪、窗口显示、原普通文件夹扫描完成。旧版位于 /Volumes/1TB/99-管理/临时/backups/cos-merge-20261006/Photo Album Viewer 3.8.1.app。
+- 使用生产 renderer 与真实缓存副本、真实 Virtuoso，在半半子120套中从2/120连续到22/120后返回：scrollTop1341px，最后套图卡片 top363.92/bottom713.56，处于963px视口内。记录 cached-anchor-runtime.json；截图捕获超时，不以截图证明此行为。原生界面工具本轮不可用，运行证据区分安装版启动与浏览器 renderer。
+- 元数据与媒体未写，真实收藏未用于测试。Ego临时页面已关闭、8754服务已停止；架构与安全复核的两处问题均闭环，未发现新的阻断。日志/报告位于 /Volumes/1TB/99-管理/{任务,报告}/cos-merge-20261006。

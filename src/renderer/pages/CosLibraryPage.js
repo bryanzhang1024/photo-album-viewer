@@ -871,7 +871,7 @@ function CosLibraryPage({ colorMode }) {
           {formatCount(total + (allSetsCard ? 1 : 0))} 项
         </Typography>
         <Virtuoso
-          key={scrollPositionKey}
+          key={`${scrollPositionKey}:${restoreAnchorIndex ?? 'position'}`}
           ref={virtuosoRef}
           style={{ flex: 1, minHeight: 0 }}
           data={visibleRows}

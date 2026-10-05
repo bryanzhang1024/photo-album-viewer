@@ -19,6 +19,11 @@ jest.mock('react-virtuoso', () => {
     React.useImperativeHandle(ref, () => ({ getState: callback => callback({ ranges: [], scrollTop: nodeRef.current?.scrollTop || 0 }),
       scrollToIndex: ({ index }) => { if (nodeRef.current) nodeRef.current.scrollTop = index * 100; } }));
     React.useLayoutEffect(() => { if (nodeRef.current && restoreStateFrom) nodeRef.current.scrollTop = restoreStateFrom.scrollTop; }, [restoreStateFrom]);
+    // Real Virtuoso consumes the initial index at mount, not on later updates.
+    React.useLayoutEffect(() => {
+      const target = props.initialTopMostItemIndex;
+      if (nodeRef.current && target != null) nodeRef.current.scrollTop = (typeof target === 'number' ? target : target.index) * 100;
+    }, []);
     return <div ref={node => {
       nodeRef.current = node;
       if (node) {
@@ -581,6 +586,33 @@ describe('CosLibraryPage', () => {
       expect.objectContaining({ includeUnavailable: true, sortBy: 'imageCount', sortDirection: 'desc' }));
     expect(window.electronAPI.invoke).toHaveBeenCalledWith(CHANNELS.COS_LIST_SETS,
       expect.objectContaining({ limit: 400, sortBy: 'imageCount', sortDirection: 'desc' }));
+  }, 15000);
+
+  test('returns to the last viewed set already inside the cached list', async () => {
+    const base = window.electronAPI.invoke.getMockImplementation();
+    const items = Array.from({ length: 200 }, (_, index) => ({ ...cardItem, id: `set-${index}`,
+      displayName: `套图 ${index}`, coverMediaId: null }));
+    window.electronAPI.invoke.mockImplementation((channel, options) => {
+      if (channel === CHANNELS.COS_LIST_SETS) return Promise.resolve({
+        items: items.slice(options.offset, options.offset + options.limit), total: items.length });
+      if (channel === CHANNELS.COS_LIST_SET_IDS) return Promise.resolve(items.map(item => item.id));
+      if (channel === CHANNELS.COS_LIST_RANDOM_SET_IDS) return Promise.resolve(['set-0', 'set-120']);
+      return base(channel, options);
+    });
+    renderCosPage('/cos/sets?context=all');
+    fireEvent.click(await screen.findByRole('button', { name: '套图 0', exact: true }));
+    await screen.findByTestId('cos-album-page');
+    await waitFor(() => expect(screen.getByRole('button', { name: '随机下一套' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '随机下一套' }));
+    await waitFor(() => expect(screen.getByTestId('cos-album-page')).toHaveAttribute('data-set-id', 'set-120'));
+    fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
+    const target = await screen.findByRole('button', { name: '套图 120', exact: true });
+    await waitFor(() => {
+      const grid = screen.getByTestId('cos-virtual-grid');
+      const row = [...grid.children].findIndex(child => child.contains(target));
+      expect(row).toBeGreaterThan(0);
+      expect(grid.scrollTop).toBe(row * 100);
+    });
   }, 15000);
 
   test('locates a random set opened directly from the list beyond the first page on return', async () => {

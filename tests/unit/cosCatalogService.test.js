@@ -152,6 +152,21 @@ describe('CosCatalogService', () => {
     expect(service.listRandomSetIds({ viewKind: 'sets', coserId: SINGLETON_COSERS_ID })).toEqual([]);
   });
 
+  test.each([
+    { viewKind: 'characters', query: '镜音铃' },
+    { viewKind: 'cosers', query: 'Alice' },
+    { viewKind: 'looks', characterId: 'character:初音未来', query: '兔子洞' }
+  ])('ordered navigation keeps the searched $viewKind membership rather than matching set titles', options => {
+    // This unrelated set mentions every query in its title, but belongs to none
+    // of the searched entities (the ambiguous fixture also has a mixed look).
+    service.sets.get('set-no-look').searchText += ' alice 兔子洞';
+    service.sets.get('set-multi-coser').searchText += ' 镜音铃';
+    const eligible = new Set(service.listRandomSetIds(options));
+    const expected = service.orderedSets({ ...options, query: '', sortBy: 'imageCount', sortDirection: 'desc' })
+      .filter(item => eligible.has(item.id)).map(item => item.id);
+    expect(service.listSetIds({ ...options, sortBy: 'imageCount', sortDirection: 'desc' })).toEqual(expected);
+  });
+
   test('random candidates are not limited to the first display page', () => {
     const template = service.sets.get('set-single');
     for (let i = 0; i < 210; i += 1) service.sets.set(`extra-${i}`, { ...template, id: `extra-${i}` });

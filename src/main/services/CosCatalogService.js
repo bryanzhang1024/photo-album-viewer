@@ -480,9 +480,9 @@ class CosCatalogService {
     return candidates.filter((record) => !query || record.searchText.includes(query));
   }
 
-  orderedSets(options = {}) {
+  orderedSets(options = {}, candidates = this.matchingSets(options)) {
     const direction = options.sortDirection === 'desc' ? -1 : 1;
-    return this.matchingSets(options).sort((left, right) => {
+    return candidates.sort((left, right) => {
       const primary = options.sortBy === 'imageCount' ? left.imageCount - right.imageCount
         : options.sortBy === 'lastModified' ? (left.lastModified || 0) - (right.lastModified || 0)
         : naturalCompare(left.displayName, right.displayName);
@@ -498,11 +498,11 @@ class CosCatalogService {
 
   listSetIds(options = {}) {
     // Navigation skips unavailable sets; return anchors use the complete displayed order.
-    return this.orderedSets(options).filter(record => options.includeUnavailable === true
+    return this.orderedSets(options, this.matchingNavigationSets(options)).filter(record => options.includeUnavailable === true
       || record.status === 'online' && record.imageCount > 0).map(record => record.id);
   }
 
-  listRandomSetIds(options = {}) {
+  matchingNavigationSets(options = {}) {
     const classification = ['characters', 'cosers', 'looks'].includes(options.viewKind);
     let allowedIds = null;
     if (classification && options.query?.trim()) {
@@ -527,8 +527,12 @@ class CosCatalogService {
       }
     }
     return this.matchingSets({ ...options, query: classification ? '' : options.query })
-      .filter(record => record.status === 'online' && record.imageCount > 0
-        && (!allowedIds || allowedIds.has(record.id)))
+      .filter(record => !allowedIds || allowedIds.has(record.id));
+  }
+
+  listRandomSetIds(options = {}) {
+    return this.matchingNavigationSets(options)
+      .filter(record => record.status === 'online' && record.imageCount > 0)
       .map(record => record.id)
       .sort();
   }
