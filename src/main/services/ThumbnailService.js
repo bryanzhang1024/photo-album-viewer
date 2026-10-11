@@ -10,15 +10,144 @@ const stat = promisify(fs.stat);
 const readdir = promisify(fs.readdir);
 const unlink = promisify(fs.unlink);
 const writeFile = promisify(fs.writeFile);
+const openFile = promisify(fs.open);
+const readFileHandle = promisify(fs.read);
+const closeFile = promisify(fs.close);
+
+// 文件头长度：JPEG/PNG/GIF/BMP/WEBP/TIFF 用前 4 字节即可判定，
+// ISO-BMFF 系（HEIC/HEIF/AVIF）需要看到 offset 8 起的 brand，故取 16。
+const HEADER_PROBE_BYTES = 16;
+
+/**
+ * 判断文件头是否属于已知图片容器。
+ *
+ * 这是「别把文件图标当缩略图缓存」的真正闸门：扩展名完全不可信，
+ * 而 app.getFileIcon 在 Electron 27 的 macOS 上返回 0x0（isEmpty() 仍为
+ * false），无法用来比对图标，所以必须自己确认源文件是不是图片。
+ */
+function looksLikeImageHeader(buffer) {
+  // BMP 只需要 2 字节即可判定，所以这里只挡空/单字节输入；
+  // 各分支自身按需检查长度。
+  if (!buffer || buffer.length < 2) {
+    return false;
+  }
+
+  // JPEG / JFIF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return true;
+  }
+  // PNG
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    return true;
+  }
+  // GIF87a / GIF89a
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
+    return true;
+  }
+  // BMP
+  if (buffer[0] === 0x42 && buffer[1] === 0x4d) {
+    return true;
+  }
+  // WebP: 'RIFF' + 4 字节长度 + 'WEBP'
+  if (
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+  ) {
+    return true;
+  }
+  // TIFF（小端 II*\0 与大端 MM\0*）
+  if (
+    (buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2a) ||
+    (buffer[0] === 0x4d && buffer[1] === 0x4d && buffer[2] === 0x00 && buffer[3] === 0x2a)
+  ) {
+    return true;
+  }
+  // ISO-BMFF: 4 字节长度 + 'ftyp' + brand
+  if (buffer.length >= 12 &&
+    buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70) {
+    const brand = String.fromCharCode(buffer[8], buffer[9], buffer[10], buffer[11]).toLowerCase();
+    if (['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1', 'avif', 'avis'].includes(brand)) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 const THUMBNAIL_CACHE_DIR = path.join(app.getPath('userData'), 'thumbnail-cache');
+
+// 队列优先级：可见图块先于屏外前瞻，避免前瞻挤占用户正在看的内容
+const PRIORITY_VISIBLE = 0;
+const PRIORITY_PREFETCH = 1;
+const PRIORITY_LEVEL_COUNT = 2;
+
+// 队列等待时间只作观测用途，保留最近若干个样本
+const QUEUE_WAIT_SAMPLE_SIZE = 200;
+
+// 单个任务的硬上限。超过就认定底层调用卡死，强制释放并发位。
+// 实测 Electron 的原生缩略图 API 可以永久不返回（曾整进程 22 分钟 0% CPU）。
+const DEFAULT_TASK_TIMEOUT_MS = 30000;
+
+// 原生缩略图与文件图标 API 的单次调用上限。这两条路实测可能耗时数秒，
+// 超时后立刻放弃并回退，不让降级路径拖住整个队列。
+const DEFAULT_NATIVE_CALL_TIMEOUT_MS = 3000;
+
+// WebP 编码参数。
+//
+// effort 是编码耗时的主控项：实测 600x900 下 effort 4（sharp 默认）编码 p50 51ms，
+// effort 2 为 22ms（-57%），而同一 quality 下输出只大 3%（71KB → 73KB）。
+// quality 决定量化表、直接影响观感，保持 80 不变。
+const DEFAULT_WEBP_OPTIONS = { quality: 80, effort: 2 };
+
+function createDeferred() {
+  let resolve;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/**
+ * 给可能永不 settle 的 Promise 加超时，超时以 null 结束竞争。
+ *
+ * 原始任务不会被中断（libvips 与原生 API 都无法中断），它会继续在后台跑完，
+ * 但结果被丢弃。Promise.race 已为原始 Promise 挂上处理函数，因此它之后
+ * 失败也不会产生 unhandled rejection。
+ */
+function withTimeout(promise, timeoutMs, onTimeout) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return promise;
+  }
+
+  let timer = null;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      if (typeof onTimeout === 'function') {
+        onTimeout();
+      }
+      resolve(null);
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
+}
 
 /**
  * ThumbnailService - 缩略图生成服务
  *
  * Linus式设计:
  * - 初始化时检查目录，避免重复检查
- * - 并发控制，最多3个Sharp进程
+ * - 并发控制，最多 MAX_WORKERS 个解码任务，由调度器统一派发
+ * - 双档优先级队列：可见图块优先于屏外前瞻
+ * - 支持取消尚未开始的排队任务
  * - 请求去重，相同请求合并
  * - 自动清理，7天TTL + 2GB限制
  */
@@ -26,9 +155,14 @@ class ThumbnailService {
   constructor() {
     this.cacheDir = THUMBNAIL_CACHE_DIR;
     this.cacheDirReady = false;
-    this.pendingTasks = new Map(); // 请求去重
+    this.pendingTasks = new Map(); // key -> task，用于请求去重
+    this.pendingByPath = new Map(); // imagePath -> Set<key>，用于按路径取消
+    this.priorityQueues = Array.from({ length: PRIORITY_LEVEL_COUNT }, () => []);
     this.activeWorkers = 0;
-    this.MAX_WORKERS = 3; // 最大并发Sharp进程
+    this.MAX_WORKERS = 3; // 最大并发解码任务
+    this.TASK_TIMEOUT_MS = DEFAULT_TASK_TIMEOUT_MS;
+    this.NATIVE_CALL_TIMEOUT_MS = DEFAULT_NATIVE_CALL_TIMEOUT_MS;
+    this.WEBP_OPTIONS = { ...DEFAULT_WEBP_OPTIONS };
     this.MAX_CACHE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
     this.CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7天
     this.metrics = {
@@ -42,7 +176,13 @@ class ThumbnailService {
       dedupHits: 0,
       generatedWithSharp: 0,
       generatedWithSystem: 0,
-      generationFailures: 0
+      generationFailures: 0,
+      cancelled: 0,
+      timeouts: 0,
+      nativeTimeouts: 0,
+      nonImageFallbacksSkipped: 0,
+      iconChecksUndeterminable: 0,
+      queueWaits: []
     };
   }
 
@@ -62,6 +202,7 @@ class ThumbnailService {
 
     this.MAX_WORKERS = safeValue;
     console.log(`[ThumbnailService] 更新并发度: ${this.MAX_WORKERS}`);
+    this.pump();
   }
 
   /**
@@ -95,9 +236,14 @@ class ThumbnailService {
   }
 
   /**
-   * 生成缩略图 - 带并发控制和请求去重
+   * 生成缩略图 - 带并发控制、优先级和请求去重
+   *
+   * @param {string} imagePath 原图绝对路径
+   * @param {number} width 目标宽度
+   * @param {number} height 目标高度
+   * @param {number} priority 0（可见，优先）或 >0（屏外前瞻）
    */
-  async generateThumbnail(imagePath, width = 300, height = 300) {
+  async generateThumbnail(imagePath, width = 300, height = 300, priority = PRIORITY_VISIBLE) {
     this.metrics.requestCount++;
 
     // 问题1解决: 初始化时检查一次
@@ -141,30 +287,209 @@ class ThumbnailService {
 
     // 问题3+4解决: 任务队列 + 并发控制
     this.metrics.cacheMisses++;
-    return this.enqueueTask(imagePath, width, height, cacheFilenames);
+    return this.enqueueTask(imagePath, width, height, cacheFilenames, priority);
+  }
+
+  normalizePriority(priority) {
+    const numeric = Number(priority);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return PRIORITY_VISIBLE;
+    }
+    return PRIORITY_PREFETCH;
   }
 
   /**
-   * 任务队列 - 去重和并发控制
+   * 任务队列 - 去重、优先级排序、并发派发
    */
-  async enqueueTask(imagePath, width, height, cacheFilenames) {
+  enqueueTask(imagePath, width, height, cacheFilenames, priority = PRIORITY_VISIBLE) {
     const key = `${imagePath}:${width}:${height}`;
 
     // 去重: 相同请求合并
-    if (this.pendingTasks.has(key)) {
+    const existing = this.pendingTasks.get(key);
+    if (existing) {
       this.metrics.dedupHits++;
-      return this.pendingTasks.get(key);
+      return existing.deferred.promise;
     }
 
-    const promise = this.processThumbnail(imagePath, width, height, cacheFilenames);
-    this.pendingTasks.set(key, promise);
+    const task = {
+      key,
+      imagePath,
+      width,
+      height,
+      cacheFilenames,
+      priority: this.normalizePriority(priority),
+      state: 'queued', // queued | running | settled
+      enqueuedAt: Date.now(),
+      deferred: createDeferred()
+    };
 
-    promise.finally(() => this.pendingTasks.delete(key));
-    return promise;
+    this.pendingTasks.set(key, task);
+    let keysForPath = this.pendingByPath.get(imagePath);
+    if (!keysForPath) {
+      keysForPath = new Set();
+      this.pendingByPath.set(imagePath, keysForPath);
+    }
+    keysForPath.add(key);
+
+    this.priorityQueues[task.priority].push(task);
+    this.pump();
+
+    return task.deferred.promise;
+  }
+
+  /**
+   * 调度器：在有空闲并发位时按优先级派发任务。
+   * 取代原先 100ms 轮询的信号量，任务完成即立刻补位。
+   */
+  pump() {
+    while (this.activeWorkers < this.MAX_WORKERS) {
+      const task = this.dequeueTask();
+      if (!task) {
+        return;
+      }
+      this.activeWorkers++;
+      task.state = 'running';
+      this.runTask(task);
+    }
+  }
+
+  dequeueTask() {
+    for (let level = 0; level < PRIORITY_LEVEL_COUNT; level += 1) {
+      const queue = this.priorityQueues[level];
+      while (queue.length > 0) {
+        const task = queue.shift();
+        if (task.state === 'queued') {
+          return task;
+        }
+      }
+    }
+    return null;
+  }
+
+  async runTask(task) {
+    if (task.enqueuedAt) {
+      this.recordQueueWait(Date.now() - task.enqueuedAt);
+    }
+
+    let result = null;
+    try {
+      result = await withTimeout(
+        this.processThumbnail(task.imagePath, task.width, task.height, task.cacheFilenames),
+        this.TASK_TIMEOUT_MS,
+        () => {
+          this.metrics.timeouts++;
+          console.warn(
+            `[ThumbnailService] 任务超时 ${this.TASK_TIMEOUT_MS}ms，释放并发位: ${task.imagePath}`
+          );
+        }
+      );
+    } catch (error) {
+      console.error(`生成缩略图失败: ${task.imagePath}`, error);
+      result = null;
+    } finally {
+      this.activeWorkers--;
+      this.releasePending(task);
+      this.pump();
+    }
+
+    this.settleTask(task, result);
+  }
+
+  settleTask(task, result) {
+    if (task.state === 'settled') {
+      return;
+    }
+    task.state = 'settled';
+    task.deferred.resolve(result);
+  }
+
+  releasePending(task) {
+    if (this.pendingTasks.get(task.key) === task) {
+      this.pendingTasks.delete(task.key);
+    }
+
+    const keysForPath = this.pendingByPath.get(task.imagePath);
+    if (keysForPath) {
+      keysForPath.delete(task.key);
+      if (keysForPath.size === 0) {
+        this.pendingByPath.delete(task.imagePath);
+      }
+    }
+  }
+
+  removeFromQueues(task) {
+    for (let level = 0; level < PRIORITY_LEVEL_COUNT; level += 1) {
+      const queue = this.priorityQueues[level];
+      const index = queue.indexOf(task);
+      if (index !== -1) {
+        queue.splice(index, 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  recordQueueWait(durationMs) {
+    const waits = this.metrics.queueWaits;
+    waits.push(durationMs);
+    if (waits.length > QUEUE_WAIT_SAMPLE_SIZE) {
+      waits.shift();
+    }
+  }
+
+  /**
+   * 取消尚未开始的排队任务。
+   *
+   * 只取消 queued 状态的任务：运行中的任务不打断，一来无法中断 libvips 解码，
+   * 二来避免同一路径被重复解码并发写同一个缓存文件。
+   *
+   * @param {string[]} imagePaths 原图绝对路径
+   * @returns {{requested:number, cancelled:number, inFlight:number}}
+   */
+  cancelPending(imagePaths) {
+    if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
+      return { requested: 0, cancelled: 0, inFlight: 0 };
+    }
+
+    const seen = new Set();
+    let cancelled = 0;
+    let inFlight = 0;
+
+    for (const imagePath of imagePaths) {
+      if (typeof imagePath !== 'string' || seen.has(imagePath)) {
+        continue;
+      }
+      seen.add(imagePath);
+
+      const keysForPath = this.pendingByPath.get(imagePath);
+      if (!keysForPath || keysForPath.size === 0) {
+        continue;
+      }
+
+      for (const key of Array.from(keysForPath)) {
+        const task = this.pendingTasks.get(key);
+        if (!task) {
+          continue;
+        }
+
+        if (task.state !== 'queued') {
+          inFlight++;
+          continue;
+        }
+
+        this.removeFromQueues(task);
+        this.releasePending(task);
+        this.settleTask(task, null);
+        cancelled++;
+      }
+    }
+
+    this.metrics.cancelled += cancelled;
+    return { requested: seen.size, cancelled, inFlight };
   }
 
   async processThumbnail(imagePath, width, height, cacheFilenames) {
-    const sharpResult = await this.waitAndGenerate(imagePath, width, height, cacheFilenames.webp);
+    const sharpResult = await this.doGenerate(imagePath, width, height, cacheFilenames.webp);
     if (sharpResult) {
       return sharpResult;
     }
@@ -175,6 +500,32 @@ class ThumbnailService {
       this.metrics.generationFailures++;
     }
     return systemResult;
+  }
+
+  /**
+   * 读源文件头，确认它确实是一个图片容器。
+   *
+   * 读不到或不认识的头一律按「不是图片」处理：宁可这张图没有缩略图，
+   * 也不要把通用文件图标当成缩略图写进缓存（那种错误一旦落盘会长期存在）。
+   */
+  async isDecodableImageSource(imagePath) {
+    let handle = null;
+    try {
+      handle = await openFile(imagePath, 'r');
+      const buffer = Buffer.alloc(HEADER_PROBE_BYTES);
+      const { bytesRead } = await readFileHandle(handle, buffer, 0, HEADER_PROBE_BYTES, 0);
+      return looksLikeImageHeader(buffer.subarray(0, bytesRead));
+    } catch (error) {
+      return false;
+    } finally {
+      if (handle !== null) {
+        try {
+          await closeFile(handle);
+        } catch (error) {
+          // 关闭失败不影响判定结果
+        }
+      }
+    }
   }
 
   async trySystemThumbnail(imagePath, width, height, cacheFilenames) {
@@ -190,8 +541,27 @@ class ThumbnailService {
       return null;
     }
 
+    // 闸门：扩展名不可信，先确认文件头是图片。
+    // 否则 QuickLook 会返回该类型的通用图标（实测对 .txt 与假 .jpg 都返回了
+    // 600x600 的图标位图），而图标比对已不可用，写进缓存就永久错。
+    if (!await this.isDecodableImageSource(imagePath)) {
+      this.metrics.nonImageFallbacksSkipped++;
+      console.warn(`源文件不是可识别的图片格式，跳过系统缩略图回退: ${imagePath}`);
+      return null;
+    }
+
     try {
-      const image = await nativeImage.createThumbnailFromPath(imagePath, { width, height });
+      const image = await withTimeout(
+        nativeImage.createThumbnailFromPath(imagePath, { width, height }),
+        this.NATIVE_CALL_TIMEOUT_MS,
+        () => {
+          this.metrics.nativeTimeouts++;
+          console.warn(
+            `系统缩略图超时 ${this.NATIVE_CALL_TIMEOUT_MS}ms，放弃原生路径: ${imagePath}`
+          );
+        }
+      );
+
       if (!image || image.isEmpty()) {
         return null;
       }
@@ -212,7 +582,12 @@ class ThumbnailService {
   }
 
   /**
-   * 检查系统返回的缩略图是否只是默认文件图标
+   * 尝试判断系统返回的缩略图是否只是默认文件图标。
+   *
+   * 返回 true 表示「这是通用图标，应拒绝」。注意这个判定在本机（Electron 27 /
+   * macOS 26）实际无法工作：app.getFileIcon 返回 0x0 而 isEmpty() 仍为 false，
+   * 位图比对无法进行。因此它只是尽力而为的第二道检查，真正的闸门是
+   * trySystemThumbnail 开头的文件头检查。
    */
   async isSystemFileIcon(imagePath, thumbnailImage) {
     if (!thumbnailImage || thumbnailImage.isEmpty()) {
@@ -225,15 +600,37 @@ class ThumbnailService {
 
     if (!app.isReady()) {
       try {
-        await app.whenReady();
+        await withTimeout(app.whenReady(), this.NATIVE_CALL_TIMEOUT_MS, () => {
+          this.metrics.nativeTimeouts++;
+          console.warn(`等待应用就绪超时 ${this.NATIVE_CALL_TIMEOUT_MS}ms，跳过图标判定`);
+        });
       } catch (err) {
         return false;
       }
     }
 
     try {
-      const fileIcon = await app.getFileIcon(imagePath, { size: 'large' });
+      const fileIcon = await withTimeout(
+        app.getFileIcon(imagePath, { size: 'large' }),
+        this.NATIVE_CALL_TIMEOUT_MS,
+        () => {
+          this.metrics.nativeTimeouts++;
+          console.warn(
+            `文件图标超时 ${this.NATIVE_CALL_TIMEOUT_MS}ms，跳过图标判定: ${imagePath}`
+          );
+        }
+      );
+
       if (!fileIcon || fileIcon.isEmpty()) {
+        return false;
+      }
+
+      // app.getFileIcon 返回 0x0 而 isEmpty() 仍为 false，无法比对。
+      // 明确记为「无法判定」并返回，避免在坏图上做无意义的 resize/位图运算。
+      const iconSize = fileIcon.getSize();
+      if (!iconSize || !iconSize.width || !iconSize.height) {
+        this.metrics.iconChecksUndeterminable++;
+        console.warn(`文件图标不可用（0x0），无法比对图标: ${imagePath}`);
         return false;
       }
 
@@ -276,23 +673,6 @@ class ThumbnailService {
   }
 
   /**
-   * 等待并生成 - 并发控制
-   */
-  async waitAndGenerate(imagePath, width, height, cacheFilename) {
-    // 并发控制: 等待空闲worker
-    while (this.activeWorkers >= this.MAX_WORKERS) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    this.activeWorkers++;
-    try {
-      return await this.doGenerate(imagePath, width, height, cacheFilename);
-    } finally {
-      this.activeWorkers--;
-    }
-  }
-
-  /**
    * 实际生成逻辑
    */
   async doGenerate(imagePath, width, height, cacheFilename) {
@@ -307,7 +687,7 @@ class ThumbnailService {
     try {
       await sharp(imagePath, { failOnError: false })
         .resize({ width, height, fit: sharp.fit.cover, withoutEnlargement: true })
-        .webp({ quality: 80 })
+        .webp(this.WEBP_OPTIONS)
         .toFile(cacheFilename);
 
       this.metrics.generatedWithSharp++;
@@ -435,12 +815,27 @@ class ThumbnailService {
       ? Number(((this.metrics.cacheHits.total / this.metrics.requestCount) * 100).toFixed(2))
       : 0;
 
+    const { queueWaits, ...counters } = this.metrics;
+    const sortedWaits = [...queueWaits].sort((a, b) => a - b);
+    const percentile = (ratio) => {
+      if (sortedWaits.length === 0) {
+        return 0;
+      }
+      const index = Math.min(sortedWaits.length - 1, Math.floor(sortedWaits.length * ratio));
+      return sortedWaits[index];
+    };
+
     return {
-      ...this.metrics,
+      ...counters,
       hitRate,
       pendingTasks: this.pendingTasks.size,
       activeWorkers: this.activeWorkers,
-      maxWorkers: this.MAX_WORKERS
+      maxWorkers: this.MAX_WORKERS,
+      queuedVisible: this.priorityQueues[PRIORITY_VISIBLE].length,
+      queuedPrefetch: this.priorityQueues[PRIORITY_PREFETCH].length,
+      queueWaitP50Ms: percentile(0.5),
+      queueWaitP90Ms: percentile(0.9),
+      queueWaitSamples: sortedWaits.length
     };
   }
 }
@@ -468,14 +863,20 @@ async function ensureCacheDir() {
   return thumbnailService.ensureCacheDir();
 }
 
-async function generateThumbnail(imagePath, width, height) {
-  return thumbnailService.generateThumbnail(imagePath, width, height);
+async function generateThumbnail(imagePath, width, height, priority) {
+  return thumbnailService.generateThumbnail(imagePath, width, height, priority);
+}
+
+async function cancelPending(imagePaths) {
+  return thumbnailService.cancelPending(imagePaths);
 }
 
 module.exports = {
   thumbnailService,
   ensureCacheDir,
   generateThumbnail,
+  cancelPending,
+  looksLikeImageHeader,
   THUMBNAIL_CACHE_DIR,
   setMaxWorkers: (count) => thumbnailService.setMaxWorkers(count)
 };

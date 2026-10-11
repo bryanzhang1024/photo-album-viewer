@@ -23,6 +23,30 @@ async function readJson(fsApi, filePath) {
   }
 }
 
+/**
+ * 只判断文件是否存在。
+ *
+ * 不要用 readJson 来做存在性检查：`.pre-3.4.json` 副本实测 30MB，
+ * 为了「它在不在」而读进来再 JSON.parse 一遍是纯浪费。
+ */
+async function fileExists(fsApi, filePath) {
+  if (typeof fsApi.access === 'function') {
+    try {
+      await fsApi.access(filePath, fs.constants.F_OK);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  try {
+    await fsApi.stat(filePath);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function writeJsonAtomic(fsApi, filePath, value, { pretty = true } = {}) {
   await fsApi.mkdir(path.dirname(filePath), { recursive: true });
   const temporaryPath = `${filePath}.${process.pid}.tmp`;
@@ -86,7 +110,7 @@ class CosLibraryService {
             }));
             this.rootCatalogs.set(root.id, { ...cache.catalog, sets });
           }
-          if (!await readJson(this.fs, `${this.cachePath}.pre-3.4.json`)) {
+          if (!await fileExists(this.fs, `${this.cachePath}.pre-3.4.json`)) {
             await writeJsonAtomic(this.fs, `${this.cachePath}.pre-3.4.json`, cache, { pretty: false });
           }
         }

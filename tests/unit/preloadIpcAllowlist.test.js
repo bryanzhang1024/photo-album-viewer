@@ -75,6 +75,17 @@ describe('preload IPC allowlist', () => {
     expect(() => api.invoke('unknown-channel')).toThrow('Blocked IPC invoke channel');
   });
 
+  test.each([false, true])(
+    'allows the CANCEL_THUMBNAILS thumbnail cancellation channel (fallback=%s)',
+    async (useFallback) => {
+      const { api, electron } = loadPreload({ useFallback });
+      const paths = ['/photos/one.jpg', '/photos/two.jpg'];
+
+      await expect(api.invoke(CHANNELS.CANCEL_THUMBNAILS, paths)).resolves.toBe('ok');
+      expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith('cancel-thumbnails', paths);
+    }
+  );
+
   test.each([
     'COS_GET_STATUS',
     'COS_SELECT_ROOT',
