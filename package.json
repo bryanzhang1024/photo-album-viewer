@@ -1,6 +1,6 @@
 {
   "name": "photo-album-viewer",
-  "version": "3.8.2",
+  "version": "3.8.3",
   "description": "照片相簿浏览器 - 穿透多层文件夹查看底层相簿",
   "main": "src/main/main.js",
   "scripts": {
@@ -15,7 +15,9 @@
     "build:electron:release": "electron-builder",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:navigation": "jest tests/unit/navigation.test.js"
+    "test:navigation": "jest tests/unit/navigation.test.js",
+    "bench:thumb": "electron scripts/bench-thumbnails-3.js",
+    "probe:thumb": "cross-env PROBE_TIMEOUT=20000 electron scripts/probe-native-thumb.js"
   },
   "build": {
     "appId": "com.photoalbum.viewer",

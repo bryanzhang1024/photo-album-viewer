@@ -16,6 +16,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const sharp = require('sharp');
 
 const LIST = process.env.BENCH_LIST || '/tmp/thumb-bench-sample.txt';
@@ -59,6 +60,10 @@ async function timePool(files, limit, fn) {
   });
   return { wall: performance.now() - t0, failures };
 }
+
+/** 并发场景每张图必须写到不同文件，否则写入互相竞争会低估吞吐 */
+const uniqueOut = (tag, key) =>
+  path.join(OUT, `${tag}-${crypto.createHash('md5').update(key).digest('hex').slice(0, 16)}.webp`);
 
 const section = (t) => console.log(`\n${'─'.repeat(72)}\n${t}\n${'─'.repeat(72)}`);
 
@@ -176,7 +181,7 @@ async function main() {
     if (vipsThreads > 0) sharp.concurrency(vipsThreads);
     const label = vipsThreads === 0 ? `libvips 默认(${sharp.concurrency()})` : `libvips=${vipsThreads}`;
     for (const conc of [3, 6, 10, 14]) {
-      const run = await timePool(grid, conc, (f) => sharp(f).resize(COVER).webp(WEBP).toFile(path.join(OUT, 'c.webp')));
+      const run = await timePool(grid, conc, (f) => sharp(f).resize(COVER).webp(WEBP).toFile(uniqueOut('c', f)));
       console.log(
         `  并发=${String(conc).padStart(2)} × ${label.padEnd(16)} ${String(run.wall.toFixed(0)).padStart(6)}ms` +
           `  ${String((run.wall / grid.length).toFixed(0)).padStart(4)}ms/张` +
@@ -198,14 +203,14 @@ async function main() {
         while (active >= MAX) await new Promise((r) => setTimeout(r, 100));
         active++;
         try {
-          await sharp(f).resize(COVER).webp(WEBP).toFile(path.join(OUT, 'q.webp'));
+          await sharp(f).resize(COVER).webp(WEBP).toFile(uniqueOut('q-poll', f));
         } finally {
           active--;
         }
       })
     );
     const polling = performance.now() - t0;
-    const direct = await timePool(tasks, MAX, (f) => sharp(f).resize(COVER).webp(WEBP).toFile(path.join(OUT, 'q.webp')));
+    const direct = await timePool(tasks, MAX, (f) => sharp(f).resize(COVER).webp(WEBP).toFile(uniqueOut('q-direct', f)));
     console.log(`  轮询队列（当前实现）      ${polling.toFixed(0)}ms`);
     console.log(`  直接派发（同等并发）      ${direct.wall.toFixed(0)}ms`);
     console.log(`  轮询带来的额外开销        +${(polling - direct.wall).toFixed(0)}ms  (${(((polling - direct.wall) / polling) * 100).toFixed(0)}%)`);

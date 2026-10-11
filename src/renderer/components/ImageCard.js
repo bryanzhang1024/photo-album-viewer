@@ -155,17 +155,10 @@ function ImageCard({
     }
 
     try {
-      const filename = image.name.toLowerCase();
-      const isPriority =
-        filename.includes('cover') ||
-        filename.includes('folder') ||
-        filename.startsWith('0') ||
-        filename.startsWith('1') ||
-        filename.startsWith('a') ||
-        filename.startsWith('front') ||
-        filename.startsWith('main');
-
-      const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, isPriority ? 0 : 1);
+      // 这条路径只在图块加载失败后触发，说明用户正在等它，一律按可见优先级请求。
+      // 原先按文件名（cover/01/a/front/main…）猜测优先级，会把非封面命名的可见图
+      // 降到屏外前瞻档，与「可见优先」的队列语义相反。
+      const url = await ipcRenderer.invoke('get-image-thumbnail', image.path, 0);
 
       if (!url) {
         setImageError(true);

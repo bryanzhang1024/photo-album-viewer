@@ -10,6 +10,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const sharp = require('sharp');
 
 const LIST = process.env.BENCH_LIST || '/tmp/thumb-bench-sample.txt';
@@ -31,6 +32,14 @@ function stats(a) {
 const fmt = (s) => (s ? `mean=${s.mean.toFixed(0)} p50=${s.p50.toFixed(0)} p90=${s.p90.toFixed(0)} min=${s.min.toFixed(0)} max=${s.max.toFixed(0)}` : 'n/a');
 
 const gen = (f, out) => sharp(f).resize(COVER).webp(WEBP).toFile(out);
+
+/**
+ * 并发场景必须让每张图写到不同文件。
+ * 早期版本让所有并发任务写同一个路径，写入互相竞争，
+ * 测出的吞吐明显偏低，是本文件历史上一个真实的基准缺陷。
+ */
+const uniqueOut = (tag, key) =>
+  path.join(OUT, `${tag}-${crypto.createHash('md5').update(key).digest('hex').slice(0, 16)}.webp`);
 
 async function mapPool(items, limit, fn) {
   const q = [...items];
@@ -92,7 +101,7 @@ async function main() {
     if (vips > 0) sharp.concurrency(vips);
     const label = vips === 0 ? `libvips=默认(10)` : `libvips=${vips}      `;
     for (const conc of [2, 3, 6, 10, 14]) {
-      const r = await timePool(grid, conc, (f) => gen(f, path.join(OUT, 'c.webp')));
+      const r = await timePool(grid, conc, (f) => gen(f, uniqueOut('c', f)));
       const rate = grid.length / (r.wall / 1000);
       if (rate > best.rate) Object.assign(best, { rate, conc, vips: vips || 10, wall: r.wall });
       console.log(
@@ -115,14 +124,14 @@ async function main() {
         while (active >= MAX) await new Promise((r) => setTimeout(r, 100));
         active++;
         try {
-          await gen(f, path.join(OUT, 'q.webp'));
+          await gen(f, uniqueOut('q-poll', f));
         } finally {
           active--;
         }
       })
     );
     const polling = performance.now() - t0;
-    const direct = await timePool(tasks, 6, (f) => gen(f, path.join(OUT, 'q.webp')));
+    const direct = await timePool(tasks, 6, (f) => gen(f, uniqueOut('q-direct', f)));
     console.log(`  当前实现（100ms 轮询信号量）  ${polling.toFixed(0)}ms`);
     console.log(`  直接派发（同等并发）          ${direct.wall.toFixed(0)}ms`);
     console.log(`  轮询额外开销                  +${(polling - direct.wall).toFixed(0)}ms  (${(((polling - direct.wall) / polling) * 100).toFixed(0)}%)`);

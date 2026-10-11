@@ -13,12 +13,30 @@ const writeFile = promisify(fs.writeFile);
 
 const THUMBNAIL_CACHE_DIR = path.join(app.getPath('userData'), 'thumbnail-cache');
 
+// 队列优先级：可见图块先于屏外前瞻，避免前瞻挤占用户正在看的内容
+const PRIORITY_VISIBLE = 0;
+const PRIORITY_PREFETCH = 1;
+const PRIORITY_LEVEL_COUNT = 2;
+
+// 队列等待时间只作观测用途，保留最近若干个样本
+const QUEUE_WAIT_SAMPLE_SIZE = 200;
+
+function createDeferred() {
+  let resolve;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 /**
  * ThumbnailService - 缩略图生成服务
  *
  * Linus式设计:
  * - 初始化时检查目录，避免重复检查
- * - 并发控制，最多3个Sharp进程
+ * - 并发控制，最多 MAX_WORKERS 个解码任务，由调度器统一派发
+ * - 双档优先级队列：可见图块优先于屏外前瞻
+ * - 支持取消尚未开始的排队任务
  * - 请求去重，相同请求合并
  * - 自动清理，7天TTL + 2GB限制
  */
@@ -26,9 +44,11 @@ class ThumbnailService {
   constructor() {
     this.cacheDir = THUMBNAIL_CACHE_DIR;
     this.cacheDirReady = false;
-    this.pendingTasks = new Map(); // 请求去重
+    this.pendingTasks = new Map(); // key -> task，用于请求去重
+    this.pendingByPath = new Map(); // imagePath -> Set<key>，用于按路径取消
+    this.priorityQueues = Array.from({ length: PRIORITY_LEVEL_COUNT }, () => []);
     this.activeWorkers = 0;
-    this.MAX_WORKERS = 3; // 最大并发Sharp进程
+    this.MAX_WORKERS = 3; // 最大并发解码任务
     this.MAX_CACHE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
     this.CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7天
     this.metrics = {
@@ -42,7 +62,9 @@ class ThumbnailService {
       dedupHits: 0,
       generatedWithSharp: 0,
       generatedWithSystem: 0,
-      generationFailures: 0
+      generationFailures: 0,
+      cancelled: 0,
+      queueWaits: []
     };
   }
 
@@ -62,6 +84,7 @@ class ThumbnailService {
 
     this.MAX_WORKERS = safeValue;
     console.log(`[ThumbnailService] 更新并发度: ${this.MAX_WORKERS}`);
+    this.pump();
   }
 
   /**
@@ -95,9 +118,14 @@ class ThumbnailService {
   }
 
   /**
-   * 生成缩略图 - 带并发控制和请求去重
+   * 生成缩略图 - 带并发控制、优先级和请求去重
+   *
+   * @param {string} imagePath 原图绝对路径
+   * @param {number} width 目标宽度
+   * @param {number} height 目标高度
+   * @param {number} priority 0（可见，优先）或 >0（屏外前瞻）
    */
-  async generateThumbnail(imagePath, width = 300, height = 300) {
+  async generateThumbnail(imagePath, width = 300, height = 300, priority = PRIORITY_VISIBLE) {
     this.metrics.requestCount++;
 
     // 问题1解决: 初始化时检查一次
@@ -141,30 +169,200 @@ class ThumbnailService {
 
     // 问题3+4解决: 任务队列 + 并发控制
     this.metrics.cacheMisses++;
-    return this.enqueueTask(imagePath, width, height, cacheFilenames);
+    return this.enqueueTask(imagePath, width, height, cacheFilenames, priority);
+  }
+
+  normalizePriority(priority) {
+    const numeric = Number(priority);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return PRIORITY_VISIBLE;
+    }
+    return PRIORITY_PREFETCH;
   }
 
   /**
-   * 任务队列 - 去重和并发控制
+   * 任务队列 - 去重、优先级排序、并发派发
    */
-  async enqueueTask(imagePath, width, height, cacheFilenames) {
+  enqueueTask(imagePath, width, height, cacheFilenames, priority = PRIORITY_VISIBLE) {
     const key = `${imagePath}:${width}:${height}`;
 
     // 去重: 相同请求合并
-    if (this.pendingTasks.has(key)) {
+    const existing = this.pendingTasks.get(key);
+    if (existing) {
       this.metrics.dedupHits++;
-      return this.pendingTasks.get(key);
+      return existing.deferred.promise;
     }
 
-    const promise = this.processThumbnail(imagePath, width, height, cacheFilenames);
-    this.pendingTasks.set(key, promise);
+    const task = {
+      key,
+      imagePath,
+      width,
+      height,
+      cacheFilenames,
+      priority: this.normalizePriority(priority),
+      state: 'queued', // queued | running | settled
+      enqueuedAt: Date.now(),
+      deferred: createDeferred()
+    };
 
-    promise.finally(() => this.pendingTasks.delete(key));
-    return promise;
+    this.pendingTasks.set(key, task);
+    let keysForPath = this.pendingByPath.get(imagePath);
+    if (!keysForPath) {
+      keysForPath = new Set();
+      this.pendingByPath.set(imagePath, keysForPath);
+    }
+    keysForPath.add(key);
+
+    this.priorityQueues[task.priority].push(task);
+    this.pump();
+
+    return task.deferred.promise;
+  }
+
+  /**
+   * 调度器：在有空闲并发位时按优先级派发任务。
+   * 取代原先 100ms 轮询的信号量，任务完成即立刻补位。
+   */
+  pump() {
+    while (this.activeWorkers < this.MAX_WORKERS) {
+      const task = this.dequeueTask();
+      if (!task) {
+        return;
+      }
+      this.activeWorkers++;
+      task.state = 'running';
+      this.runTask(task);
+    }
+  }
+
+  dequeueTask() {
+    for (let level = 0; level < PRIORITY_LEVEL_COUNT; level += 1) {
+      const queue = this.priorityQueues[level];
+      while (queue.length > 0) {
+        const task = queue.shift();
+        if (task.state === 'queued') {
+          return task;
+        }
+      }
+    }
+    return null;
+  }
+
+  async runTask(task) {
+    if (task.enqueuedAt) {
+      this.recordQueueWait(Date.now() - task.enqueuedAt);
+    }
+
+    let result = null;
+    try {
+      result = await this.processThumbnail(task.imagePath, task.width, task.height, task.cacheFilenames);
+    } catch (error) {
+      console.error(`生成缩略图失败: ${task.imagePath}`, error);
+      result = null;
+    } finally {
+      this.activeWorkers--;
+      this.releasePending(task);
+      this.pump();
+    }
+
+    this.settleTask(task, result);
+  }
+
+  settleTask(task, result) {
+    if (task.state === 'settled') {
+      return;
+    }
+    task.state = 'settled';
+    task.deferred.resolve(result);
+  }
+
+  releasePending(task) {
+    if (this.pendingTasks.get(task.key) === task) {
+      this.pendingTasks.delete(task.key);
+    }
+
+    const keysForPath = this.pendingByPath.get(task.imagePath);
+    if (keysForPath) {
+      keysForPath.delete(task.key);
+      if (keysForPath.size === 0) {
+        this.pendingByPath.delete(task.imagePath);
+      }
+    }
+  }
+
+  removeFromQueues(task) {
+    for (let level = 0; level < PRIORITY_LEVEL_COUNT; level += 1) {
+      const queue = this.priorityQueues[level];
+      const index = queue.indexOf(task);
+      if (index !== -1) {
+        queue.splice(index, 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  recordQueueWait(durationMs) {
+    const waits = this.metrics.queueWaits;
+    waits.push(durationMs);
+    if (waits.length > QUEUE_WAIT_SAMPLE_SIZE) {
+      waits.shift();
+    }
+  }
+
+  /**
+   * 取消尚未开始的排队任务。
+   *
+   * 只取消 queued 状态的任务：运行中的任务不打断，一来无法中断 libvips 解码，
+   * 二来避免同一路径被重复解码并发写同一个缓存文件。
+   *
+   * @param {string[]} imagePaths 原图绝对路径
+   * @returns {{requested:number, cancelled:number, inFlight:number}}
+   */
+  cancelPending(imagePaths) {
+    if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
+      return { requested: 0, cancelled: 0, inFlight: 0 };
+    }
+
+    const seen = new Set();
+    let cancelled = 0;
+    let inFlight = 0;
+
+    for (const imagePath of imagePaths) {
+      if (typeof imagePath !== 'string' || seen.has(imagePath)) {
+        continue;
+      }
+      seen.add(imagePath);
+
+      const keysForPath = this.pendingByPath.get(imagePath);
+      if (!keysForPath || keysForPath.size === 0) {
+        continue;
+      }
+
+      for (const key of Array.from(keysForPath)) {
+        const task = this.pendingTasks.get(key);
+        if (!task) {
+          continue;
+        }
+
+        if (task.state !== 'queued') {
+          inFlight++;
+          continue;
+        }
+
+        this.removeFromQueues(task);
+        this.releasePending(task);
+        this.settleTask(task, null);
+        cancelled++;
+      }
+    }
+
+    this.metrics.cancelled += cancelled;
+    return { requested: seen.size, cancelled, inFlight };
   }
 
   async processThumbnail(imagePath, width, height, cacheFilenames) {
-    const sharpResult = await this.waitAndGenerate(imagePath, width, height, cacheFilenames.webp);
+    const sharpResult = await this.doGenerate(imagePath, width, height, cacheFilenames.webp);
     if (sharpResult) {
       return sharpResult;
     }
@@ -272,23 +470,6 @@ class ThumbnailService {
     } catch (err) {
       console.warn('比对系统文件图标失败，跳过检测:', err?.message || err);
       return false;
-    }
-  }
-
-  /**
-   * 等待并生成 - 并发控制
-   */
-  async waitAndGenerate(imagePath, width, height, cacheFilename) {
-    // 并发控制: 等待空闲worker
-    while (this.activeWorkers >= this.MAX_WORKERS) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    this.activeWorkers++;
-    try {
-      return await this.doGenerate(imagePath, width, height, cacheFilename);
-    } finally {
-      this.activeWorkers--;
     }
   }
 
@@ -435,12 +616,27 @@ class ThumbnailService {
       ? Number(((this.metrics.cacheHits.total / this.metrics.requestCount) * 100).toFixed(2))
       : 0;
 
+    const { queueWaits, ...counters } = this.metrics;
+    const sortedWaits = [...queueWaits].sort((a, b) => a - b);
+    const percentile = (ratio) => {
+      if (sortedWaits.length === 0) {
+        return 0;
+      }
+      const index = Math.min(sortedWaits.length - 1, Math.floor(sortedWaits.length * ratio));
+      return sortedWaits[index];
+    };
+
     return {
-      ...this.metrics,
+      ...counters,
       hitRate,
       pendingTasks: this.pendingTasks.size,
       activeWorkers: this.activeWorkers,
-      maxWorkers: this.MAX_WORKERS
+      maxWorkers: this.MAX_WORKERS,
+      queuedVisible: this.priorityQueues[PRIORITY_VISIBLE].length,
+      queuedPrefetch: this.priorityQueues[PRIORITY_PREFETCH].length,
+      queueWaitP50Ms: percentile(0.5),
+      queueWaitP90Ms: percentile(0.9),
+      queueWaitSamples: sortedWaits.length
     };
   }
 }
@@ -468,14 +664,19 @@ async function ensureCacheDir() {
   return thumbnailService.ensureCacheDir();
 }
 
-async function generateThumbnail(imagePath, width, height) {
-  return thumbnailService.generateThumbnail(imagePath, width, height);
+async function generateThumbnail(imagePath, width, height, priority) {
+  return thumbnailService.generateThumbnail(imagePath, width, height, priority);
+}
+
+async function cancelPending(imagePaths) {
+  return thumbnailService.cancelPending(imagePaths);
 }
 
 module.exports = {
   thumbnailService,
   ensureCacheDir,
   generateThumbnail,
+  cancelPending,
   THUMBNAIL_CACHE_DIR,
   setMaxWorkers: (count) => thumbnailService.setMaxWorkers(count)
 };

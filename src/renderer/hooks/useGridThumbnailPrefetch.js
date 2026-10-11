@@ -57,6 +57,30 @@ export function useGridThumbnailPrefetch({
   enabled = true
 }) {
   const thumbnailPrefetchInFlight = useRef(new Set());
+  // 当前真正需要的路径窗口，用于识别已经划出去的请求
+  const requestedPaths = useRef(new Set());
+
+  const collectRowPaths = useCallback((startRow, endRow) => {
+    if (!gridRows?.length || typeof extractPathsFromRow !== 'function') {
+      return [];
+    }
+
+    const normalizedStart = Math.max(0, startRow);
+    const normalizedEnd = Math.min(gridRows.length - 1, endRow);
+
+    if (normalizedStart > normalizedEnd) {
+      return [];
+    }
+
+    const paths = [];
+    for (let rowIndex = normalizedStart; rowIndex <= normalizedEnd; rowIndex += 1) {
+      const row = gridRows[rowIndex];
+      if (row) {
+        paths.push(...extractPathsFromRow(row));
+      }
+    }
+    return paths;
+  }, [extractPathsFromRow, gridRows]);
 
   const prefetchThumbnails = useCallback(async (paths, priority = 1) => {
     if (!enabled || !ipcRenderer || !Array.isArray(paths) || paths.length === 0) {
@@ -94,42 +118,95 @@ export function useGridThumbnailPrefetch({
     }
   }, [enabled]);
 
+  /**
+   * 取消已经划出需求窗口的排队请求，避免它们继续占用解码并发位。
+   *
+   * 只影响尚未开始的任务；已经在解码的无法中断。若某张图被误取消，
+   * 它一旦重新进入窗口会被再次请求，且 ImageCard 自身的 404 回退路径
+   * 也会补发一次请求，因此取消是自愈的。
+   */
+  const cancelDroppedPaths = useCallback((droppedPaths) => {
+    if (!enabled || !ipcRenderer || droppedPaths.length === 0) {
+      return;
+    }
+
+    droppedPaths.forEach((imagePath) => {
+      thumbnailPrefetchInFlight.current.delete(imagePath);
+    });
+
+    Promise.resolve(ipcRenderer.invoke(CHANNELS.CANCEL_THUMBNAILS, droppedPaths)).catch((error) => {
+      console.error('取消缩略图请求失败:', error);
+    });
+  }, [enabled]);
+
+  const syncRequestedWindow = useCallback((nextPaths) => {
+    const next = new Set(nextPaths);
+    const dropped = [];
+
+    for (const imagePath of requestedPaths.current) {
+      if (!next.has(imagePath)) {
+        dropped.push(imagePath);
+      }
+    }
+
+    requestedPaths.current = next;
+    return dropped;
+  }, []);
+
   const prefetchRows = useCallback((startRow, endRow, priority = 1) => {
-    if (!enabled || !gridRows?.length || typeof extractPathsFromRow !== 'function') {
+    if (!enabled) {
       return;
     }
 
-    const normalizedStart = Math.max(0, startRow);
-    const normalizedEnd = Math.min(gridRows.length - 1, endRow);
-
-    if (normalizedStart > normalizedEnd) {
-      return;
-    }
-
-    const paths = [];
-
-    for (let rowIndex = normalizedStart; rowIndex <= normalizedEnd; rowIndex += 1) {
-      paths.push(...extractPathsFromRow(gridRows[rowIndex]));
-    }
-
+    const paths = collectRowPaths(startRow, endRow);
     if (paths.length) {
       prefetchThumbnails(paths, priority);
     }
-  }, [enabled, extractPathsFromRow, gridRows, prefetchThumbnails]);
+  }, [collectRowPaths, enabled, prefetchThumbnails]);
 
   useEffect(() => {
     if (!enabled || !gridRows?.length) {
       return;
     }
 
+    syncRequestedWindow(collectRowPaths(0, rowsAhead));
     prefetchRows(0, Math.min(gridRows.length - 1, rowsAhead), 0);
-  }, [enabled, gridRows, prefetchRows, rowsAhead]);
+  }, [collectRowPaths, enabled, gridRows, prefetchRows, rowsAhead, syncRequestedWindow]);
+
+  // 卸载时把整个窗口的排队请求一并取消
+  useEffect(() => () => {
+    const pending = Array.from(requestedPaths.current);
+    requestedPaths.current = new Set();
+    if (pending.length > 0 && ipcRenderer) {
+      Promise.resolve(ipcRenderer.invoke(CHANNELS.CANCEL_THUMBNAILS, pending)).catch(() => {});
+    }
+  }, []);
 
   const handleRangeChanged = useCallback(({ startIndex, endIndex }) => {
-    prefetchRows(startIndex, endIndex, 0);
+    if (!enabled || !gridRows?.length) {
+      return;
+    }
+
+    const normalizedEnd = Math.min(gridRows.length - 1, endIndex);
+
+    // 真正需要覆盖的窗口：可见范围 + 后方回顾 + 前方前瞻
+    const wanted = collectRowPaths(startIndex - rowsBehind, normalizedEnd + rowsAhead);
+    const dropped = syncRequestedWindow(wanted);
+    cancelDroppedPaths(dropped);
+
+    prefetchRows(startIndex, normalizedEnd, 0);
     prefetchRows(startIndex - rowsBehind, startIndex - 1, 1);
-    prefetchRows(endIndex + 1, endIndex + rowsAhead, 1);
-  }, [prefetchRows, rowsAhead, rowsBehind]);
+    prefetchRows(normalizedEnd + 1, normalizedEnd + rowsAhead, 1);
+  }, [
+    cancelDroppedPaths,
+    collectRowPaths,
+    enabled,
+    gridRows,
+    prefetchRows,
+    rowsAhead,
+    rowsBehind,
+    syncRequestedWindow
+  ]);
 
   return {
     handleRangeChanged

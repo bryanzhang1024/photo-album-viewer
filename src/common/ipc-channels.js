@@ -9,6 +9,7 @@ module.exports = {
     GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',
     GET_THUMBNAIL: 'get-thumbnail',
     GET_BATCH_THUMBNAILS: 'get-batch-thumbnails',
+    CANCEL_THUMBNAILS: 'cancel-thumbnails',
     GET_ALBUM_IMAGES: 'get-album-images',
     GET_ALBUM_IMAGE_COUNT: 'get-album-image-count',
     UPDATE_PERFORMANCE_SETTINGS: 'update-performance-settings',

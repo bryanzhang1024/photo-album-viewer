@@ -17,6 +17,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const sharp = require('sharp');
 
 const LIST = process.env.BENCH_LIST || '/tmp/thumb-bench-sample.txt';
@@ -36,6 +37,10 @@ function stats(arr) {
   const q = (p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
   return { n: a.length, mean, p50: q(0.5), p90: q(0.9), min: a[0], max: a[a.length - 1] };
 }
+
+/** 并发场景每张图必须写到不同文件，否则写入互相竞争会低估吞吐 */
+const uniqueOut = (tag, key) =>
+  path.join(OUT, `${tag}-${crypto.createHash('md5').update(key).digest('hex').slice(0, 16)}.webp`);
 
 const fmt = (s) =>
   s ? `n=${s.n} mean=${s.mean.toFixed(1)}ms p50=${s.p50.toFixed(1)}ms p90=${s.p90.toFixed(1)}ms min=${s.min.toFixed(1)} max=${s.max.toFixed(1)}` : 'n=0';
@@ -147,10 +152,17 @@ async function main() {
   }
 
   section('2. 编码成本拆解');
-  const rawBuf = await sharp(seq[0]).resize(COVER).toBuffer();
+  // 必须显式 .raw()：toBuffer() 默认保持输入格式（JPEG 进 JPEG 出），
+  // 不加 .raw() 会把压缩后的 JPEG 当原始像素交给下游，直接报 size 不匹配。
+  const rawResult = await sharp(seq[0]).resize(COVER).raw().toBuffer({ resolveWithObject: true });
+  const rawBuf = rawResult.data;
   const tEnc = performance.now();
-  for (let i = 0; i < 5; i++) await sharp(rawBuf, { raw: { width: SIZE, height: SIZE, channels: 3 } }).webp(WEBP).toBuffer();
-  console.log(`  300x300 原始像素 → webp80        ${((performance.now() - tEnc) / 5).toFixed(1)}ms/张`);
+  for (let i = 0; i < 5; i++) {
+    await sharp(rawBuf, {
+      raw: { width: rawResult.info.width, height: rawResult.info.height, channels: rawResult.info.channels }
+    }).webp(WEBP).toBuffer();
+  }
+  console.log(`  ${rawResult.info.width}x${rawResult.info.height} 原始像素 → webp80   ${((performance.now() - tEnc) / 5).toFixed(1)}ms/张`);
   const nativeImg = await nativeImage.createThumbnailFromPath(seq[0], { width: SIZE, height: SIZE });
   const tPng = performance.now();
   for (let i = 0; i < 5; i++) nativeImg.toPNG();
@@ -178,7 +190,7 @@ async function main() {
 
   section('4. 网格填充吞吐（整批墙钟时间，越低越好）');
   for (const conc of [3, 8, 12]) {
-    const sharpRun = await timePool(grid, conc, (f) => sharp(f).resize(COVER).webp(WEBP).toFile(path.join(OUT, 'b.webp')));
+    const sharpRun = await timePool(grid, conc, (f) => sharp(f).resize(COVER).webp(WEBP).toFile(uniqueOut('b', f)));
     const nativeRun = await timePool(grid, conc, async (f) => {
       const i = await nativeImage.createThumbnailFromPath(f, { width: SIZE, height: SIZE });
       if (!i || i.isEmpty()) throw new Error('空缩略图');

@@ -293,4 +293,228 @@ describe('ThumbnailService', () => {
     expect(firstResult).toBe('result');
     expect(secondResult).toBe('result');
   });
+
+  describe('队列调度与取消', () => {
+    const flush = async (times = 4) => {
+      for (let i = 0; i < times; i += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    };
+
+    const queueFsStructure = {
+      '/photos': {},
+      '/mock': { userData: { 'thumbnail-cache': {} } }
+    };
+
+    /** 用可控 Promise 替换真正的解码，从而观察队列派发顺序 */
+    const controlProcessing = (service) => {
+      const control = { started: [], pending: [] };
+      jest
+        .spyOn(service.thumbnailService, 'processThumbnail')
+        .mockImplementation((imagePath) => {
+          control.started.push(imagePath);
+          return new Promise((resolve, reject) => {
+            control.pending.push({ resolve, reject });
+          });
+        });
+      return control;
+    };
+
+    test('可见任务插队到未开始的屏外前瞻任务之前', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(1);
+
+      const blocker = service.thumbnailService.generateThumbnail('/photos/blocker.jpg', 600, 900, 1);
+      await flush();
+      expect(control.started).toEqual(['/photos/blocker.jpg']);
+
+      const prefetchA = service.thumbnailService.generateThumbnail('/photos/prefetch-a.jpg', 600, 900, 1);
+      const prefetchB = service.thumbnailService.generateThumbnail('/photos/prefetch-b.jpg', 600, 900, 1);
+      const visible = service.thumbnailService.generateThumbnail('/photos/visible.jpg', 600, 900, 0);
+
+      const queued = service.thumbnailService.getRuntimeStats();
+      expect(queued.queuedPrefetch).toBe(2);
+      expect(queued.queuedVisible).toBe(1);
+
+      control.pending.shift().resolve('blocker');
+      await flush();
+      expect(control.started).toEqual(['/photos/blocker.jpg', '/photos/visible.jpg']);
+
+      control.pending.shift().resolve('visible');
+      await flush();
+      expect(control.started).toEqual([
+        '/photos/blocker.jpg',
+        '/photos/visible.jpg',
+        '/photos/prefetch-a.jpg'
+      ]);
+
+      control.pending.shift().resolve('prefetch-a');
+      await flush();
+      expect(control.started).toEqual([
+        '/photos/blocker.jpg',
+        '/photos/visible.jpg',
+        '/photos/prefetch-a.jpg',
+        '/photos/prefetch-b.jpg'
+      ]);
+
+      control.pending.shift().resolve('prefetch-b');
+      await expect(Promise.all([blocker, prefetchA, prefetchB, visible])).resolves.toEqual([
+        'blocker',
+        'prefetch-a',
+        'prefetch-b',
+        'visible'
+      ]);
+    });
+
+    test('取消排队中的任务：立刻返回 null 且不再开始解码', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(1);
+
+      const blocker = service.thumbnailService.generateThumbnail('/photos/blocker.jpg', 600, 900, 0);
+      await flush();
+
+      const queued = service.thumbnailService.generateThumbnail('/photos/queued.jpg', 600, 900, 0);
+      await flush();
+      expect(control.started).toEqual(['/photos/blocker.jpg']);
+
+      const result = service.thumbnailService.cancelPending(['/photos/queued.jpg']);
+      expect(result).toMatchObject({ requested: 1, cancelled: 1, inFlight: 0 });
+      await expect(queued).resolves.toBeNull();
+
+      control.pending.shift().resolve('blocker');
+      await flush();
+      await expect(blocker).resolves.toBe('blocker');
+      expect(control.started).toEqual(['/photos/blocker.jpg']);
+      expect(service.thumbnailService.getRuntimeStats().cancelled).toBe(1);
+    });
+
+    test('已在解码的任务不被取消打断，仍返回结果', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(1);
+
+      const running = service.thumbnailService.generateThumbnail('/photos/running.jpg', 600, 900, 0);
+      await flush();
+      expect(control.started).toEqual(['/photos/running.jpg']);
+
+      const result = service.thumbnailService.cancelPending(['/photos/running.jpg']);
+      expect(result).toMatchObject({ requested: 1, cancelled: 0, inFlight: 1 });
+
+      control.pending.shift().resolve('running-result');
+      await expect(running).resolves.toBe('running-result');
+    });
+
+    test('取消后同一路径可以重新入队并真正开始', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(1);
+
+      const blocker = service.thumbnailService.generateThumbnail('/photos/blocker.jpg', 600, 900, 0);
+      await flush();
+
+      const queued = service.thumbnailService.generateThumbnail('/photos/again.jpg', 600, 900, 0);
+      service.thumbnailService.cancelPending(['/photos/again.jpg']);
+      await expect(queued).resolves.toBeNull();
+
+      const retried = service.thumbnailService.generateThumbnail('/photos/again.jpg', 600, 900, 0);
+      control.pending.shift().resolve('blocker');
+      await flush();
+
+      expect(control.started).toEqual(['/photos/blocker.jpg', '/photos/again.jpg']);
+      control.pending.shift().resolve('retry-result');
+      await expect(retried).resolves.toBe('retry-result');
+      await expect(blocker).resolves.toBe('blocker');
+    });
+
+    test('取消未知路径或空输入都是安全的空操作', () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+
+      expect(service.thumbnailService.cancelPending(['/photos/never.jpg'])).toMatchObject({
+        requested: 1,
+        cancelled: 0,
+        inFlight: 0
+      });
+      expect(service.thumbnailService.cancelPending([])).toMatchObject({ requested: 0, cancelled: 0 });
+      expect(service.thumbnailService.cancelPending(null)).toMatchObject({ requested: 0, cancelled: 0 });
+    });
+
+    test('解码失败不泄漏并发位，后续任务能立即补位', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(1);
+
+      const failing = service.thumbnailService.generateThumbnail('/photos/broken.jpg', 600, 900, 0);
+      await flush();
+      control.pending.shift().reject(new Error('decode failed'));
+      await expect(failing).resolves.toBeNull();
+      expect(service.thumbnailService.getRuntimeStats().activeWorkers).toBe(0);
+
+      const next = service.thumbnailService.generateThumbnail('/photos/next.jpg', 600, 900, 0);
+      await flush();
+      expect(control.started).toEqual(['/photos/broken.jpg', '/photos/next.jpg']);
+
+      control.pending.shift().resolve('next-result');
+      await expect(next).resolves.toBe('next-result');
+    });
+
+    test('全部任务结束后无残留排队与在途记录', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(2);
+
+      const tasks = [
+        service.thumbnailService.generateThumbnail('/photos/one.jpg', 600, 900, 0),
+        service.thumbnailService.generateThumbnail('/photos/two.jpg', 600, 900, 0),
+        service.thumbnailService.generateThumbnail('/photos/three.jpg', 600, 900, 1)
+      ];
+
+      await flush();
+      while (control.pending.length > 0) {
+        control.pending.shift().resolve('done');
+        // eslint-disable-next-line no-await-in-loop
+        await flush();
+      }
+      await Promise.all(tasks);
+
+      const stats = service.thumbnailService.getRuntimeStats();
+      expect(stats.activeWorkers).toBe(0);
+      expect(stats.pendingTasks).toBe(0);
+      expect(stats.queuedVisible).toBe(0);
+      expect(stats.queuedPrefetch).toBe(0);
+    });
+
+    test('运行时统计暴露两档队列长度与等待分位，且不泄漏样本数组', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(1);
+
+      const blocker = service.thumbnailService.generateThumbnail('/photos/blocker.jpg', 600, 900, 0);
+      await flush();
+      const queued = service.thumbnailService.generateThumbnail('/photos/queued.jpg', 600, 900, 1);
+      await flush();
+
+      expect(service.thumbnailService.getRuntimeStats()).toMatchObject({
+        maxWorkers: 1,
+        activeWorkers: 1,
+        queuedVisible: 0,
+        queuedPrefetch: 1
+      });
+      // blocker 已开始，记下它那一条（接近 0ms）样本作为基线
+      const samplesBefore = service.thumbnailService.getRuntimeStats().queueWaitSamples;
+
+      control.pending.shift().resolve('blocker');
+      await flush();
+      control.pending.shift().resolve('queued');
+      await Promise.all([blocker, queued]);
+
+      const after = service.thumbnailService.getRuntimeStats();
+      expect(after.queueWaitSamples).toBeGreaterThan(samplesBefore);
+      expect(after.queueWaitP50Ms).toBeGreaterThanOrEqual(0);
+      expect(after.queueWaitP90Ms).toBeGreaterThanOrEqual(after.queueWaitP50Ms);
+      expect(after.queueWaits).toBeUndefined();
+    });
+  });
 });

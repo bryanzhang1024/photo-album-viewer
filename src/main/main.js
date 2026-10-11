@@ -813,7 +813,7 @@ ipcMain.handle(CHANNELS.GET_IMAGE_THUMBNAIL, async (event, imagePath, priority =
     if (!isAllowed) {
       return null;
     }
-    return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
+    return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5, priority);
 });
 
 // 获取单个图片的缩略图 - 与get-image-thumbnail功能相同，但为了兼容性添加
@@ -822,7 +822,7 @@ ipcMain.handle(CHANNELS.GET_THUMBNAIL, async (event, imagePath, priority = 0) =>
     if (!isAllowed) {
       return null;
     }
-    return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5);
+    return ThumbnailService.generateThumbnail(imagePath, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5, priority);
 });
 
 // 批量请求预览图 - 提高效率的新接口
@@ -838,9 +838,30 @@ ipcMain.handle(CHANNELS.GET_BATCH_THUMBNAILS, async (event, imagePaths, priority
       }
     }
 
-    const promises = approvedPaths.map(p => ThumbnailService.generateThumbnail(p, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5).then(url => ({[p]: url})));
+    const promises = approvedPaths.map(p => ThumbnailService.generateThumbnail(p, performanceSettings.thumbnailResolution, performanceSettings.thumbnailResolution * 1.5, priority).then(url => ({[p]: url})));
     const results = await Promise.all(promises);
     return Object.assign({}, ...results);
+});
+
+// 取消尚未开始的缩略图请求（用户已经划走的图块）
+//
+// 这是纯减法操作：只从队列里摘掉还没开始的任务，不读取任何文件。
+// 因此这里不做 assertApprovedPath 逐路径审批 —— 那会给滚动热路径引入
+// 与路径数成正比的串行 IO，且取消行为本身不会扩大任何访问权限。
+ipcMain.handle(CHANNELS.CANCEL_THUMBNAILS, async (event, imagePaths) => {
+    if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
+      return { requested: 0, cancelled: 0, inFlight: 0 };
+    }
+
+    const normalizedPaths = [];
+    for (const imagePath of imagePaths) {
+      const normalized = normalizeAbsolutePath(imagePath);
+      if (normalized) {
+        normalizedPaths.push(normalized);
+      }
+    }
+
+    return ThumbnailService.cancelPending(normalizedPaths);
 });
 
 
