@@ -10,6 +10,70 @@ const stat = promisify(fs.stat);
 const readdir = promisify(fs.readdir);
 const unlink = promisify(fs.unlink);
 const writeFile = promisify(fs.writeFile);
+const openFile = promisify(fs.open);
+const readFileHandle = promisify(fs.read);
+const closeFile = promisify(fs.close);
+
+// 文件头长度：JPEG/PNG/GIF/BMP/WEBP/TIFF 用前 4 字节即可判定，
+// ISO-BMFF 系（HEIC/HEIF/AVIF）需要看到 offset 8 起的 brand，故取 16。
+const HEADER_PROBE_BYTES = 16;
+
+/**
+ * 判断文件头是否属于已知图片容器。
+ *
+ * 这是「别把文件图标当缩略图缓存」的真正闸门：扩展名完全不可信，
+ * 而 app.getFileIcon 在 Electron 27 的 macOS 上返回 0x0（isEmpty() 仍为
+ * false），无法用来比对图标，所以必须自己确认源文件是不是图片。
+ */
+function looksLikeImageHeader(buffer) {
+  // BMP 只需要 2 字节即可判定，所以这里只挡空/单字节输入；
+  // 各分支自身按需检查长度。
+  if (!buffer || buffer.length < 2) {
+    return false;
+  }
+
+  // JPEG / JFIF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return true;
+  }
+  // PNG
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    return true;
+  }
+  // GIF87a / GIF89a
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
+    return true;
+  }
+  // BMP
+  if (buffer[0] === 0x42 && buffer[1] === 0x4d) {
+    return true;
+  }
+  // WebP: 'RIFF' + 4 字节长度 + 'WEBP'
+  if (
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+  ) {
+    return true;
+  }
+  // TIFF（小端 II*\0 与大端 MM\0*）
+  if (
+    (buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2a) ||
+    (buffer[0] === 0x4d && buffer[1] === 0x4d && buffer[2] === 0x00 && buffer[3] === 0x2a)
+  ) {
+    return true;
+  }
+  // ISO-BMFF: 4 字节长度 + 'ftyp' + brand
+  if (buffer.length >= 12 &&
+    buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70) {
+    const brand = String.fromCharCode(buffer[8], buffer[9], buffer[10], buffer[11]).toLowerCase();
+    if (['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1', 'avif', 'avis'].includes(brand)) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 const THUMBNAIL_CACHE_DIR = path.join(app.getPath('userData'), 'thumbnail-cache');
 
@@ -116,6 +180,8 @@ class ThumbnailService {
       cancelled: 0,
       timeouts: 0,
       nativeTimeouts: 0,
+      nonImageFallbacksSkipped: 0,
+      iconChecksUndeterminable: 0,
       queueWaits: []
     };
   }
@@ -436,6 +502,32 @@ class ThumbnailService {
     return systemResult;
   }
 
+  /**
+   * 读源文件头，确认它确实是一个图片容器。
+   *
+   * 读不到或不认识的头一律按「不是图片」处理：宁可这张图没有缩略图，
+   * 也不要把通用文件图标当成缩略图写进缓存（那种错误一旦落盘会长期存在）。
+   */
+  async isDecodableImageSource(imagePath) {
+    let handle = null;
+    try {
+      handle = await openFile(imagePath, 'r');
+      const buffer = Buffer.alloc(HEADER_PROBE_BYTES);
+      const { bytesRead } = await readFileHandle(handle, buffer, 0, HEADER_PROBE_BYTES, 0);
+      return looksLikeImageHeader(buffer.subarray(0, bytesRead));
+    } catch (error) {
+      return false;
+    } finally {
+      if (handle !== null) {
+        try {
+          await closeFile(handle);
+        } catch (error) {
+          // 关闭失败不影响判定结果
+        }
+      }
+    }
+  }
+
   async trySystemThumbnail(imagePath, width, height, cacheFilenames) {
     if (!nativeImage || typeof nativeImage.createThumbnailFromPath !== 'function') {
       return null;
@@ -446,6 +538,15 @@ class ThumbnailService {
       process.platform === 'win32';
 
     if (!platformSupportsNative) {
+      return null;
+    }
+
+    // 闸门：扩展名不可信，先确认文件头是图片。
+    // 否则 QuickLook 会返回该类型的通用图标（实测对 .txt 与假 .jpg 都返回了
+    // 600x600 的图标位图），而图标比对已不可用，写进缓存就永久错。
+    if (!await this.isDecodableImageSource(imagePath)) {
+      this.metrics.nonImageFallbacksSkipped++;
+      console.warn(`源文件不是可识别的图片格式，跳过系统缩略图回退: ${imagePath}`);
       return null;
     }
 
@@ -481,7 +582,12 @@ class ThumbnailService {
   }
 
   /**
-   * 检查系统返回的缩略图是否只是默认文件图标
+   * 尝试判断系统返回的缩略图是否只是默认文件图标。
+   *
+   * 返回 true 表示「这是通用图标，应拒绝」。注意这个判定在本机（Electron 27 /
+   * macOS 26）实际无法工作：app.getFileIcon 返回 0x0 而 isEmpty() 仍为 false，
+   * 位图比对无法进行。因此它只是尽力而为的第二道检查，真正的闸门是
+   * trySystemThumbnail 开头的文件头检查。
    */
   async isSystemFileIcon(imagePath, thumbnailImage) {
     if (!thumbnailImage || thumbnailImage.isEmpty()) {
@@ -516,6 +622,15 @@ class ThumbnailService {
       );
 
       if (!fileIcon || fileIcon.isEmpty()) {
+        return false;
+      }
+
+      // app.getFileIcon 返回 0x0 而 isEmpty() 仍为 false，无法比对。
+      // 明确记为「无法判定」并返回，避免在坏图上做无意义的 resize/位图运算。
+      const iconSize = fileIcon.getSize();
+      if (!iconSize || !iconSize.width || !iconSize.height) {
+        this.metrics.iconChecksUndeterminable++;
+        console.warn(`文件图标不可用（0x0），无法比对图标: ${imagePath}`);
         return false;
       }
 
@@ -761,6 +876,7 @@ module.exports = {
   ensureCacheDir,
   generateThumbnail,
   cancelPending,
+  looksLikeImageHeader,
   THUMBNAIL_CACHE_DIR,
   setMaxWorkers: (count) => thumbnailService.setMaxWorkers(count)
 };

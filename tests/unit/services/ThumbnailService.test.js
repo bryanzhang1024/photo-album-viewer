@@ -29,6 +29,17 @@ let electron;
 let sharp;
 let mockFsInstance;
 
+/**
+ * 带真实文件头的假图片。
+ *
+ * trySystemThumbnail 现在会先读文件头确认是图片容器（扩展名不可信），
+ * 所以需要走原生回退的用例必须提供真实的 magic bytes，否则会被闸门挡掉。
+ */
+const JPEG_HEADER = Buffer.concat([
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01]),
+  Buffer.alloc(16)
+]);
+
 const createNativeImageStub = ({ empty = false, width = 128, height = 128, bitmap = [0, 0, 0, 0], png = 'png' } = {}) => {
   const image = {
     isEmpty: jest.fn(() => empty),
@@ -202,7 +213,7 @@ describe('ThumbnailService', () => {
     const service = setupThumbnailService({
       fsStructure: {
         '/photos': {
-          'fallback.jpg': 'image'
+          'fallback.jpg': JPEG_HEADER
         },
         '/mock': {
           userData: {
@@ -235,7 +246,7 @@ describe('ThumbnailService', () => {
     const service = setupThumbnailService({
       fsStructure: {
         '/photos': {
-          'unlucky.jpg': 'data'
+          'unlucky.jpg': JPEG_HEADER
         },
         '/mock': {
           userData: {
@@ -521,7 +532,10 @@ describe('ThumbnailService', () => {
 
   describe('超时与并发位保护', () => {
     const timeoutFsStructure = {
-      '/photos': {},
+      '/photos': {
+        'native-hang.jpg': JPEG_HEADER,
+        'icon-hang.jpg': JPEG_HEADER
+      },
       '/mock': { userData: { 'thumbnail-cache': {} } }
     };
 
@@ -604,6 +618,106 @@ describe('ThumbnailService', () => {
       expect(stats.pendingTasks).toBe(0);
       // 图标判定超时后返回「不是图标」，沿用既有语义（第 4 步会重写该判定）
       expect(result === null || typeof result === 'string').toBe(true);
+    });
+  });
+
+  describe('文件头闸门（防止把文件图标当缩略图缓存）', () => {
+    const RIFF = Buffer.from('RIFF', 'ascii');
+    const FOUR_ZERO = Buffer.from([0, 0, 0, 0]);
+
+    test.each([
+      ['JPEG', Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])],
+      ['PNG', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+      ['GIF', Buffer.from('GIF89a', 'ascii')],
+      ['BMP', Buffer.from('BM', 'ascii')],
+      ['WebP', Buffer.concat([RIFF, FOUR_ZERO, Buffer.from('WEBP', 'ascii')])],
+      ['TIFF-LE', Buffer.from([0x49, 0x49, 0x2a, 0x00])],
+      ['TIFF-BE', Buffer.from([0x4d, 0x4d, 0x00, 0x2a])],
+      ['HEIC', Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic', 'ascii')])],
+      ['AVIF', Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypavif', 'ascii')])]
+    ])('接受 %s 文件头', (_name, header) => {
+      const service = setupThumbnailService();
+      expect(service.looksLikeImageHeader(header)).toBe(true);
+    });
+
+    test.each([
+      ['纯文本', Buffer.from('这不是图片，只是文本', 'utf8')],
+      ['空 buffer', Buffer.alloc(0)],
+      ['过短的头', Buffer.from([0xff, 0xd8])],
+      ['RIFF 但是 WAVE 音频', Buffer.concat([RIFF, FOUR_ZERO, Buffer.from('WAVE', 'ascii')])],
+      ['ISO-BMFF 但是 mp4 视频', Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypmp42', 'ascii')])]
+    ])('拒绝 %s', (_name, header) => {
+      const service = setupThumbnailService();
+      expect(service.looksLikeImageHeader(header)).toBe(false);
+    });
+
+    test('isDecodableImageSource 按真实文件头判定', async () => {
+      const service = setupThumbnailService({
+        fsStructure: {
+          '/photos': {
+            'real.jpg': JPEG_HEADER,
+            'fake.jpg': '这不是图片，只是纯文本内容。'
+          },
+          '/mock': { userData: { 'thumbnail-cache': {} } }
+        }
+      });
+
+      await expect(service.thumbnailService.isDecodableImageSource('/photos/real.jpg')).resolves.toBe(true);
+      await expect(service.thumbnailService.isDecodableImageSource('/photos/fake.jpg')).resolves.toBe(false);
+      await expect(service.thumbnailService.isDecodableImageSource('/photos/missing.jpg')).resolves.toBe(false);
+    });
+
+    test('源文件不是图片时不走原生回退，也不写缓存', async () => {
+      const service = setupThumbnailService({
+        fsStructure: {
+          '/photos': {
+            'renamed.jpg': '这不是图片，只是被改名的纯文本。'
+          },
+          '/mock': { userData: { 'thumbnail-cache': {} } }
+        },
+        sharpToFileImpl: () => Promise.reject(new Error('sharp failed'))
+      });
+      electron.nativeImage.createThumbnailFromPath.mockResolvedValue(
+        createNativeImageStub({ png: 'native' })
+      );
+
+      const imagePath = '/photos/renamed.jpg';
+      const result = await service.thumbnailService.generateThumbnail(imagePath, 600, 900, 0);
+
+      expect(result).toBeNull();
+      // 关键：连原生调用都不该发生，通用图标才没有机会被写进缓存
+      expect(electron.nativeImage.createThumbnailFromPath).not.toHaveBeenCalled();
+      expect(service.thumbnailService.getRuntimeStats().nonImageFallbacksSkipped).toBe(1);
+
+      const pngPath = buildCachePath(service, imagePath, 600, 900, 'png');
+      expect(fs.existsSync(pngPath)).toBe(false);
+    });
+
+    test('文件头合法时仍走原生回退', async () => {
+      // 位图要足够大：太小的 buffer 会让既有 20% 阈值把两者判成「同一个图标」
+      const systemThumb = createNativeImageStub({ bitmap: [9, 9, 9, 9, 9, 9, 9, 9], png: 'native' });
+      const service = setupThumbnailService({
+        fsStructure: {
+          '/photos': {
+            'real.jpg': JPEG_HEADER
+          },
+          '/mock': { userData: { 'thumbnail-cache': {} } }
+        },
+        sharpToFileImpl: () => Promise.reject(new Error('sharp failed')),
+        systemThumb
+      });
+
+      const imagePath = '/photos/real.jpg';
+      const result = await service.thumbnailService.generateThumbnail(imagePath, 600, 900, 0);
+
+      expect(electron.nativeImage.createThumbnailFromPath).toHaveBeenCalledWith(imagePath, {
+        width: 600,
+        height: 900
+      });
+      expect(result).toBe(
+        `thumbnail-protocol://${path.basename(buildCachePath(service, imagePath, 600, 900, 'png'))}`
+      );
+      expect(service.thumbnailService.getRuntimeStats().nonImageFallbacksSkipped).toBe(0);
     });
   });
 });

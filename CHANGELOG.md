@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.6] - 2026-10-11
+
+- 系统缩略图回退新增文件头闸门：只有文件头确实是已知图片格式（JPEG/PNG/GIF/BMP/WebP/TIFF/HEIC/AVIF）时才尝试原生回退。此前只凭扩展名判断，被改名或损坏的文件会走进原生回退，而原生回退对任何文件都会返回该类型的通用图标——通用图标一旦写进缓存就会长期存在。
+- 该闸门同时避免了对非图片文件发起原生调用：实测原生调用对假 .png 需 25 秒、对无扩展名文件需 8 秒，这些时间此前被白白浪费（现由 3 秒超时兜底）。
+- 修正 `isSystemFileIcon` 对退化图标的处理：`app.getFileIcon` 在 Electron 27 的 macOS 上返回 0x0 而 `isEmpty()` 仍为 false，此前会在坏图上继续 resize 与位图比对；现在明确记为「无法判定」并直接返回。
+- 运行时统计新增 `nonImageFallbacksSkipped` 与 `iconChecksUndeterminable` 计数。
+
 ## [3.8.5] - 2026-10-11
 
 - 缩略图 WebP 编码改用 effort 2（sharp 默认为 4）：单张生成耗时下降约 12%，同一批 42MP 样本的整批吞吐从 25.2 提升到 31.4 张/秒。
