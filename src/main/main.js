@@ -62,6 +62,36 @@ const DEFAULT_PERFORMANCE_SETTINGS = {
 let performanceSettings = {...DEFAULT_PERFORMANCE_SETTINGS};
 ThumbnailService.setMaxWorkers(performanceSettings.concurrentTasks);
 
+// Cos 索引预热延迟。
+//
+// cos-library-catalog-v1.json 实测 105MB，readFile 后还要在主线程做 JSON.parse
+// （实测 ~140ms 同步阻塞、堆 +235MB）。原先挂在 did-finish-load 上，正好和用户
+// 第一次点击抢占主进程，于是首屏刚出来就卡一下。延后到首屏安静下来再预热，
+// 用户在几秒内点进 Cos 图库时索引通常已就绪。
+const COS_PREWARM_DELAY_MS = Number(process.env.COS_PREWARM_DELAY_MS || 5000);
+let cosPrewarmTimer = null;
+
+function scheduleCosPrewarm() {
+  if (cosPrewarmTimer) {
+    clearTimeout(cosPrewarmTimer);
+  }
+
+  cosPrewarmTimer = setTimeout(() => {
+    cosPrewarmTimer = null;
+    const startedAt = Date.now();
+    cosLibraryService
+      .initialize()
+      .then(() => {
+        console.log(`[Cos] 缓存预热完成，耗时 ${Date.now() - startedAt}ms（首屏后延迟 ${COS_PREWARM_DELAY_MS}ms 启动）`);
+      })
+      .catch(error => console.warn('[Cos] 缓存预热失败:', error?.message));
+  }, COS_PREWARM_DELAY_MS);
+
+  if (typeof cosPrewarmTimer.unref === 'function') {
+    cosPrewarmTimer.unref();
+  }
+}
+
 const cosLibraryService = new CosLibraryService({
   configPath: path.join(app.getPath('userData'), 'cos-library-roots-v1.json'),
   cachePath: path.join(app.getPath('userData'), 'cos-library-catalog-v1.json')
@@ -475,9 +505,7 @@ app.whenReady().then(async () => {
   }
 
   const initialWindow = createWindow(launchTarget);
-  initialWindow.webContents.once('did-finish-load', () => {
-    cosLibraryService.initialize().catch(error => console.warn('[Cos] 缓存预热失败:', error?.message));
-  });
+  initialWindow.webContents.once('did-finish-load', scheduleCosPrewarm);
   
   // 启动收藏数据文件监听
   await FavoritesService.startFavoritesWatcher();
@@ -485,6 +513,10 @@ app.whenReady().then(async () => {
 
 // 应用退出时清理资源
 app.on('before-quit', () => {
+  if (cosPrewarmTimer) {
+    clearTimeout(cosPrewarmTimer);
+    cosPrewarmTimer = null;
+  }
   FavoritesService.stopFavoritesWatcher();
 });
 

@@ -528,6 +528,42 @@ describe('ThumbnailService', () => {
       expect(after.queueWaitP90Ms).toBeGreaterThanOrEqual(after.queueWaitP50Ms);
       expect(after.queueWaits).toBeUndefined();
     });
+
+    test('单张结果不依赖批量聚合：批量屏障不会推迟图块拿到自己的缩略图', async () => {
+      const service = setupThumbnailService({ fsStructure: queueFsStructure });
+      const control = controlProcessing(service);
+      service.thumbnailService.setMaxWorkers(1);
+
+      // 等价于 GET_BATCH_THUMBNAILS 的聚合方式：一次请求多个路径，
+      // Promise.all 之后才把整批返回给渲染进程
+      const first = service.thumbnailService.generateThumbnail('/photos/first.jpg', 600, 900, 0);
+      const second = service.thumbnailService.generateThumbnail('/photos/second.jpg', 600, 900, 0);
+      const third = service.thumbnailService.generateThumbnail('/photos/third.jpg', 600, 900, 0);
+
+      let batchSettled = false;
+      const batch = Promise.all([first, second, third]).then((urls) => {
+        batchSettled = true;
+        return urls;
+      });
+
+      await flush();
+      expect(control.started).toEqual(['/photos/first.jpg']);
+
+      control.pending.shift().resolve('url-first');
+      await flush();
+      control.pending.shift().resolve('url-second');
+      await flush();
+
+      // 前两张已各自完成：ImageCard 自己那条 get-image-thumbnail 请求走的是
+      // 同一个 per-path promise，此时就能拿到 URL，不必等第三张。
+      await expect(first).resolves.toBe('url-first');
+      await expect(second).resolves.toBe('url-second');
+      expect(batchSettled).toBe(false);
+
+      control.pending.shift().resolve('url-third');
+      await expect(batch).resolves.toEqual(['url-first', 'url-second', 'url-third']);
+      expect(batchSettled).toBe(true);
+    });
   });
 
   describe('超时与并发位保护', () => {

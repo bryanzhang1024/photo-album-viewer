@@ -130,4 +130,44 @@ describe('CosLibraryService', () => {
       'library · CosPool'
     ]);
   });
+
+  test('旧版共享快照迁移时，判断副本是否存在不解析它', async () => {
+    const crypto = require('crypto');
+    const rootId = `root:${crypto.createHash('sha1').update(rootPath).digest('hex')}`;
+
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      roots: [{ id: rootId, path: rootPath, label: 'library' }]
+    }));
+    // 旧版共享快照：有 catalog、没有 rootCatalogs，会走迁移分支
+    fs.writeFileSync(cachePath, JSON.stringify({
+      version: 2,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      catalog: {
+        sets: [{
+          id: 'set-one',
+          locations: [{ rootId, relativePath: 'set-one' }],
+          media: [{ rootId, relativePath: 'set-one/01.jpg' }]
+        }]
+      }
+    }));
+
+    const pre34Path = `${cachePath}.pre-3.4.json`;
+    const readSpy = jest.spyOn(fs.promises, 'readFile');
+
+    try {
+      const service = new CosLibraryService({ configPath, cachePath });
+      await service.initialize();
+
+      const readPaths = readSpy.mock.calls.map((call) => call[0]);
+      // 副本实测 29MB；为了判断「它在不在」而把它读进来解析是纯浪费
+      expect(readPaths).not.toContain(pre34Path);
+      // 但迁移副本本身仍然要被写出来
+      expect(fs.existsSync(pre34Path)).toBe(true);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
 });
