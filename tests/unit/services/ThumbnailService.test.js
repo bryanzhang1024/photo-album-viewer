@@ -184,7 +184,8 @@ describe('ThumbnailService', () => {
       fit: expect.anything(),
       withoutEnlargement: true
     });
-    expect(service.sharpInstance.webp).toHaveBeenCalledWith({ quality: 80 });
+    // quality 决定量化表与观感，保持 80；effort 只影响编码搜索强度（实测 −12% 端到端）
+    expect(service.sharpInstance.webp).toHaveBeenCalledWith({ quality: 80, effort: 2 });
     expect(service.sharpInstance.toFile).toHaveBeenCalledWith(webpPath);
     expect(result).toBe(`thumbnail-protocol://${path.basename(webpPath)}`);
   });
