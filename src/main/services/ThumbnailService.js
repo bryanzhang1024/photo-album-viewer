@@ -21,12 +21,52 @@ const PRIORITY_LEVEL_COUNT = 2;
 // 队列等待时间只作观测用途，保留最近若干个样本
 const QUEUE_WAIT_SAMPLE_SIZE = 200;
 
+// 单个任务的硬上限。超过就认定底层调用卡死，强制释放并发位。
+// 实测 Electron 的原生缩略图 API 可以永久不返回（曾整进程 22 分钟 0% CPU）。
+const DEFAULT_TASK_TIMEOUT_MS = 30000;
+
+// 原生缩略图与文件图标 API 的单次调用上限。这两条路实测可能耗时数秒，
+// 超时后立刻放弃并回退，不让降级路径拖住整个队列。
+const DEFAULT_NATIVE_CALL_TIMEOUT_MS = 3000;
+
 function createDeferred() {
   let resolve;
   const promise = new Promise((res) => {
     resolve = res;
   });
   return { promise, resolve };
+}
+
+/**
+ * 给可能永不 settle 的 Promise 加超时，超时以 null 结束竞争。
+ *
+ * 原始任务不会被中断（libvips 与原生 API 都无法中断），它会继续在后台跑完，
+ * 但结果被丢弃。Promise.race 已为原始 Promise 挂上处理函数，因此它之后
+ * 失败也不会产生 unhandled rejection。
+ */
+function withTimeout(promise, timeoutMs, onTimeout) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return promise;
+  }
+
+  let timer = null;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      if (typeof onTimeout === 'function') {
+        onTimeout();
+      }
+      resolve(null);
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
 }
 
 /**
@@ -49,6 +89,8 @@ class ThumbnailService {
     this.priorityQueues = Array.from({ length: PRIORITY_LEVEL_COUNT }, () => []);
     this.activeWorkers = 0;
     this.MAX_WORKERS = 3; // 最大并发解码任务
+    this.TASK_TIMEOUT_MS = DEFAULT_TASK_TIMEOUT_MS;
+    this.NATIVE_CALL_TIMEOUT_MS = DEFAULT_NATIVE_CALL_TIMEOUT_MS;
     this.MAX_CACHE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
     this.CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7天
     this.metrics = {
@@ -64,6 +106,8 @@ class ThumbnailService {
       generatedWithSystem: 0,
       generationFailures: 0,
       cancelled: 0,
+      timeouts: 0,
+      nativeTimeouts: 0,
       queueWaits: []
     };
   }
@@ -255,7 +299,16 @@ class ThumbnailService {
 
     let result = null;
     try {
-      result = await this.processThumbnail(task.imagePath, task.width, task.height, task.cacheFilenames);
+      result = await withTimeout(
+        this.processThumbnail(task.imagePath, task.width, task.height, task.cacheFilenames),
+        this.TASK_TIMEOUT_MS,
+        () => {
+          this.metrics.timeouts++;
+          console.warn(
+            `[ThumbnailService] 任务超时 ${this.TASK_TIMEOUT_MS}ms，释放并发位: ${task.imagePath}`
+          );
+        }
+      );
     } catch (error) {
       console.error(`生成缩略图失败: ${task.imagePath}`, error);
       result = null;
@@ -389,7 +442,17 @@ class ThumbnailService {
     }
 
     try {
-      const image = await nativeImage.createThumbnailFromPath(imagePath, { width, height });
+      const image = await withTimeout(
+        nativeImage.createThumbnailFromPath(imagePath, { width, height }),
+        this.NATIVE_CALL_TIMEOUT_MS,
+        () => {
+          this.metrics.nativeTimeouts++;
+          console.warn(
+            `系统缩略图超时 ${this.NATIVE_CALL_TIMEOUT_MS}ms，放弃原生路径: ${imagePath}`
+          );
+        }
+      );
+
       if (!image || image.isEmpty()) {
         return null;
       }
@@ -423,14 +486,27 @@ class ThumbnailService {
 
     if (!app.isReady()) {
       try {
-        await app.whenReady();
+        await withTimeout(app.whenReady(), this.NATIVE_CALL_TIMEOUT_MS, () => {
+          this.metrics.nativeTimeouts++;
+          console.warn(`等待应用就绪超时 ${this.NATIVE_CALL_TIMEOUT_MS}ms，跳过图标判定`);
+        });
       } catch (err) {
         return false;
       }
     }
 
     try {
-      const fileIcon = await app.getFileIcon(imagePath, { size: 'large' });
+      const fileIcon = await withTimeout(
+        app.getFileIcon(imagePath, { size: 'large' }),
+        this.NATIVE_CALL_TIMEOUT_MS,
+        () => {
+          this.metrics.nativeTimeouts++;
+          console.warn(
+            `文件图标超时 ${this.NATIVE_CALL_TIMEOUT_MS}ms，跳过图标判定: ${imagePath}`
+          );
+        }
+      );
+
       if (!fileIcon || fileIcon.isEmpty()) {
         return false;
       }

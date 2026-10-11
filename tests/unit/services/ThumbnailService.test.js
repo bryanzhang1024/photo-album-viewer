@@ -517,4 +517,92 @@ describe('ThumbnailService', () => {
       expect(after.queueWaits).toBeUndefined();
     });
   });
+
+  describe('超时与并发位保护', () => {
+    const timeoutFsStructure = {
+      '/photos': {},
+      '/mock': { userData: { 'thumbnail-cache': {} } }
+    };
+
+    test('任务永不 settle 时超时释放并发位，后续任务仍能完成', async () => {
+      const service = setupThumbnailService({ fsStructure: timeoutFsStructure });
+      const svc = service.thumbnailService;
+      svc.setMaxWorkers(1);
+      svc.TASK_TIMEOUT_MS = 60;
+
+      const neverSettles = new Promise(() => {});
+      const processSpy = jest
+        .spyOn(svc, 'processThumbnail')
+        .mockImplementation((imagePath) =>
+          imagePath === '/photos/hang.jpg' ? neverSettles : Promise.resolve('recovered')
+        );
+
+      const startedAt = Date.now();
+      const hung = await svc.generateThumbnail('/photos/hang.jpg', 600, 900, 0);
+      const elapsed = Date.now() - startedAt;
+
+      expect(hung).toBeNull();
+      expect(elapsed).toBeGreaterThanOrEqual(50);
+
+      const stats = svc.getRuntimeStats();
+      expect(stats.timeouts).toBe(1);
+      expect(stats.activeWorkers).toBe(0);
+      expect(stats.pendingTasks).toBe(0);
+
+      // 并发位确实被释放：后续任务可以立刻开始并完成
+      await expect(svc.generateThumbnail('/photos/after.jpg', 600, 900, 0)).resolves.toBe('recovered');
+      expect(processSpy).toHaveBeenCalledTimes(2);
+    });
+
+    test('原生缩略图调用挂起时按超时放弃，不拖住队列', async () => {
+      const service = setupThumbnailService({
+        fsStructure: timeoutFsStructure,
+        sharpToFileImpl: () => Promise.reject(new Error('sharp failed'))
+      });
+      const svc = service.thumbnailService;
+      svc.setMaxWorkers(1);
+      svc.NATIVE_CALL_TIMEOUT_MS = 60;
+
+      electron.nativeImage.createThumbnailFromPath.mockImplementation(() => new Promise(() => {}));
+
+      const startedAt = Date.now();
+      const result = await svc.generateThumbnail('/photos/native-hang.jpg', 600, 900, 0);
+      const elapsed = Date.now() - startedAt;
+
+      expect(result).toBeNull();
+      expect(elapsed).toBeLessThan(2000);
+
+      const stats = svc.getRuntimeStats();
+      expect(stats.nativeTimeouts).toBeGreaterThanOrEqual(1);
+      expect(stats.activeWorkers).toBe(0);
+      expect(stats.pendingTasks).toBe(0);
+    });
+
+    test('文件图标判定挂起时按超时返回，不阻塞任务', async () => {
+      const systemThumb = createNativeImageStub({ bitmap: [7, 7, 7, 7], png: 'native' });
+      const service = setupThumbnailService({
+        fsStructure: timeoutFsStructure,
+        sharpToFileImpl: () => Promise.reject(new Error('sharp failed')),
+        systemThumb
+      });
+      const svc = service.thumbnailService;
+      svc.setMaxWorkers(1);
+      svc.NATIVE_CALL_TIMEOUT_MS = 60;
+
+      electron.app.getFileIcon.mockImplementation(() => new Promise(() => {}));
+
+      const startedAt = Date.now();
+      const result = await svc.generateThumbnail('/photos/icon-hang.jpg', 600, 900, 0);
+      const elapsed = Date.now() - startedAt;
+
+      expect(elapsed).toBeLessThan(2000);
+
+      const stats = svc.getRuntimeStats();
+      expect(stats.nativeTimeouts).toBeGreaterThanOrEqual(1);
+      expect(stats.activeWorkers).toBe(0);
+      expect(stats.pendingTasks).toBe(0);
+      // 图标判定超时后返回「不是图标」，沿用既有语义（第 4 步会重写该判定）
+      expect(result === null || typeof result === 'string').toBe(true);
+    });
+  });
 });
