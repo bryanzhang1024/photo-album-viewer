@@ -67,3 +67,6 @@ logs/
 .gemini/
 .codex/
 .venv/
+
+# 本机专属进度状态，不入库（见 AGENTS.md 聚类与进度）
+PROGRESS.local.md
