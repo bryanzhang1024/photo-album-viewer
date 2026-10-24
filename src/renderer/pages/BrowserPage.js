@@ -53,6 +53,7 @@ import {
 } from '../persistence/sessionAdapter';
 import { useRandomNavigationCoordinator } from '../hooks/useRandomNavigationCoordinator';
 import { useNavigationHistory } from '../hooks/useNavigationHistory';
+import { useShellActionsRegister } from '../shell/ShellActions';
 
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const DRAG_INSERT_BEFORE = 'before';
@@ -452,6 +453,17 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     location: activeTab?.location || null,
     applyLocation: applyHistoryLocation
   });
+
+  const registerShellActions = useShellActionsRegister();
+  useEffect(() => {
+    registerShellActions({
+      title: activeTab?.title || '照片相簿浏览器',
+      canGoBack,
+      canGoForward,
+      goBack,
+      goForward
+    });
+  }, [registerShellActions, activeTab?.title, canGoBack, canGoForward, goBack, goForward]);
 
   useEffect(() => {
     const handleHistoryShortcut = (event) => {

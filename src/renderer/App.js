@@ -10,7 +10,8 @@ import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import CHANNELS from '../common/ipc-channels';
 import Box from '@mui/material/Box';
-import AppTitleBar from './components/AppTitleBar';
+import Toolbar from './shell/Toolbar';
+import { ShellActionsProvider } from './shell/ShellActions';
 import Sidebar from './shell/Sidebar';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { MAC_TITLEBAR_HEIGHT } from '../common/window-chrome';
@@ -168,12 +169,13 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <ShellActionsProvider>
       <SettingsProvider>
         <FavoritesProvider>
           <ScrollPositionContext.Provider value={scrollContext}>
             <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column',
               '--app-chrome-height': window.electronAPI?.platform === 'darwin' ? `${MAC_TITLEBAR_HEIGHT}px` : '36px' }}>
-            <AppTitleBar onToggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} />
+            <Toolbar onToggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} />
             <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
             <Sidebar collapsed={sidebarCollapsed} />
             <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -190,6 +192,7 @@ function App() {
           </ScrollPositionContext.Provider>
         </FavoritesProvider>
       </SettingsProvider>
+      </ShellActionsProvider>
     </ThemeProvider>
   );
 }

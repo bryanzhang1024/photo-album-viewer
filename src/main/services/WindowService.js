@@ -73,13 +73,13 @@ const waitForServer = (url, callback) => {
 function createWindow(launchTarget = null) {
   // 创建一个新的BrowserWindow实例
   const newWindow = new BrowserWindow({
-    width: 1200,
+    width: 1280,
     height: 800,
+    minWidth: 720,
+    minHeight: 480,
     ...(process.platform === 'darwin' ? {
       titleBarStyle: 'hiddenInset',
-      trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION,
-      minWidth: 360,
-      minHeight: 320
+      trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION
     } : {}),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
