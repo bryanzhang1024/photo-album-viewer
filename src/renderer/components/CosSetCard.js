@@ -40,6 +40,21 @@ function coserCardText(item, currentCoser) {
   };
 }
 
+
+function stripReleaseName(item, currentCoser) {
+  const fullName = item.displayName || '';
+  const cosers = values(item.cosers);
+  const separatorIndex = fullName.indexOf('｜');
+  const prefix = separatorIndex < 0 ? '' : fullName.slice(0, separatorIndex).trim();
+  const knownPrefixes = [currentCoser, ...cosers,
+    cosers.join('＋'), cosers.join('、'), cosers.join(' + ')].filter(Boolean);
+  let name = (currentCoser && separatorIndex >= 0 && knownPrefixes.includes(prefix))
+    ? fullName.slice(separatorIndex + 1).trim()
+    : fullName;
+  name = name.replace(/（[^（）]*）\s*$/, '').trim();
+  return name || fullName;
+}
+
 function CosSetCard({ item, context, currentCoser, cover, metadata, onClick, onSelect = null, selected = false, onError }) {
   const { favorites, isLoading, toggleAlbumFavorite } = useFavorites();
   const [pending, setPending] = useState(false);
@@ -50,7 +65,8 @@ function CosSetCard({ item, context, currentCoser, cover, metadata, onClick, onS
   const target = targets.find(candidate => candidate.online);
   const isOffline = item.status === 'offline';
   const concise = context === 'coser';
-  const text = concise ? coserCardText(item, currentCoser) : { title: item.displayName, subtitle: '' };
+  const baseText = coserCardText(item, currentCoser);
+  const text = { title: stripReleaseName(item, currentCoser), subtitle: baseText.subtitle };
 
   const handleFavorite = async event => {
     event.stopPropagation();
