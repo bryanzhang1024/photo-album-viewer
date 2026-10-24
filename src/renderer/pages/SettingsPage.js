@@ -341,6 +341,32 @@ function SettingsPage({ colorMode }) {
               </RadioGroup>
             </FormControl>
           </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <FormControl component="fieldset">
+              <FormLabel component="legend">文件夹封面</FormLabel>
+              <RadioGroup
+                value={settings.folderCoverMode || 'auto'}
+                onChange={handleRadioChange('folderCoverMode')}
+              >
+                <FormControlLabel
+                  value="auto"
+                  control={<Radio />}
+                  label="自动：含子文件夹时拼贴，否则单图"
+                />
+                <FormControlLabel
+                  value="collage"
+                  control={<Radio />}
+                  label="总是拼贴（2×2 采样）"
+                />
+                <FormControlLabel
+                  value="single"
+                  control={<Radio />}
+                  label="总是单图"
+                />
+              </RadioGroup>
+            </FormControl>
+          </Box>
         </Box>
 
         <Divider sx={{ my: 2 }} />

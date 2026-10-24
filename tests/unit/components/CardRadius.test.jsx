@@ -74,7 +74,7 @@ describe('card radius styling', () => {
     expect(container.firstChild).toHaveStyle('border-radius: 18px');
   });
 
-  test('AlbumCard renders folder previews as a single album-style cover', () => {
+  test('AlbumCard renders folder covers as a 2x2 collage when samples allow', () => {
     const { container } = renderWithTheme(
       <AlbumCard
         node={{
@@ -91,10 +91,13 @@ describe('card radius styling', () => {
 
     expect(container.firstChild).toHaveStyle('border-radius: 18px');
 
-    const coverImages = container.querySelectorAll('img[alt="trip"]');
-    expect(coverImages).toHaveLength(1);
+    expect(container.querySelector('[data-testid="cover-collage"]')).toBeTruthy();
+    expect(container.querySelectorAll('img[alt="trip"]')).toHaveLength(0);
     expect(container.querySelectorAll('img[alt^="预览"]')).toHaveLength(0);
     expect(container).toHaveTextContent('3');
+
+    const collageImages = container.querySelectorAll('[data-testid="cover-collage"] img');
+    expect(collageImages).toHaveLength(4);
   });
 
   test('AlbumCard keeps folder favorite semantics for container nodes', () => {

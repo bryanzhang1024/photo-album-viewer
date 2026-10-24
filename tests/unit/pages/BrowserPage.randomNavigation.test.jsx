@@ -579,10 +579,10 @@ describe('BrowserPage real random-navigation integration', () => {
     });
 
     fireEvent.mouseDown(screen.getByLabelText('排序'));
-    fireEvent.click(await screen.findByRole('option', { name: '照片数量' }));
+    fireEvent.click(await screen.findByRole('option', { name: '图片数量' }));
     await waitFor(() => {
       expect(screen.queryByRole('listbox', { name: '排序' })).not.toBeInTheDocument();
-      expect(screen.getByLabelText('排序')).toHaveTextContent('照片数量');
+      expect(screen.getByLabelText('排序')).toHaveTextContent('图片数量');
     });
 
     await clickRandomBrowse();

@@ -62,6 +62,12 @@ describe('FileSystemService', () => {
     );
   });
 
+  test('SUPPORTED_FORMATS 包含 HEIC/HEIF/AVIF，文件夹模式可以直接列出', () => {
+    expect(SUPPORTED_FORMATS).toEqual(
+      expect.arrayContaining(['.heic', '.heif', '.avif'])
+    );
+  });
+
   test('scanNavigationLevel returns empty nodes for empty directory', async () => {
     mockFs = createFsMock({
       '/photos': {

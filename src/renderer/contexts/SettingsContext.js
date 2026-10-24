@@ -9,7 +9,11 @@ const DEFAULT_SETTINGS = {
   showFilename: true,
   defaultDualPageViewer: false,
   theme: 'auto',
-  homeSortGrouping: 'mixed'
+  homeSortGrouping: 'mixed',
+  // 文件夹封面：auto = 含子文件夹时拼贴、否则单图；collage = 总是拼贴；single = 总是单图
+  folderCoverMode: 'auto',
+  // 默认视图：grid = 图标，list = 列表
+  defaultViewMode: 'grid'
 };
 
 export const useSettings = () => {
@@ -19,6 +23,9 @@ export const useSettings = () => {
   }
   return context;
 };
+
+/** 可选读取：不在 Provider 内时返回 null，供可独立渲染的组件使用。 */
+export const useSettingsOptional = () => useContext(SettingsContext);
 
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(() => {
