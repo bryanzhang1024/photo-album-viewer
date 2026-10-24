@@ -471,10 +471,10 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       canGoForward,
       goBack,
       goForward,
-      viewMode,
-      onViewModeChange: changeViewMode
+      viewMode: activeTab?.viewMode === 'favorites' ? null : viewMode,
+      onViewModeChange: activeTab?.viewMode === 'favorites' ? null : changeViewMode
     });
-  }, [registerShellActions, activeTab?.title, canGoBack, canGoForward, goBack, goForward, viewMode, changeViewMode]);
+  }, [registerShellActions, activeTab?.title, activeTab?.viewMode, canGoBack, canGoForward, goBack, goForward, viewMode, changeViewMode]);
 
   useEffect(() => {
     const handleHistoryShortcut = (event) => {

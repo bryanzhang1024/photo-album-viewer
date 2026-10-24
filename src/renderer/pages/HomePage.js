@@ -894,6 +894,12 @@ function HomePage({
             匹配 {filteredItemsCount} / {totalItemsCount} 项
           </Typography>
         )}
+        {!hasActiveSearch && filteredItemsCount === 0 && (
+          <Box sx={{ py: 8, textAlign: 'center', color: 'text.secondary' }}>
+            <Typography sx={{ fontSize: 14, mb: 0.5 }}>这个文件夹是空的</Typography>
+            <Typography sx={{ fontSize: 12 }}>没有图片或子文件夹，换一个位置试试。</Typography>
+          </Box>
+        )}
         {viewMode === 'list' ? renderList() : rowsToRender.length > 0 ? (
           <Virtuoso
             data={rowsToRender}
