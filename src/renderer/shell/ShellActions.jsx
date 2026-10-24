@@ -5,7 +5,9 @@ const EMPTY_ACTIONS = {
   canGoBack: false,
   canGoForward: false,
   goBack: null,
-  goForward: null
+  goForward: null,
+  viewMode: null,
+  onViewModeChange: null
 };
 
 const ShellActionsContext = createContext({

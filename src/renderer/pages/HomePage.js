@@ -14,6 +14,8 @@ import {
   useTheme
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AlbumCard from '../components/AlbumCard';
 import ImageCard from '../components/ImageCard';
 import ImageViewer from '../components/ImageViewer';
@@ -42,6 +44,7 @@ const ipcRenderer = window.electronAPI || null;
 
 function HomePage({
   colorMode,
+  viewMode = 'grid',
   // URL模式的新props
   currentPath: urlCurrentPath = null,
   onNavigate = null,
@@ -92,7 +95,7 @@ function HomePage({
   const displayedBreadcrumbs = Array.isArray(sourceBreadcrumbs)
     ? sourceBreadcrumbs
     : breadcrumbs;
-  const homeSortFields = useMemo(() => ['name', 'imageCount', 'lastModified'], []);
+  const homeSortFields = useMemo(() => ['name', 'imageCount', 'directImageCount', 'childFolders', 'lastModified'], []);
   const homeLegacySortKeys = useMemo(
     () => ({ sortByKey: 'sortBy', sortDirectionKey: 'sortDirection' }),
     []
@@ -423,6 +426,8 @@ function HomePage({
       path: node.path || '',
       lastModified: node.lastModified || 0,
       count: getPrimaryKind(node) === 'folder' ? (node.childFolders || 0) : (node.imageCount || 0),
+      directImageCount: node.imageCount || 0,
+      childFolders: node.childFolders || 0,
       groupRank: getPrimaryKind(node) === 'folder' ? 0 : 1,
       node
     }));
@@ -682,7 +687,8 @@ function HomePage({
           onSearchFocusChange={setSearchHasFocus}
           sortOptions={[
             { value: 'name', label: '名称' },
-            { value: 'imageCount', label: '照片数量' },
+            { value: 'directImageCount', label: '图片数量' },
+            { value: 'childFolders', label: '子文件夹' },
             { value: 'lastModified', label: '修改时间' }
           ]}
           sortBy={sortBy}
@@ -790,6 +796,80 @@ function HomePage({
       );
     }
 
+    const formatListDate = (value) => {
+      if (!value) return '—';
+      try {
+        return new Date(value).toLocaleString('zh-CN', {
+          year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+      } catch (_error) {
+        return '—';
+      }
+    };
+
+    const renderList = () => (
+      <Box>
+        <Box sx={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 84px 96px 152px',
+          alignItems: 'center',
+          height: 26,
+          px: 2,
+          fontSize: 11,
+          color: 'text.secondary',
+          borderBottom: 1,
+          borderColor: 'divider',
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          bgcolor: 'background.default'
+        }}>
+          <Box>名称</Box>
+          <Box>图片</Box>
+          <Box>子文件夹</Box>
+          <Box>修改日期</Box>
+        </Box>
+        <Virtuoso
+          data={sortedDisplayItems}
+          customScrollParent={virtualScrollParent || undefined}
+          overscan={480}
+          itemContent={(_rowIndex, item) => {
+            const isImage = item.itemKind === 'image';
+            const handleOpen = isImage
+              ? () => handleDirectImageClick(directImageIndexByPath[item.image.path] ?? 0)
+              : () => handleNodeClick(item.node);
+            return (
+              <Box
+                onClick={handleOpen}
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 84px 96px 152px',
+                  alignItems: 'center',
+                  height: 34,
+                  px: 2,
+                  fontSize: 12.5,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  cursor: 'pointer',
+                  '&:hover': { bgcolor: 'hover' }
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                  {isImage
+                    ? <ImageOutlinedIcon sx={{ fontSize: 15, color: 'primary.main', flexShrink: 0 }} />
+                    : <FolderOutlinedIcon sx={{ fontSize: 15, color: 'primary.main', flexShrink: 0 }} />}
+                  <Typography noWrap sx={{ fontSize: 12.5, minWidth: 0 }}>{item.name || '未命名'}</Typography>
+                </Box>
+                <Box sx={{ color: 'text.secondary' }}>{isImage ? '1 张' : `${item.directImageCount || 0} 张`}</Box>
+                <Box sx={{ color: 'text.secondary' }}>{isImage ? '—' : (item.childFolders ? `${item.childFolders} 个` : '—')}</Box>
+                <Box sx={{ color: 'text.secondary' }}>{formatListDate(item.lastModified)}</Box>
+              </Box>
+            );
+          }}
+        />
+      </Box>
+    );
+
     return (
       <Box>
         {renderScanProgress()}
@@ -805,7 +885,7 @@ function HomePage({
             匹配 {filteredItemsCount} / {totalItemsCount} 项
           </Typography>
         )}
-        {rowsToRender.length > 0 ? (
+        {viewMode === 'list' ? renderList() : rowsToRender.length > 0 ? (
           <Virtuoso
             data={rowsToRender}
             customScrollParent={virtualScrollParent || undefined}

@@ -17,6 +17,12 @@ export function compareByFolderSort(left, right, sortBy, sortDirection) {
     const leftCount = left.imageCount ?? left.count ?? 0;
     const rightCount = right.imageCount ?? right.count ?? 0;
     comparison = leftCount - rightCount;
+  } else if (sortBy === 'directImageCount') {
+    const leftCount = left.directImageCount ?? left.imageCount ?? left.count ?? 0;
+    const rightCount = right.directImageCount ?? right.imageCount ?? right.count ?? 0;
+    comparison = leftCount - rightCount;
+  } else if (sortBy === 'childFolders') {
+    comparison = (left.childFolders ?? 0) - (right.childFolders ?? 0);
   } else if (sortBy === 'lastModified') {
     comparison = new Date(left.lastModified || 0) - new Date(right.lastModified || 0);
   }

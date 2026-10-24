@@ -278,6 +278,15 @@ function BrowserPage({ colorMode, scrollContext = null }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [sources, setSources] = useState([]);
+  const [viewMode, setViewMode] = useState(() => {
+    const saved = localStorage.getItem('shell.viewMode');
+    return saved === 'list' ? 'list' : 'grid';
+  });
+  const changeViewMode = useCallback((next) => {
+    const normalized = next === 'list' ? 'list' : 'grid';
+    setViewMode(normalized);
+    localStorage.setItem('shell.viewMode', normalized);
+  }, []);
   const [hydrationStatus, setHydrationStatus] = useState(HYDRATION_PENDING);
   const draggingTabIdRef = useRef(null);
   const [dragIndicator, setDragIndicator] = useState({ tabId: null, position: DRAG_INSERT_BEFORE });
@@ -461,9 +470,11 @@ function BrowserPage({ colorMode, scrollContext = null }) {
       canGoBack,
       canGoForward,
       goBack,
-      goForward
+      goForward,
+      viewMode,
+      onViewModeChange: changeViewMode
     });
-  }, [registerShellActions, activeTab?.title, canGoBack, canGoForward, goBack, goForward]);
+  }, [registerShellActions, activeTab?.title, canGoBack, canGoForward, goBack, goForward, viewMode, changeViewMode]);
 
   useEffect(() => {
     const handleHistoryShortcut = (event) => {
@@ -1372,6 +1383,7 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     ? (
       <AlbumPage
         colorMode={colorMode}
+        viewMode={viewMode}
         // 通过props传递URL状态，而不是依赖路由参数
         albumPath={displayState.targetPath}
         initialImage={displayState.initialImage}
@@ -1408,6 +1420,7 @@ function BrowserPage({ colorMode, scrollContext = null }) {
         : (
       <HomePage
         colorMode={colorMode}
+        viewMode={viewMode}
         // 通过props传递URL状态
         currentPath={displayState.targetPath}
         sourceBoundary={displayState.sourceBoundary}

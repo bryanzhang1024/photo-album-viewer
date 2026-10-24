@@ -3,6 +3,8 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded';
+import ViewListRoundedIcon from '@mui/icons-material/ViewListRounded';
 import { useShellActions } from './ShellActions';
 import { MAC_TITLEBAR_HEIGHT, MAC_WINDOW_CONTROLS_WIDTH } from '../../common/window-chrome';
 
@@ -70,6 +72,29 @@ export default function Toolbar({ onToggleSidebar = null, sidebarCollapsed = fal
             </IconButton>
           </span>
         </Tooltip>
+        <Box sx={{ width: 1, height: 14, bgcolor: 'divider', mx: 0.5 }} />
+        <Box sx={{ display: 'flex', bgcolor: 'hover', borderRadius: 1, p: '2px' }}>
+          <IconButton
+            size="small"
+            aria-label="图标视图"
+            aria-pressed={actions.viewMode === 'grid'}
+            onClick={() => actions.onViewModeChange?.('grid')}
+            disabled={!actions.onViewModeChange}
+            sx={{ width: 24, height: 20, borderRadius: 0.75, bgcolor: actions.viewMode === 'grid' ? 'selection' : 'transparent' }}
+          >
+            <GridViewRoundedIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+          <IconButton
+            size="small"
+            aria-label="列表视图"
+            aria-pressed={actions.viewMode === 'list'}
+            onClick={() => actions.onViewModeChange?.('list')}
+            disabled={!actions.onViewModeChange}
+            sx={{ width: 24, height: 20, borderRadius: 0.75, bgcolor: actions.viewMode === 'list' ? 'selection' : 'transparent' }}
+          >
+            <ViewListRoundedIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Box>
       </Box>
       <Typography component="span" sx={{
         position: 'absolute',

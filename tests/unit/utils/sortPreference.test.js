@@ -90,3 +90,18 @@ describe('sortPreference', () => {
     });
   });
 });
+
+describe('compareByFolderSort 新增列', () => {
+  const a = { name: 'A', path: '/a', directImageCount: 0, childFolders: 12 };
+  const b = { name: 'B', path: '/b', directImageCount: 30, childFolders: 0 };
+
+  test('directImageCount 按直接图片数排序', () => {
+    expect(compareByFolderSort(a, b, 'directImageCount', 'asc')).toBeLessThan(0);
+    expect(compareByFolderSort(a, b, 'directImageCount', 'desc')).toBeGreaterThan(0);
+  });
+
+  test('childFolders 按子文件夹数排序', () => {
+    expect(compareByFolderSort(a, b, 'childFolders', 'asc')).toBeGreaterThan(0);
+    expect(compareByFolderSort(a, b, 'childFolders', 'desc')).toBeLessThan(0);
+  });
+});
