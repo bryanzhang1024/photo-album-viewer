@@ -829,10 +829,33 @@ function HomePage({
           zIndex: 2,
           bgcolor: 'background.default'
         }}>
-          <Box>名称</Box>
-          <Box>图片</Box>
-          <Box>子文件夹</Box>
-          <Box>修改日期</Box>
+          {[
+            ['名称', 'name'],
+            ['图片', 'directImageCount'],
+            ['子文件夹', 'childFolders'],
+            ['修改日期', 'lastModified']
+          ].map(([label, field]) => {
+            const active = sortBy === field;
+            return (
+              <Box
+                key={field}
+                component="button"
+                onClick={() => (active
+                  ? handleDirectionChange()
+                  : handleSortChange({ target: { value: field } }))}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.5,
+                  border: 0, background: 'none', p: 0, font: 'inherit',
+                  cursor: 'pointer', textAlign: 'left',
+                  color: active ? 'text.primary' : 'text.secondary',
+                  '&:hover': { color: 'text.primary' }
+                }}
+              >
+                {label}
+                {active ? <Box component="span" sx={{ fontSize: 10 }}>{sortDirection === 'asc' ? '↑' : '↓'}</Box> : null}
+              </Box>
+            );
+          })}
         </Box>
         <Virtuoso
           data={sortedDisplayItems}

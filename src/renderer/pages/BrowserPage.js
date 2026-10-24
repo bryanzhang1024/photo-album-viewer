@@ -869,6 +869,30 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     });
   }, [activeTab, activeTabId, commitValidatedLocation]);
 
+
+  // ⌘↑ 上一级、⌘F 聚焦搜索框；单独成 effect，等 handleGoBack 定义之后再挂。
+  useEffect(() => {
+    const handleExtraShortcuts = (event) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const activeElement = event.target?.tagName ? event.target : document.activeElement;
+      const isEditable = activeElement?.tagName === 'INPUT'
+        || activeElement?.tagName === 'TEXTAREA'
+        || activeElement?.isContentEditable;
+      if (isEditable) return;
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        handleGoBack();
+      } else if (event.key.toLowerCase() === 'f') {
+        const searchInput = document.querySelector('input[placeholder^="搜索"]');
+        if (searchInput) {
+          event.preventDefault();
+          searchInput.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleExtraShortcuts);
+    return () => window.removeEventListener('keydown', handleExtraShortcuts);
+  }, [handleGoBack]);
   const openLocationInNewTab = useCallback((
     browserLocation,
     sourcesOverride = sourcesRef.current,

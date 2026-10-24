@@ -824,6 +824,10 @@ function AlbumPage({
             const index = images.findIndex((image) => image.path === row.path);
             if (index >= 0) handleImageClick(index);
           }}
+          sortBy={sortBy}
+          sortDirection={sortDirection}
+          onSortChange={(key) => handleSortChange({ target: { value: key } })}
+          onToggleSortDirection={handleDirectionChange}
           columns={[
             {
               key: 'name',
@@ -831,8 +835,8 @@ function AlbumPage({
               width: '1fr',
               render: (row) => <Typography noWrap sx={{ fontSize: 12.5 }}>{row.name || '未命名'}</Typography>
             },
-            { key: 'size', label: '大小', width: '110px', dim: true, render: (row) => formatBytes(row.size) },
-            { key: 'lastModified', label: '修改时间', width: '168px', dim: true, render: (row) => formatListDate(row.lastModified) }
+            { key: 'size', label: '大小', width: '110px', dim: true, sortKey: 'size', render: (row) => formatBytes(row.size) },
+            { key: 'lastModified', label: '修改时间', width: '168px', dim: true, sortKey: 'lastModified', render: (row) => formatListDate(row.lastModified) }
           ]}
         />
       ) : filteredImagesCount > 0 ? (

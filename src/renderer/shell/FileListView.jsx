@@ -41,7 +41,11 @@ export default function FileListView({
   endReached = null,
   emptyText = '没有内容',
   testId = 'file-list',
-  isRowSelected = null
+  isRowSelected = null,
+  sortBy = null,
+  sortDirection = 'asc',
+  onSortChange = null,
+  onToggleSortDirection = null
 }) {
   const template = columns.map((column) => column.width || '1fr').join(' ');
   const alignFor = (column) => (column.align === 'right' ? 'flex-end' : 'flex-start');
@@ -62,11 +66,39 @@ export default function FileListView({
       zIndex: 2,
       bgcolor: 'background.default'
     }}>
-      {columns.map((column) => (
-        <Box key={column.key} sx={{ display: 'flex', justifyContent: alignFor(column), minWidth: 0 }}>
-          <Typography noWrap sx={{ fontSize: 11 }}>{column.label}</Typography>
-        </Box>
-      ))}
+      {columns.map((column) => {
+        const sortable = Boolean(column.sortKey && onSortChange);
+        const active = sortable && column.sortKey === sortBy;
+        return (
+          <Box key={column.key} sx={{ display: 'flex', justifyContent: alignFor(column), minWidth: 0 }}>
+            <Box
+              component={sortable ? 'button' : 'div'}
+              onClick={sortable ? () => {
+                if (active && onToggleSortDirection) onToggleSortDirection();
+                else onSortChange(column.sortKey);
+              } : undefined}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                border: 0,
+                background: 'none',
+                p: 0,
+                font: 'inherit',
+                cursor: sortable ? 'pointer' : 'default',
+                color: active ? 'text.primary' : 'text.secondary',
+                minWidth: 0,
+                '&:hover': sortable ? { color: 'text.primary' } : {}
+              }}
+            >
+              <Typography noWrap sx={{ fontSize: 11 }}>{column.label}</Typography>
+              {active ? (
+                <Typography component="span" sx={{ fontSize: 10 }}>{sortDirection === 'asc' ? '↑' : '↓'}</Typography>
+              ) : null}
+            </Box>
+          </Box>
+        );
+      })}
     </Box>
   );
 

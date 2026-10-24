@@ -896,10 +896,10 @@ function CosLibraryPage({ colorMode }) {
       const isSets = view.kind === 'sets';
       const columns = isSets
         ? [
-            { key: 'name', label: '名称', width: '1fr', render: (item) => <Typography noWrap sx={{ fontSize: 12.5 }}>{item.displayName || item.name || '未命名'}</Typography> },
-            { key: 'count', label: '张数', width: '88px', dim: true, render: (item) => `${formatCount(item.imageCount || 0)} 张` },
+            { key: 'name', label: '名称', width: '1fr', sortKey: 'name', render: (item) => <Typography noWrap sx={{ fontSize: 12.5 }}>{item.displayName || item.name || '未命名'}</Typography> },
+            { key: 'count', label: '张数', width: '88px', dim: true, sortKey: 'imageCount', render: (item) => `${formatCount(item.imageCount || 0)} 张` },
             { key: 'characters', label: '角色', width: '180px', dim: true, render: (item) => (item.characters || []).join('、') || '—' },
-            { key: 'date', label: '修改日期', width: '168px', dim: true, render: (item) => formatListDate(item.lastModified) }
+            { key: 'date', label: '修改日期', width: '168px', dim: true, sortKey: 'lastModified', render: (item) => formatListDate(item.lastModified) }
           ]
         : [
             { key: 'name', label: '名称', width: '1fr', render: (item) => <Typography noWrap sx={{ fontSize: 12.5 }}>{item.name || '未命名'}</Typography> },
@@ -917,6 +917,10 @@ function CosLibraryPage({ colorMode }) {
               customScrollParent={scrollContainerRef.current || undefined}
               endReached={loadMore}
               isRowSelected={(item) => selectedItemId === item.id}
+              sortBy={sortBy}
+              sortDirection={sortDirection}
+              onSortChange={(key) => updateFilter('sort', key)}
+              onToggleSortDirection={() => updateFilter('direction', sortDirection === 'asc' ? 'desc' : 'asc')}
               onRowClick={(item) => setSelectedItemId(item.id)}
               onRowDoubleClick={(item) => {
                 if (item.id === '__all__') {

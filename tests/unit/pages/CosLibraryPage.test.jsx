@@ -130,7 +130,8 @@ describe('CosLibraryPage', () => {
     renderCoserCard();
     await screen.findByAltText(cardItem.displayName);
     expect(screen.queryByText(cardItem.displayName)).not.toBeInTheDocument();
-    expect(screen.getByText('初音未来')).toBeInTheDocument();
+    // 丙方案：主行是去掉署名前缀与作品括号的完整名
+    expect(screen.getByText('初音未来·原皮')).toBeInTheDocument();
     expect(screen.getByText('VOCALOID')).toBeInTheDocument();
     expect(screen.queryByText('原皮')).not.toBeInTheDocument();
     expect(screen.queryByText('角色服装')).not.toBeInTheDocument();
