@@ -10,7 +10,7 @@ export default function AppTitleBar() {
     height: MAC_TITLEBAR_HEIGHT, flexShrink: 0, position: 'relative',
     display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
     pl: `${MAC_WINDOW_CONTROLS_WIDTH}px`, pr: 1.5,
-    bgcolor: theme => theme.palette.mode === 'dark' ? '#303030' : '#e7e7e7',
+    bgcolor: theme => theme.palette.chrome,
     WebkitAppRegion: 'drag', userSelect: 'none'
   }}>
     <Typography component="span" sx={{
