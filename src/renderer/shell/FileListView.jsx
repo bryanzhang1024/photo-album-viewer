@@ -40,7 +40,8 @@ export default function FileListView({
   overscan = 480,
   endReached = null,
   emptyText = '没有内容',
-  testId = 'file-list'
+  testId = 'file-list',
+  isRowSelected = null
 }) {
   const template = columns.map((column) => column.width || '1fr').join(' ');
   const alignFor = (column) => (column.align === 'right' ? 'flex-end' : 'flex-start');
@@ -103,6 +104,7 @@ export default function FileListView({
               borderBottom: 1,
               borderColor: 'divider',
               cursor: onRowClick || onRowDoubleClick ? 'pointer' : 'default',
+              bgcolor: isRowSelected?.(row) ? 'selection' : 'transparent',
               '&:hover': { bgcolor: 'hover' }
             }}
           >

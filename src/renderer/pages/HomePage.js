@@ -30,6 +30,8 @@ import useSorting from '../hooks/useSorting';
 import { getFolderSortScopeKey, compareByFolderSort } from '../utils/sortPreference';
 import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
+import { openSettingsWindow } from '../utils/openSettingsWindow';
+import PageHeader from '../shell/PageHeader';
 import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import {
@@ -672,63 +674,65 @@ function HomePage({
   const randomDisabled = !onRandomBrowse || randomBrowseDisabled || randomBrowseLoading;
   
     const renderHeader = () => (
-      <>
-        <BreadcrumbNavigation
-          breadcrumbs={displayedBreadcrumbs}
-          currentPath={currentPath}
-          onNavigate={handleBreadcrumbNavigate}
-          variant="minimal"
-          compact={isSmallScreen}
-          sx={{ flexGrow: 1, minWidth: 0 }}
-        />
+      <PageHeader
+        breadcrumbs={displayedBreadcrumbs}
+        onNavigate={handleBreadcrumbNavigate}
+        title={displayedBreadcrumbs[displayedBreadcrumbs.length - 1]?.name || '文件夹'}
+        count={`${navigationNodes.length + directImages.length} 项`}
+        compact={isSmallScreen}
+        controls={
         <GridPageToolbar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="搜索当前文件夹"
-          onSearchFocusChange={setSearchHasFocus}
-          sortOptions={[
-            { value: 'name', label: '名称' },
-            { value: 'directImageCount', label: '图片数量' },
-            { value: 'childFolders', label: '子文件夹' },
-            { value: 'lastModified', label: '修改时间' }
-          ]}
-          sortBy={sortBy}
-          sortDirection={sortDirection}
-          onSortChange={handleSortChange}
-          onSortDirectionChange={handleDirectionChange}
-          userDensity={userDensity}
-          onDensityChange={(value) => {
-            setUserDensity(value);
-            localStorage.setItem('userDensity', value);
-          }}
-          onRandomAlbum={handleRandomAlbum}
-          randomDisabled={randomDisabled}
-          onRefresh={handleRefresh}
-          refreshDisabled={!canRefreshCurrentFolder}
-          refreshAriaLabel="刷新当前文件夹"
-          favoriteMenuItems={[
-            {
-              id: 'folder',
-              label: isFolderFavorited(currentPath) ? '取消收藏当前文件夹' : '收藏当前文件夹',
-              checked: isFolderFavorited(currentPath),
-              disabled: !currentPath,
-              onClick: handleToggleCurrentFolderFavorite
-            },
-            {
-              id: 'photoSet',
-              label: isAlbumFavorited(currentPath) ? '取消收藏当前照片集合' : '收藏当前照片集合',
-              checked: isAlbumFavorited(currentPath),
-              disabled: !currentPath || (!isAlbumFavorited(currentPath) && directImages.length === 0),
-              onClick: handleToggleCurrentPhotoSetFavorite
-            }
-          ]}
-          openFavoritesItem={{
-            label: '打开我的收藏',
-            onClick: handleNavigateToFavorites
-          }}
-          onOpenSettings={() => navigate('/settings')}
-        />
-      </>
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="搜索当前文件夹"
+            onSearchFocusChange={setSearchHasFocus}
+            sortOptions={[
+              { value: 'name', label: '名称' },
+              { value: 'directImageCount', label: '图片数量' },
+              { value: 'childFolders', label: '子文件夹' },
+              { value: 'lastModified', label: '修改时间' }
+            ]}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            onSortChange={handleSortChange}
+            onSortDirectionChange={handleDirectionChange}
+            userDensity={userDensity}
+            onDensityChange={(value) => {
+              setUserDensity(value);
+              localStorage.setItem('userDensity', value);
+            }}
+            onRandomAlbum={handleRandomAlbum}
+            randomDisabled={randomDisabled}
+            onRefresh={handleRefresh}
+            refreshDisabled={!canRefreshCurrentFolder}
+            refreshAriaLabel="刷新当前文件夹"
+            favoriteMenuItems={[
+              {
+                id: 'folder',
+                label: isFolderFavorited(currentPath) ? '取消收藏当前文件夹' : '收藏当前文件夹',
+                checked: isFolderFavorited(currentPath),
+                disabled: !currentPath,
+                onClick: handleToggleCurrentFolderFavorite
+              },
+              {
+                id: 'photoSet',
+                label: isAlbumFavorited(currentPath) ? '取消收藏当前照片集合' : '收藏当前照片集合',
+                checked: isAlbumFavorited(currentPath),
+                disabled: !currentPath || (!isAlbumFavorited(currentPath) && directImages.length === 0),
+                onClick: handleToggleCurrentPhotoSetFavorite
+              }
+            ]}
+            openFavoritesItem={{
+              label: '打开我的收藏',
+              onClick: handleNavigateToFavorites
+            }}
+            onOpenSettings={async () => {
+              const opened = await openSettingsWindow();
+              if (!opened) navigate('/settings');
+            }}
+          />
+        }
+      />
     );
   
   const renderScanProgress = () => {
@@ -836,12 +840,15 @@ function HomePage({
           overscan={480}
           itemContent={(_rowIndex, item) => {
             const isImage = item.itemKind === 'image';
+            const itemPath = isImage ? item.image.path : item.node.path;
+            const handleSelect = () => setSelectedPath(itemPath);
             const handleOpen = isImage
               ? () => handleDirectImageClick(directImageIndexByPath[item.image.path] ?? 0)
               : () => handleNodeClick(item.node);
             return (
               <Box
-                onClick={handleOpen}
+                onClick={handleSelect}
+                onDoubleClick={handleOpen}
                 sx={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 84px 96px 152px',
@@ -852,6 +859,7 @@ function HomePage({
                   borderBottom: 1,
                   borderColor: 'divider',
                   cursor: 'pointer',
+                  bgcolor: selectedPath === itemPath ? 'selection' : 'transparent',
                   '&:hover': { bgcolor: 'hover' }
                 }}
               >

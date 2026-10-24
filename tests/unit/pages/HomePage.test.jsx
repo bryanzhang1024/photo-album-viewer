@@ -551,7 +551,8 @@ describe('HomePage refresh button', () => {
         const breadcrumbProps = BreadcrumbNavigation.mock.calls[
           BreadcrumbNavigation.mock.calls.length - 1
         ][0];
-        expect(breadcrumbProps.breadcrumbs).toEqual(sourceBreadcrumbs);
+        // 页头只把上级路径交给面包屑，当前目录名由标题承担。
+        expect(breadcrumbProps.breadcrumbs).toEqual(sourceBreadcrumbs.slice(0, -1));
       });
       expect(ipcRenderer.invoke).not.toHaveBeenCalledWith(
         CHANNELS.GET_DIRECTORY_LEVEL_V1,
