@@ -30,6 +30,7 @@ import useSorting from '../hooks/useSorting';
 import { getFolderSortScopeKey, compareByFolderSort } from '../utils/sortPreference';
 import useGridThumbnailPrefetch, { extractHomePageRowPaths } from '../hooks/useGridThumbnailPrefetch';
 import PageLayout from '../components/PageLayout';
+import { openSettingsWindow } from '../utils/openSettingsWindow';
 import PageHeader from '../shell/PageHeader';
 import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
@@ -725,7 +726,10 @@ function HomePage({
               label: '打开我的收藏',
               onClick: handleNavigateToFavorites
             }}
-            onOpenSettings={() => navigate('/settings')}
+            onOpenSettings={async () => {
+              const opened = await openSettingsWindow();
+              if (!opened) navigate('/settings');
+            }}
           />
         }
       />

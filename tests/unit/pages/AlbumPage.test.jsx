@@ -653,7 +653,7 @@ describe('AlbumPage refresh button', () => {
         const breadcrumbProps = BreadcrumbNavigation.mock.calls[
           BreadcrumbNavigation.mock.calls.length - 1
         ][0];
-        expect(breadcrumbProps.breadcrumbs).toEqual(sourceBreadcrumbs);
+        expect(breadcrumbProps.breadcrumbs).toEqual(sourceBreadcrumbs.slice(0, -1));
       });
       expect(useAlbumImages).toHaveBeenCalledWith(
         albumPath,

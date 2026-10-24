@@ -43,5 +43,6 @@ module.exports = {
     COS_SHOW_SET_IN_FOLDER: 'cos-show-set-in-folder',
     COS_OPEN_IN_PICTUREVIEW: 'cos-open-in-pictureview',
     COS_INDEX_PROGRESS: 'cos-index-progress',
-    COS_LIBRARY_UPDATED: 'cos-library-updated'
+    COS_LIBRARY_UPDATED: 'cos-library-updated',
+    OPEN_SETTINGS_WINDOW: 'open-settings-window'
 };

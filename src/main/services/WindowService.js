@@ -70,13 +70,20 @@ const waitForServer = (url, callback) => {
   check();
 };
 
-function createWindow(launchTarget = null) {
+function createWindow(launchTarget = null, options = {}) {
+  const {
+    width = 1280,
+    height = 800,
+    minWidth = 720,
+    minHeight = 480,
+    hashUrl = null
+  } = options;
   // 创建一个新的BrowserWindow实例
   const newWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 720,
-    minHeight: 480,
+    width,
+    height,
+    minWidth,
+    minHeight,
     ...(process.platform === 'darwin' ? {
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION
@@ -137,7 +144,9 @@ function createWindow(launchTarget = null) {
     ? 'http://localhost:3000/'
     : `file://${path.join(__dirname, '../../../build/index.html')}`;
 
-  const finalUrl = buildWindowUrl(startUrl, launchTarget);
+  const finalUrl = hashUrl
+    ? `${startUrl}${hashUrl}`
+    : buildWindowUrl(startUrl, launchTarget);
   if (launchTarget) {
     console.log('创建窗口的URL:', finalUrl);
   }

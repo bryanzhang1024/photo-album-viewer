@@ -1219,6 +1219,22 @@ ipcMain.handle(CHANNELS.VALIDATE_NAVIGATION_TARGET_V1, async (event, payload) =>
 });
 
 // 创建新窗口查看文件夹
+ipcMain.handle(CHANNELS.OPEN_SETTINGS_WINDOW, async () => {
+  try {
+    const settingsWindow = createWindow(null, {
+      width: 760,
+      height: 560,
+      minWidth: 640,
+      minHeight: 480,
+      hashUrl: '#/settings'
+    });
+    return { success: true, windowId: settingsWindow.id };
+  } catch (error) {
+    console.error('打开设置窗口失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle(CHANNELS.CREATE_NEW_WINDOW, async (event, payload) => {
   try {
     const launchTarget = await resolveWindowLaunchPayload(payload, { allowEmpty: true });

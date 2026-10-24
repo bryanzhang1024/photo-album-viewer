@@ -26,6 +26,8 @@ import useGridThumbnailPrefetch, { extractAlbumImageRowPaths } from '../hooks/us
 import useBreadcrumbs from '../hooks/useBreadcrumbs';
 import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
 import PageLayout from '../components/PageLayout';
+import { openSettingsWindow } from '../utils/openSettingsWindow';
+import PageHeader from '../shell/PageHeader';
 import FileListView, { formatBytes, formatListDate } from '../shell/FileListView';
 import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
@@ -694,20 +696,8 @@ function AlbumPage({
 
   const randomDisabled = !onRandomBrowse || randomBrowseDisabled || randomBrowseLoading;
 
-  const renderHeader = () => (
-    <>
-      {headerLeadingContent || (
-        <BreadcrumbNavigation
-          breadcrumbs={breadcrumbs.length > 0
-            ? breadcrumbs
-            : getBreadcrumbPaths(decodedAlbumPath, breadcrumbRootPath)}
-          currentPath={decodedAlbumPath}
-          onNavigate={handleBreadcrumbNavigate}
-          variant="minimal"
-          compact={isSmallScreen}
-          sx={{ flexGrow: 1, minWidth: 0 }}
-        />
-      )}
+  const renderHeader = () => {
+    const toolbar = (
       <GridPageToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -755,13 +745,40 @@ function AlbumPage({
           label: '打开我的收藏',
           onClick: handleNavigateToFavorites
         }}
-        onOpenSettings={() => navigate('/settings')}
+        onOpenSettings={async () => {
+          const opened = await openSettingsWindow();
+          if (!opened) navigate('/settings');
+        }}
         showFavorites={!embeddedMode}
         showSettings={!embeddedMode}
         extraActions={headerExtraActions}
       />
-    </>
-  );
+    );
+
+    if (headerLeadingContent) {
+      return (
+        <>
+          {headerLeadingContent}
+          {toolbar}
+        </>
+      );
+    }
+
+    const headerBreadcrumbs = breadcrumbs.length > 0
+      ? breadcrumbs
+      : getBreadcrumbPaths(decodedAlbumPath, breadcrumbRootPath);
+
+    return (
+      <PageHeader
+        breadcrumbs={headerBreadcrumbs}
+        onNavigate={handleBreadcrumbNavigate}
+        title={getBasename(decodedAlbumPath) || '相簿'}
+        count={`${totalImagesCount} 张照片`}
+        compact={isSmallScreen}
+        controls={toolbar}
+      />
+    );
+  };
 
   const renderContent = () => (
     <>
