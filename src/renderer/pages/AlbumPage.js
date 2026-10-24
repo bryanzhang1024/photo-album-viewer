@@ -882,6 +882,8 @@ function AlbumPage({
       headerContent={renderHeader()}
       subHeaderContent={tabsHeaderContent}
       scrollContainerRef={scrollContainerRef}
+      statusLeft={`${images.length}${hasMore ? '+' : ''} 张照片`}
+      statusRight={readOnly ? '只读' : '⌘[ 后退　⌘] 前进　⌘↑ 上一级'}
     >
       {renderContent()}
     </PageLayout>

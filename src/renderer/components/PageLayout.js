@@ -8,7 +8,7 @@ import {
   Container
 } from '@mui/material';
 
-function PageLayout({ loading, error, headerContent, subHeaderContent = null, children, scrollContainerRef }) {
+function PageLayout({ loading, error, headerContent, subHeaderContent = null, children, scrollContainerRef, statusLeft = null, statusRight = null }) {
   return (
     <Box sx={{ flexGrow: 1, height: 'calc(100vh - var(--app-chrome-height, 0px))', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
@@ -39,6 +39,24 @@ function PageLayout({ loading, error, headerContent, subHeaderContent = null, ch
           children
         )}
       </Box>
+      {statusLeft || statusRight ? (
+        <Box sx={{
+          height: 24,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 1.5,
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'chrome',
+          fontSize: 11,
+          color: 'text.secondary'
+        }}>
+          <Box component="span" noWrap>{statusLeft}</Box>
+          <Box component="span" noWrap sx={{ color: 'text.disabled' }}>{statusRight}</Box>
+        </Box>
+      ) : null}
     </Box>
   );
 }

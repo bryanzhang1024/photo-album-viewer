@@ -1004,6 +1004,10 @@ function CosLibraryPage({ colorMode }) {
 
   return (
     <PageLayout loading={loading && view.kind !== 'landing'} error="" headerContent={header} scrollContainerRef={scrollContainerRef}
+      statusLeft={view.kind === 'landing'
+        ? `${formatCount(summary.setCount)} 套 · ${formatCount(summary.imageCount)} 张图片`
+        : `${formatCount(total)} 项`}
+      statusRight="Esc 返回　E 随机换一套"
       subHeaderContent={status?.refreshing || progress?.total ? <Box sx={{ px: 1, py: 0.25 }}>
         <Typography variant="caption" color="text.secondary">
           {status?.cached ? '后台更新索引，可继续浏览' : '首次建立索引…'}

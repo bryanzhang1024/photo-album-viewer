@@ -953,6 +953,10 @@ function HomePage({
     );
   };
   
+    const statusLeft = metadata
+      ? `${metadata.albumCount ?? 0} 个相簿 · ${filteredItemsCount} 项`
+      : `${filteredNodes.length} 个文件夹${filteredDirectImages.length ? ` · ${filteredDirectImages.length} 张照片` : ''}`;
+
     return (
       <PageLayout
         loading={loading}
@@ -960,6 +964,8 @@ function HomePage({
         headerContent={renderHeader()}
         subHeaderContent={tabsHeaderContent}
         scrollContainerRef={scrollContainerRef}
+        statusLeft={statusLeft}
+        statusRight="⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索"
       >
         {renderContent()}
         <Snackbar 
