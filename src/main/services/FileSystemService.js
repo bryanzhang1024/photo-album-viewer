@@ -193,6 +193,7 @@ async function scanNavigationLevel(targetPath, options = {}) {
 
     const directoryEntries = [];
     const imageFiles = [];
+    let otherFileCount = 0;
 
     // 1. 分离文件和目录
     for (const entry of entries) {
@@ -203,6 +204,9 @@ async function scanNavigationLevel(targetPath, options = {}) {
           directoryEntries.push(entry);
         } else if (stats.isFile() && SUPPORTED_FORMATS.includes(path.extname(entry).toLowerCase())) {
           imageFiles.push({ path: fullPath, name: entry, stats });
+        } else if (stats.isFile() && !entry.startsWith('.')) {
+          // 视频、压缩包等非图片文件：不进入网格，但要在状态栏说明还有多少。
+          otherFileCount += 1;
         }
       } catch (err) {
         // 忽略无法访问的条目
@@ -248,6 +252,7 @@ async function scanNavigationLevel(targetPath, options = {}) {
     
     const response = createNavigationResponse(nodes, targetPath, parentPath, breadcrumbs, directImages);
     response.metadata.scanTime = Date.now() - startTime;
+    response.metadata.otherFileCount = otherFileCount;
     
     console.log(`智能扫描完成: ${targetPath}, 耗时: ${response.metadata.scanTime}ms, 节点: ${nodes.length}`);
     return response;
@@ -652,6 +657,7 @@ function createNavigationResponse(nodes, currentPath, parentPath, breadcrumbs, d
       folderCount: nodes.filter(n => n.type === NODE_TYPES.FOLDER).length,
       albumCount: nodes.filter(n => n.type === NODE_TYPES.ALBUM).length,
       directImageCount: directImages.length,
+      otherFileCount: 0,
       scanTime: 0 // 将在调用处设置
     }
   };

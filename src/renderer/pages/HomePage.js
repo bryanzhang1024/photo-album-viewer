@@ -995,9 +995,10 @@ function HomePage({
     );
   };
   
-    const statusLeft = metadata
+    const otherFileCount = metadata?.otherFileCount || 0;
+    const statusLeft = `${metadata
       ? `${metadata.albumCount ?? 0} 个相簿 · ${filteredItemsCount} 项`
-      : `${filteredNodes.length} 个文件夹${filteredDirectImages.length ? ` · ${filteredDirectImages.length} 张照片` : ''}`;
+      : `${filteredNodes.length} 个文件夹${filteredDirectImages.length ? ` · ${filteredDirectImages.length} 张照片` : ''}`}${otherFileCount ? ` · 另有 ${otherFileCount} 个非图片文件` : ''}`;
 
     return (
       <PageLayout

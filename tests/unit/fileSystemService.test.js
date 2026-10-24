@@ -108,6 +108,25 @@ describe('FileSystemService', () => {
     });
   });
 
+
+  test('scanNavigationLevel 统计当前目录的非图片文件数', async () => {
+    mockFs = createFsMock({
+      '/downloads': {
+        'clip.mp4': Buffer.from('video'),
+        'pack.zip': Buffer.from('zip'),
+        'readme.txt': 'text',
+        '.DS_Store': 'hidden',
+        'cover.jpg': Buffer.from('image')
+      }
+    });
+
+    const result = await scanNavigationLevel('/downloads');
+
+    expect(result.success).toBe(true);
+    expect(result.metadata.otherFileCount).toBe(3);
+    expect(result.directImages.map((image) => image.name)).toEqual(['cover.jpg']);
+  });
+
   test('scanNavigationLevel classifies folders and albums correctly', async () => {
     mockFs = createFsMock({
       '/photos': {

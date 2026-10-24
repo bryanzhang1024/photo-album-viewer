@@ -35,7 +35,7 @@ export default function PageHeader({
             onNavigate={onNavigate}
             showStats={false}
             metadata={metadata}
-            compact
+            compact={compact}
             variant="minimal"
             sx={{ minWidth: 0, flexShrink: 1 }}
           />
