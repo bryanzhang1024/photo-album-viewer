@@ -19,34 +19,30 @@ test('routes /cos to the dedicated Cos library page', () => {
   expect(screen.getByText('cos-library-route')).toBeInTheDocument();
 });
 
-test('offers permanent mode tabs in both browser and Cos routes and remembers the last Cos route', () => {
-  const leave = jest.fn();
-  window.addEventListener('browse-mode-leave', leave);
-  render(<MemoryRouter initialEntries={['/cos/sets?context=coser&coser=coser%3AAlice']}><App /><RouteProbe /></MemoryRouter>);
-  expect(screen.getByRole('tab', { name: 'Cos 图库' })).toHaveAttribute('aria-selected', 'true');
-  fireEvent.click(screen.getByRole('tab', { name: '文件夹浏览' }));
-  expect(screen.getByText('browser-page')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: 'Cos 图库' }));
-  expect(leave).toHaveBeenCalledTimes(2);
-  window.removeEventListener('browse-mode-leave', leave);
+test('侧栏提供文件夹与 Cos 图库入口，并可切回文件夹', () => {
+  render(<MemoryRouter initialEntries={['/cos/characters']}><App /><RouteProbe /></MemoryRouter>);
   expect(screen.getByText('cos-library-route')).toBeInTheDocument();
-  expect(screen.getByTestId('mode-route')).toHaveTextContent('/cos/sets?context=coser&coser=coser%3AAlice');
+
+  const sidebar = screen.getByRole('navigation', { name: '侧栏' });
+  fireEvent.click(within(sidebar).getByRole('button', { name: '文件夹' }));
+  expect(screen.getByText('browser-page')).toBeInTheDocument();
+  expect(screen.getByTestId('mode-route')).toHaveTextContent(/^\/$/);
+
+  fireEvent.click(within(sidebar).getByRole('button', { name: '按角色' }));
+  expect(screen.getByText('cos-library-route')).toBeInTheDocument();
+  expect(screen.getByTestId('mode-route')).toHaveTextContent('/cos/characters');
 });
 
-test('places compact mode controls in the macOS window titlebar and retains the last route', () => {
+test('macOS 窗口工具栏提供后退与前进按钮，初始不可用', () => {
   const previousPlatform = window.electronAPI.platform;
   window.electronAPI.platform = 'darwin';
   try {
     render(<MemoryRouter initialEntries={['/cos/sets?context=coser&coser=coser%3AAlice']}><App /><RouteProbe /></MemoryRouter>);
-    const titlebar = screen.getByRole('banner', { name: '窗口标题栏' });
-    expect(titlebar).toHaveStyle({ height: '32px' });
-    expect(within(titlebar).getByText('照片相簿浏览器')).toBeInTheDocument();
-    expect(within(titlebar).getByText('文件夹', { exact: true })).toBeInTheDocument();
-    fireEvent.click(within(titlebar).getByRole('tab', { name: '文件夹浏览' }));
-    expect(screen.getByText('browser-page')).toBeInTheDocument();
-    fireEvent.click(within(titlebar).getByRole('tab', { name: 'Cos 图库' }));
-    expect(screen.getByTestId('mode-route')).toHaveTextContent('/cos/sets?context=coser&coser=coser%3AAlice');
-    expect(screen.getAllByRole('navigation', { name: '浏览方式' })).toHaveLength(1);
+    const toolbar = screen.getByRole('banner', { name: '窗口工具栏' });
+    expect(toolbar).toHaveStyle({ height: '32px' });
+    expect(within(toolbar).getByText('照片相簿浏览器')).toBeInTheDocument();
+    expect(within(toolbar).getByRole('button', { name: '后退' })).toBeDisabled();
+    expect(within(toolbar).getByRole('button', { name: '前进' })).toBeDisabled();
   } finally {
     if (previousPlatform === undefined) delete window.electronAPI.platform;
     else window.electronAPI.platform = previousPlatform;

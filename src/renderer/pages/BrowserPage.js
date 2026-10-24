@@ -52,6 +52,8 @@ import {
   saveTabsSession
 } from '../persistence/sessionAdapter';
 import { useRandomNavigationCoordinator } from '../hooks/useRandomNavigationCoordinator';
+import { useNavigationHistory } from '../hooks/useNavigationHistory';
+import { useShellActionsRegister } from '../shell/ShellActions';
 
 const createTabId = () => `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const DRAG_INSERT_BEFORE = 'before';
@@ -436,6 +438,52 @@ function BrowserPage({ colorMode, scrollContext = null }) {
     onError: setErrorMessage
   });
   const randomBrowseAvailable = randomNavigation.available && !isComputerRootView;
+
+  // 每个标签各自的前进/后退历史；应用历史条目时以 replace 方式切换，不新增 URL 历史。
+  const applyHistoryLocation = useCallback((browserLocation) => {
+    commitTabLocation({
+      tabId: activeTabId,
+      browserLocation,
+      replace: true
+    });
+  }, [activeTabId, commitTabLocation]);
+
+  const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory({
+    tabId: activeTabId,
+    location: activeTab?.location || null,
+    applyLocation: applyHistoryLocation
+  });
+
+  const registerShellActions = useShellActionsRegister();
+  useEffect(() => {
+    registerShellActions({
+      title: activeTab?.title || '照片相簿浏览器',
+      canGoBack,
+      canGoForward,
+      goBack,
+      goForward
+    });
+  }, [registerShellActions, activeTab?.title, canGoBack, canGoForward, goBack, goForward]);
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const activeElement = event.target?.tagName ? event.target : document.activeElement;
+      const isEditable = activeElement?.tagName === 'INPUT'
+        || activeElement?.tagName === 'TEXTAREA'
+        || activeElement?.isContentEditable;
+      if (isEditable) return;
+      if (event.key === '[') {
+        event.preventDefault();
+        goBack();
+      } else if (event.key === ']') {
+        event.preventDefault();
+        goForward();
+      }
+    };
+    window.addEventListener('keydown', handleHistoryShortcut);
+    return () => window.removeEventListener('keydown', handleHistoryShortcut);
+  }, [goBack, goForward]);
 
   const commitValidatedLocation = useCallback(async ({
     browserLocation,

@@ -36,6 +36,7 @@ import AlbumPage from './AlbumPage';
 import PageLayout from '../components/PageLayout';
 import { SortControls, TunePopover } from '../components/GridPageToolbar';
 import { ScrollPositionContext } from '../App';
+import { useShellActionsRegister } from '../shell/ShellActions';
 import { DEFAULT_DENSITY, GRID_CONFIG, chunkIntoRows, computeGridColumns } from '../utils/virtualGrid';
 import imageCache from '../utils/ImageCacheManager';
 import useCosRandomNavigation from '../hooks/useCosRandomNavigation';
@@ -469,6 +470,17 @@ function CosLibraryPage({ colorMode }) {
     const previousView = fallbackParentView(view);
     navigate(locationForView(previousView), { state: { cosView: previousView } });
   }, [isAlbumRoute, location.search, location.state, navigate, saveScrollPosition, view]);
+
+  const registerShellActions = useShellActionsRegister();
+  useEffect(() => {
+    registerShellActions({
+      title: view.kind === 'landing' ? 'Cos 图库' : `Cos 图库 / ${view.title}`,
+      canGoBack: view.kind !== 'landing',
+      canGoForward: false,
+      goBack,
+      goForward: null
+    });
+  }, [registerShellActions, view.kind, view.title, goBack]);
 
   const updateFilter = useCallback((key, value) => {
     saveScrollPosition();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, createContext } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import BrowserPage from './pages/BrowserPage';
@@ -10,8 +10,13 @@ import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import CHANNELS from '../common/ipc-channels';
 import Box from '@mui/material/Box';
-import AppTitleBar from './components/AppTitleBar';
+import Toolbar from './shell/Toolbar';
+import { ShellActionsProvider } from './shell/ShellActions';
+import Sidebar from './shell/Sidebar';
+import { useBreakpoint } from './hooks/useBreakpoint';
 import { MAC_TITLEBAR_HEIGHT } from '../common/window-chrome';
+import { createAppTheme } from './theme/appTheme';
+import { paletteByMode } from './theme/tokens';
 
 const ipcRenderer = window.electronAPI || null;
 const PERFORMANCE_SETTINGS_KEY = 'performance_settings';
@@ -78,19 +83,31 @@ function App() {
   // 保存滚动位置的状态
   const [scrollPositions, setScrollPositions] = useState({});
   const cosViewStates = useRef(new Map());
+  const { isCompact } = useBreakpoint();
+  const [sidebarPreference, setSidebarPreference] = useState(() => {
+    const saved = localStorage.getItem('shell.sidebarCollapsed');
+    return saved === '1';
+  });
+  const [narrowSidebarOpen, setNarrowSidebarOpen] = useState(false);
+  const sidebarCollapsed = isCompact ? !narrowSidebarOpen : sidebarPreference;
+  const toggleSidebar = () => {
+    if (isCompact) {
+      setNarrowSidebarOpen((open) => !open);
+      return;
+    }
+    setSidebarPreference((collapsed) => {
+      localStorage.setItem('shell.sidebarCollapsed', collapsed ? '0' : '1');
+      return !collapsed;
+    });
+  };
 
-  // 动态设置CSS变量以支持主题切换的滚动条样式
+  // 滚动条颜色跟随主题 token
   useEffect(() => {
     const root = document.documentElement;
-    if (mode === 'dark') {
-      root.style.setProperty('--scrollbar-track', '#2a2a2a');
-      root.style.setProperty('--scrollbar-thumb', '#555555');
-      root.style.setProperty('--scrollbar-thumb-hover', '#777777');
-    } else {
-      root.style.setProperty('--scrollbar-track', '#f1f1f1');
-      root.style.setProperty('--scrollbar-thumb', '#c1c1c1');
-      root.style.setProperty('--scrollbar-thumb-hover', '#a8a8a8');
-    }
+    const palette = paletteByMode[mode] || paletteByMode.dark;
+    root.style.setProperty('--scrollbar-track', palette.scrollbarTrack);
+    root.style.setProperty('--scrollbar-thumb', palette.scrollbarThumb);
+    root.style.setProperty('--scrollbar-thumb-hover', palette.scrollbarThumbHover);
   }, [mode]);
 
   useEffect(() => {
@@ -127,48 +144,8 @@ function App() {
     localStorage.setItem('themeMode', newMode);
   };
   
-  // 创建主题对象
-  const theme = useMemo(() => createTheme({
-    palette: {
-      mode,
-      primary: {
-        main: mode === 'dark' ? '#90caf9' : '#3f51b5',
-      },
-      secondary: {
-        main: mode === 'dark' ? '#f48fb1' : '#f50057',
-      },
-      background: {
-        default: mode === 'dark' ? '#121212' : '#f5f5f5',
-        paper: mode === 'dark' ? '#1e1e1e' : '#ffffff',
-      },
-    },
-    typography: {
-      fontFamily: [
-        '-apple-system',
-        'BlinkMacSystemFont',
-        '"Segoe UI"',
-        'Roboto',
-        '"Helvetica Neue"',
-        'Arial',
-        'sans-serif',
-      ].join(','),
-    },
-    components: {
-      MuiCard: {
-        styleOverrides: {
-          root: {
-            transition: 'all 0.3s ease-in-out',
-            '&:hover': {
-              transform: 'translateY(-4px)',
-              boxShadow: mode === 'dark' 
-                ? '0 12px 20px -10px rgba(0,0,0,0.6)' 
-                : '0 12px 20px -10px rgba(0,0,0,0.2)',
-            },
-          },
-        },
-      },
-    },
-  }), [mode]);
+  // 创建主题对象（暗色为默认观感，浅色共用同一套语义 token）
+  const theme = useMemo(() => createAppTheme(mode), [mode]);
   
   // 提供主题上下文
   const colorMode = useMemo(() => ({
@@ -192,13 +169,16 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <ShellActionsProvider>
       <SettingsProvider>
         <FavoritesProvider>
           <ScrollPositionContext.Provider value={scrollContext}>
             <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column',
               '--app-chrome-height': window.electronAPI?.platform === 'darwin' ? `${MAC_TITLEBAR_HEIGHT}px` : '36px' }}>
-            <AppTitleBar />
-            <Box sx={{ flex: 1, minHeight: 0 }}>
+            <Toolbar onToggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} />
+            <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <Sidebar collapsed={sidebarCollapsed} />
+            <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
             <Routes>
               <Route path="/" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
@@ -208,9 +188,11 @@ function App() {
             </Routes>
             </Box>
             </Box>
+            </Box>
           </ScrollPositionContext.Provider>
         </FavoritesProvider>
       </SettingsProvider>
+      </ShellActionsProvider>
     </ThemeProvider>
   );
 }
