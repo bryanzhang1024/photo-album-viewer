@@ -70,6 +70,7 @@ function AlbumPage({
   const location = useLocation();
   const theme = useTheme();
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedImagePath, setSelectedImagePath] = useState('');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -800,7 +801,11 @@ function AlbumPage({
         <FileListView
           rows={images}
           customScrollParent={virtualScrollParent || undefined}
-          onRowClick={(row, index) => handleImageClick(index)}
+          onRowClick={(row) => setSelectedImagePath(row.path)}
+          onRowDoubleClick={(row) => {
+            const index = images.findIndex((image) => image.path === row.path);
+            if (index >= 0) handleImageClick(index);
+          }}
           columns={[
             {
               key: 'name',
@@ -851,6 +856,8 @@ function AlbumPage({
                     >
                       <ImageCard
                         image={image}
+                        selected={selectedImagePath === image.path}
+                        onSelect={() => setSelectedImagePath(image.path)}
                         onClick={() => handleImageClick(actualIndex)}
                         density={userDensity}
                         albumPath={decodedAlbumPath}

@@ -70,6 +70,8 @@ function AlbumCard({
   album,          // 兼容性：旧的相册数据 
   displayPath, 
   onClick, 
+  onSelect = null,
+  selected = false,
   onBrowseChildren,
   onOpenPhotoSet,
   isCompactMode, 
@@ -491,16 +493,21 @@ function AlbumCard({
         display: 'flex',
         flexDirection: 'column',
         cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
-        },
         overflow: 'hidden',
-        borderRadius: cardBorderRadius
+        borderRadius: cardBorderRadius,
+        border: 1,
+        borderColor: selected ? 'primary.main' : 'transparent',
+        boxShadow: selected ? '0 0 0 2px rgba(10,132,255,0.35)' : 'none'
       }}
-      onClick={onClick}
-      elevation={1}
+      onClick={(event) => {
+        if (onSelect) onSelect(event);
+        else onClick?.(event);
+      }}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        onClick?.(event);
+      }}
+      elevation={0}
     >
       {/* 图片区域 */}
       <Box sx={{

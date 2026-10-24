@@ -88,6 +88,7 @@ function HomePage({
   const scanGenerationRef = useRef(0);
   const [virtualScrollParent, setVirtualScrollParent] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPath, setSelectedPath] = useState('');
   const [searchHasFocus, setSearchHasFocus] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -915,6 +916,8 @@ function HomePage({
                         <AlbumCard
                           node={item.node}
                           displayPath={getNodeDisplayPath(item.node)}
+                          selected={selectedPath === item.node.path}
+                          onSelect={() => setSelectedPath(item.node.path)}
                           onClick={() => handleNodeClick(item.node)}
                           onBrowseChildren={() => handleNodeBrowseChildren(item.node)}
                           onOpenPhotoSet={() => handleNodeOpenPhotoSet(item.node)}
@@ -929,6 +932,8 @@ function HomePage({
                     <Box key={itemKey} sx={{ width: '100%', aspectRatio: '2/3' }}>
                       <ImageCard
                         image={item.image}
+                        selected={selectedPath === item.image.path}
+                        onSelect={() => setSelectedPath(item.image.path)}
                         onClick={() => handleDirectImageClick(imageIndex)}
                         density={userDensity}
                         albumPath={currentPath}

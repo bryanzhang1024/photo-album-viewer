@@ -229,15 +229,18 @@ function MetadataChips({ values }) {
   );
 }
 
-function EntityCard({ item, onClick }) {
+function EntityCard({ item, onClick, onSelect = null, selected = false }) {
   const countLabel = item.coserCount
     ? `${formatCount(item.coserCount)} 个署名 · ${formatCount(item.setCount)} 项`
     : `${formatCount(item.setCount)} 项`;
   return (
     <Paper
       component={ButtonBase}
-      onClick={onClick}
-      sx={{ width: '100%', display: 'block', textAlign: 'left', overflow: 'hidden', borderRadius: 2 }}
+      onClick={onSelect ? (event) => onSelect(event) : onClick}
+      onDoubleClick={onSelect ? () => onClick?.() : undefined}
+      sx={{ width: '100%', display: 'block', textAlign: 'left', overflow: 'hidden', borderRadius: 2,
+        border: 1, borderColor: selected ? 'primary.main' : 'transparent',
+        boxShadow: selected ? '0 0 0 2px rgba(10,132,255,0.35)' : 'none' }}
     >
       <CoverImage key={item.coverMediaId} mediaId={item.coverMediaId} alt={item.name} />
       <Box sx={{ p: 1.25 }}>
@@ -248,7 +251,7 @@ function EntityCard({ item, onClick }) {
   );
 }
 
-function SetCard({ item, context, currentCoser, onClick, onError }) {
+function SetCard({ item, context, currentCoser, onClick, onError, onSelect = null, selected = false }) {
   const metadata = context === 'character'
     ? item.cosers
     : context === 'coser'
@@ -258,6 +261,7 @@ function SetCard({ item, context, currentCoser, onClick, onError }) {
         : [...item.cosers, ...item.characters];
   return (
     <CosSetCard item={item} context={context} currentCoser={currentCoser} onClick={onClick} onError={onError}
+      onSelect={onSelect} selected={selected}
       cover={<CoverImage key={item.coverMediaId} mediaId={item.coverMediaId} alt={item.displayName} />}
       metadata={<MetadataChips values={metadata || []} />} />
   );
@@ -288,6 +292,7 @@ function CosLibraryPage({ colorMode }) {
   const localViewStates = useRef(new Map());
   const viewStates = scrollContext.cosViewStates || localViewStates.current;
   const [viewMode, setViewMode] = useState(() => (localStorage.getItem('shell.viewMode') === 'list' ? 'list' : 'grid'));
+  const [selectedItemId, setSelectedItemId] = useState('');
   const changeViewMode = useCallback((next) => {
     const normalized = next === 'list' ? 'list' : 'grid';
     setViewMode(normalized);
@@ -911,7 +916,8 @@ function CosLibraryPage({ colorMode }) {
               columns={columns}
               customScrollParent={scrollContainerRef.current || undefined}
               endReached={loadMore}
-              onRowClick={(item) => {
+              onRowClick={(item) => setSelectedItemId(item.id)}
+              onRowDoubleClick={(item) => {
                 if (item.id === '__all__') {
                   pushView({ kind: 'sets', title: `${view.character.name} · 全部收藏`, character: view.character, context: 'character' });
                   return;
@@ -962,16 +968,23 @@ function CosLibraryPage({ colorMode }) {
             >
               {row.map((item) => {
                 if (item.id === '__all__') {
-                  return <EntityCard key={item.id} item={item} onClick={() => pushView({ kind: 'sets', title: `${view.character.name} · 全部收藏`, character: view.character, context: 'character' })} />;
+                  return <EntityCard key={item.id} item={item}
+                    selected={selectedItemId === item.id}
+                    onSelect={() => setSelectedItemId(item.id)}
+                    onClick={() => pushView({ kind: 'sets', title: `${view.character.name} · 全部收藏`, character: view.character, context: 'character' })} />;
                 }
                 if (view.kind === 'sets') {
                   return <SetCard key={item.id} item={item} context={view.context} currentCoser={view.coser?.name}
+                    selected={selectedItemId === item.id}
+                    onSelect={() => setSelectedItemId(item.id)}
                     onClick={() => openSet(item)} onError={setError} />;
                 }
                 return (
                   <EntityCard
                     key={item.id}
                     item={item}
+                    selected={selectedItemId === item.id}
+                    onSelect={() => setSelectedItemId(item.id)}
                     onClick={() => {
                       if (view.kind === 'characters') pushView({ kind: 'looks', title: item.name, character: item });
                       else if (view.kind === 'cosers') {

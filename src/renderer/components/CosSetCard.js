@@ -40,7 +40,7 @@ function coserCardText(item, currentCoser) {
   };
 }
 
-function CosSetCard({ item, context, currentCoser, cover, metadata, onClick, onError }) {
+function CosSetCard({ item, context, currentCoser, cover, metadata, onClick, onSelect = null, selected = false, onError }) {
   const { favorites, isLoading, toggleAlbumFavorite } = useFavorites();
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
@@ -78,12 +78,21 @@ function CosSetCard({ item, context, currentCoser, cover, metadata, onClick, onE
   };
 
   return (
-    <Paper component="article" elevation={1} onClick={isOffline ? undefined : event => {
-      // Disabled native buttons can still bubble a click through their parent.
-      if (!event.target.closest('[data-cos-favorite]')) onClick?.(event);
-    }}
+    <Paper component="article" elevation={1}
+      onClick={isOffline ? undefined : event => {
+        // Disabled native buttons can still bubble a click through their parent.
+        if (event.target.closest('[data-cos-favorite]')) return;
+        if (onSelect) onSelect(event);
+        else onClick?.(event);
+      }}
+      onDoubleClick={isOffline ? undefined : event => {
+        if (event.target.closest('[data-cos-favorite]')) return;
+        onClick?.(event);
+      }}
       sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
         overflow: 'hidden', borderRadius: 2,
+        border: 1, borderColor: selected ? 'primary.main' : 'transparent',
+        boxShadow: selected ? '0 0 0 2px rgba(10,132,255,0.35)' : 'none',
         bgcolor: 'background.paper', backgroundImage: 'none', opacity: isOffline ? 0.62 : 1,
         cursor: isOffline ? 'default' : 'pointer' }}>
       <ButtonBase disabled={isOffline} aria-label={item.displayName} title={item.displayName}
