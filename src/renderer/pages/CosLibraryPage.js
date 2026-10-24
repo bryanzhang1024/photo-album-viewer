@@ -41,6 +41,7 @@ import { DEFAULT_DENSITY, GRID_CONFIG, chunkIntoRows, computeGridColumns } from 
 import imageCache from '../utils/ImageCacheManager';
 import useCosRandomNavigation from '../hooks/useCosRandomNavigation';
 import CosSetCard from '../components/CosSetCard';
+import FileListView, { formatListDate } from '../shell/FileListView';
 
 const ipcRenderer = window.electronAPI || null;
 const PAGE_SIZE = 200;
@@ -286,6 +287,12 @@ function CosLibraryPage({ colorMode }) {
   const virtuosoRef = useRef(null);
   const localViewStates = useRef(new Map());
   const viewStates = scrollContext.cosViewStates || localViewStates.current;
+  const [viewMode, setViewMode] = useState(() => (localStorage.getItem('shell.viewMode') === 'list' ? 'list' : 'grid'));
+  const changeViewMode = useCallback((next) => {
+    const normalized = next === 'list' ? 'list' : 'grid';
+    setViewMode(normalized);
+    localStorage.setItem('shell.viewMode', normalized);
+  }, []);
   const view = useMemo(
     () => readLocationView(location),
     [location.pathname, location.search, location.state]
@@ -478,9 +485,11 @@ function CosLibraryPage({ colorMode }) {
       canGoBack: view.kind !== 'landing',
       canGoForward: false,
       goBack,
-      goForward: null
+      goForward: null,
+      viewMode,
+      onViewModeChange: changeViewMode
     });
-  }, [registerShellActions, view.kind, view.title, goBack]);
+  }, [registerShellActions, view.kind, view.title, goBack, viewMode, changeViewMode]);
 
   const updateFilter = useCallback((key, value) => {
     saveScrollPosition();
@@ -874,8 +883,54 @@ function CosLibraryPage({ colorMode }) {
 
   const renderGrid = () => {
     const visibleRows = allSetsCard ? [[allSetsCard], ...rows] : rows;
+    const listItems = allSetsCard ? [allSetsCard, ...items] : items;
     if (!loading && items.length === 0 && !allSetsCard) {
       return <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 8 }}>没有匹配的项目</Typography>;
+    }
+    if (viewMode === 'list') {
+      const isSets = view.kind === 'sets';
+      const columns = isSets
+        ? [
+            { key: 'name', label: '名称', width: '1fr', render: (item) => <Typography noWrap sx={{ fontSize: 12.5 }}>{item.displayName || item.name || '未命名'}</Typography> },
+            { key: 'count', label: '张数', width: '88px', dim: true, render: (item) => `${formatCount(item.imageCount || 0)} 张` },
+            { key: 'characters', label: '角色', width: '180px', dim: true, render: (item) => (item.characters || []).join('、') || '—' },
+            { key: 'date', label: '修改日期', width: '168px', dim: true, render: (item) => formatListDate(item.lastModified) }
+          ]
+        : [
+            { key: 'name', label: '名称', width: '1fr', render: (item) => <Typography noWrap sx={{ fontSize: 12.5 }}>{item.name || '未命名'}</Typography> },
+            { key: 'count', label: '套数', width: '88px', dim: true, render: (item) => `${formatCount(item.setCount || 0)} 套` }
+          ];
+      return (
+        <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+            {formatCount(total + (allSetsCard ? 1 : 0))} 项
+          </Typography>
+          <Box sx={{ flex: 1, minHeight: 0 }}>
+            <FileListView
+              rows={listItems}
+              columns={columns}
+              customScrollParent={scrollContainerRef.current || undefined}
+              endReached={loadMore}
+              onRowClick={(item) => {
+                if (item.id === '__all__') {
+                  pushView({ kind: 'sets', title: `${view.character.name} · 全部收藏`, character: view.character, context: 'character' });
+                  return;
+                }
+                if (view.kind === 'sets') { openSet(item); return; }
+                if (view.kind === 'characters') { pushView({ kind: 'looks', title: item.name, character: item }); return; }
+                if (view.kind === 'cosers') {
+                  const isSingletonGroup = Boolean(item.coserCount);
+                  pushView({ kind: 'sets', title: isSingletonGroup ? '其他 · 单项署名' : item.name, coser: item, context: isSingletonGroup ? 'coser-group' : 'coser' });
+                  return;
+                }
+                if (view.kind === 'looks') {
+                  pushView({ kind: 'sets', title: `${view.character.name} · ${item.name}`, character: view.character, look: item, context: 'character' });
+                }
+              }}
+            />
+          </Box>
+        </Box>
+      );
     }
     return (
       <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>

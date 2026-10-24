@@ -26,6 +26,7 @@ import useGridThumbnailPrefetch, { extractAlbumImageRowPaths } from '../hooks/us
 import useBreadcrumbs from '../hooks/useBreadcrumbs';
 import useNeighboringAlbums from '../hooks/useNeighboringAlbums';
 import PageLayout from '../components/PageLayout';
+import FileListView, { formatBytes, formatListDate } from '../shell/FileListView';
 import GridPageToolbar from '../components/GridPageToolbar';
 import { GRID_CONFIG, DEFAULT_DENSITY, computeGridColumns, chunkIntoRows } from '../utils/virtualGrid';
 import {
@@ -62,7 +63,8 @@ function AlbumPage({
   tabScrollKey = null,
   embeddedMode = false,
   headerLeadingContent = null,
-  headerExtraActions = null
+  headerExtraActions = null,
+  viewMode = 'grid'
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -794,7 +796,23 @@ function AlbumPage({
           </Button>
         </Paper>
       )}
-      {filteredImagesCount > 0 ? (
+      {filteredImagesCount > 0 && viewMode === 'list' ? (
+        <FileListView
+          rows={images}
+          customScrollParent={virtualScrollParent || undefined}
+          onRowClick={(row, index) => handleImageClick(index)}
+          columns={[
+            {
+              key: 'name',
+              label: '名称',
+              width: '1fr',
+              render: (row) => <Typography noWrap sx={{ fontSize: 12.5 }}>{row.name || '未命名'}</Typography>
+            },
+            { key: 'size', label: '大小', width: '110px', dim: true, render: (row) => formatBytes(row.size) },
+            { key: 'lastModified', label: '修改时间', width: '168px', dim: true, render: (row) => formatListDate(row.lastModified) }
+          ]}
+        />
+      ) : filteredImagesCount > 0 ? (
         <Virtuoso
           data={gridRows}
           customScrollParent={virtualScrollParent || undefined}
