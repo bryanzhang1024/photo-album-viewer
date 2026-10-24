@@ -39,6 +39,8 @@ const ipcRenderer = window.electronAPI || null;
 function ImageCard({
   image,
   onClick,
+  onSelect = null,
+  selected = false,
   density,
   isFavoritesPage = false,
   albumPath,
@@ -177,7 +179,14 @@ function ImageCard({
     }
   };
 
-  const handleClick = (e) => onClick(e);
+  const handleClick = (e) => {
+    if (onSelect) onSelect(e);
+    else onClick(e);
+  };
+  const handleDoubleClick = (e) => {
+    e.stopPropagation();
+    onClick(e);
+  };
 
   const handleAlbumClick = (e) => {
     e.stopPropagation();
@@ -200,16 +209,15 @@ function ImageCard({
         display: 'flex',
         flexDirection: 'column',
         cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
-        },
         overflow: 'hidden',
-        borderRadius: cardBorderRadius
+        borderRadius: cardBorderRadius,
+        border: 1,
+        borderColor: selected ? 'primary.main' : 'transparent',
+        boxShadow: selected ? '0 0 0 2px rgba(10,132,255,0.35)' : 'none'
       }}
       onClick={handleClick}
-      elevation={1}
+      onDoubleClick={handleDoubleClick}
+      elevation={0}
     >
       {/* 图片区域 */}
       <Box sx={{
