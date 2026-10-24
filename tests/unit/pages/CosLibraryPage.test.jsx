@@ -377,8 +377,8 @@ describe('CosLibraryPage', () => {
     expect(screen.getByText('1,287 个角色')).toBeInTheDocument();
     expect(screen.getByText('587 个署名')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /按角色/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /初音未来/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /兔子洞/ }));
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /初音未来/ }));
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /兔子洞/ }));
 
     const setCard = await screen.findByRole('button', { name: /兔子洞写真套图/ });
     expect(setCard.closest('article')).toHaveTextContent('48 张');
@@ -387,7 +387,7 @@ describe('CosLibraryPage', () => {
     expect(setCard).toHaveTextContent('+1');
     expect(setCard).not.toHaveTextContent('初音未来');
 
-    fireEvent.click(setCard);
+    fireEvent.doubleClick(setCard);
     const albumPage = await screen.findByTestId('cos-album-page');
     expect(albumPage).toHaveAttribute('data-read-only', 'true');
     expect(albumPage).toHaveAttribute('data-embedded-mode', 'true');
@@ -425,7 +425,7 @@ describe('CosLibraryPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /按署名/ }));
     const otherCard = await screen.findByRole('button', { name: /其他/ });
     expect(otherCard).toHaveTextContent('292 个署名 · 279 项');
-    fireEvent.click(otherCard);
+    fireEvent.doubleClick(otherCard);
 
     const setCard = await screen.findByRole('button', { name: /兔子洞写真套图/ });
     expect(setCard).toHaveTextContent('Alice');
@@ -546,7 +546,7 @@ describe('CosLibraryPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '加载下一批测试数据' }));
     const target = await screen.findByRole('button', { name: '套图 320' });
     screen.getByTestId('cos-virtual-grid').scrollTop = 8000;
-    fireEvent.click(target);
+    fireEvent.doubleClick(target);
     await screen.findByTestId('cos-album-page');
     // Record the offset observed immediately before the album transition.
     // A real browser clamps it if only the first 200 items have been restored.
@@ -569,7 +569,7 @@ describe('CosLibraryPage', () => {
     });
     const origin = '/cos/sets?context=all&q=套图&type=原创写真&sort=imageCount&direction=desc';
     renderCosPage(origin);
-    fireEvent.click(await screen.findByRole('button', { name: '套图 0', exact: true }));
+    fireEvent.doubleClick(await screen.findByRole('button', { name: '套图 0', exact: true }));
     await screen.findByTestId('cos-album-page');
     const random = screen.getByRole('button', { name: '随机下一套' });
     await waitFor(() => expect(random).toBeEnabled());
@@ -600,7 +600,7 @@ describe('CosLibraryPage', () => {
       return base(channel, options);
     });
     renderCosPage('/cos/sets?context=all');
-    fireEvent.click(await screen.findByRole('button', { name: '套图 0', exact: true }));
+    fireEvent.doubleClick(await screen.findByRole('button', { name: '套图 0', exact: true }));
     await screen.findByTestId('cos-album-page');
     await waitFor(() => expect(screen.getByRole('button', { name: '随机下一套' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '随机下一套' }));
@@ -658,8 +658,8 @@ describe('CosLibraryPage', () => {
     renderCosPage('/cos/cosers');
 
     fireEvent.change(await screen.findByPlaceholderText('搜索当前分类'), { target: { value: 'Aki' } });
-    fireEvent.click(await screen.findByRole('button', { name: /Aki/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /兔子洞写真套图/ }));
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /Aki/ }));
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /兔子洞写真套图/ }));
     await screen.findByTestId('cos-album-page');
     fireEvent.click(await screen.findByRole('button', { name: '返回上一级' }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/cos/sets?'));
@@ -680,7 +680,7 @@ describe('CosLibraryPage', () => {
     renderCosPage();
 
     fireEvent.click(await screen.findByRole('button', { name: /全部收藏/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /兔子洞写真套图/ }));
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /兔子洞写真套图/ }));
     await screen.findByTestId('cos-album-page');
     fireEvent.click(screen.getByRole('button', { name: '模拟相簿密度' }));
     fireEvent.click(screen.getByRole('button', { name: '浏览器返回' }));
