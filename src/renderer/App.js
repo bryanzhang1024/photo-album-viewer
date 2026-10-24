@@ -4,7 +4,6 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import BrowserPage from './pages/BrowserPage';
-import TestPage from './pages/TestPage';
 import SettingsPage from './pages/SettingsPage';
 import CosLibraryPage from './pages/CosLibraryPage';
 import { FavoritesProvider } from './contexts/FavoritesContext';
@@ -203,7 +202,6 @@ function App() {
             <Routes>
               <Route path="/" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
-              <Route path="/test" element={<TestPage colorMode={colorMode} />} />
               <Route path="/favorites" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
               <Route path="/cos/*" element={<CosLibraryPage colorMode={colorMode} />} />

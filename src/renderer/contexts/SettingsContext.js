@@ -6,7 +6,6 @@ const DEFAULT_SETTINGS = {
   autoRotateVerticalImages: false,
   rotationDirection: 'right', // 'left' or 'right'
   zoomStep: 0.2,
-  slideshowDelay: 3000,
   showFilename: true,
   defaultDualPageViewer: false,
   theme: 'auto',
