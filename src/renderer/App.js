@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, createContext } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -71,6 +71,8 @@ export const ScrollPositionContext = createContext({
 });
 
 function App() {
+  const location = useLocation();
+  const isSettingsWindow = location.pathname === '/settings';
   // 检测系统偏好的颜色方案
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
 
@@ -175,9 +177,11 @@ function App() {
           <ScrollPositionContext.Provider value={scrollContext}>
             <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column',
               '--app-chrome-height': window.electronAPI?.platform === 'darwin' ? `${MAC_TITLEBAR_HEIGHT}px` : '36px' }}>
-            <Toolbar onToggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} />
+            {isSettingsWindow ? null : (
+              <Toolbar onToggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} />
+            )}
             <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-            <Sidebar collapsed={sidebarCollapsed} />
+            {isSettingsWindow ? null : <Sidebar collapsed={sidebarCollapsed} />}
             <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
             <Routes>
               <Route path="/" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
