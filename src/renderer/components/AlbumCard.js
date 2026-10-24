@@ -13,6 +13,8 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { useSettingsOptional } from '../contexts/SettingsContext';
+import { shouldUseCollage } from '../utils/coverPolicy';
 import imageCache from '../utils/ImageCacheManager';
 // import LazyLoad from 'react-lazyload'; // 注释掉懒加载导入
 
@@ -133,11 +135,20 @@ function AlbumCard({
     return null;
   }, [node, album]);
   
+  const settingsContext = useSettingsOptional();
+  const folderCoverMode = settingsContext?.settings?.folderCoverMode || 'auto';
+
+  // 拼贴规则：含子文件夹的容器默认拼贴，其余单图；样本不足 3 张退回单图。
+  const useCollage = useMemo(
+    () => shouldUseCollage(cardData, folderCoverMode),
+    [cardData, folderCoverMode]
+  );
+
   // 使用统一缓存管理器的缓存键
   const cacheKey = useMemo(() => {
     if (!cardData?.path) return '';
-    return cardData.path;
-  }, [cardData?.path]);
+    return `${cardData.path}::${useCollage ? 'collage' : 'single'}`;
+  }, [cardData?.path, useCollage]);
   
   // 使用收藏上下文
   const {
@@ -174,11 +185,11 @@ function AlbumCard({
 
     if (!isVisible) return;
 
-    // 文件夹和相册都按单张封面预览，直接预算缩略图 URL，零 IPC。
-    const sample = cardData.samples?.[0];
-    const predicted = sample ? getThumbnailUrl(sample) : null;
-    if (predicted) {
-      setPreviewUrls([predicted]);
+    // 直接预算缩略图 URL，零 IPC；拼贴时取最多 4 张样本。
+    const samples = useCollage ? (cardData.samples || []).slice(0, 4) : (cardData.samples || []).slice(0, 1);
+    const predictedUrls = samples.map((sample) => getThumbnailUrl(sample)).filter(Boolean);
+    if (predictedUrls.length > 0) {
+      setPreviewUrls(useCollage ? predictedUrls : [predictedUrls[0]]);
       setLoading(false);
       return;
     }
@@ -215,7 +226,7 @@ function AlbumCard({
     };
 
     loadViaIpc();
-  }, [cardData, cacheKey, isVisible]);
+  }, [cardData, cacheKey, isVisible, useCollage]);
 
   // 封面图加载失败（磁盘无缓存）→ IPC fallback 生成
   const handleAlbumPreviewError = async () => {
@@ -300,16 +311,43 @@ function AlbumCard({
     return (
       <Box sx={{ height: '100%', position: 'relative' }}>
         {previewUrls.length > 0 ? (
-          <img
-            src={previewUrls[0]}
-            alt={cardData.name}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover'
-            }}
-            onError={handleAlbumPreviewError}
-          />
+          useCollage && previewUrls.length >= 3 ? (
+            <Box
+              data-testid="cover-collage"
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gridTemplateRows: '1fr 1fr',
+                gap: '2px',
+                height: '100%',
+                bgcolor: 'action.hover'
+              }}
+            >
+              {[0, 1, 2, 3].map((index) => (
+                previewUrls[index] ? (
+                  <Box key={index} sx={{ overflow: 'hidden' }}>
+                    <img
+                      src={previewUrls[index]}
+                      alt=""
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      onError={index === 0 ? handleAlbumPreviewError : undefined}
+                    />
+                  </Box>
+                ) : <Box key={index} sx={{ bgcolor: 'action.hover' }} />
+              ))}
+            </Box>
+          ) : (
+            <img
+              src={previewUrls[0]}
+              alt={cardData.name}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+              onError={handleAlbumPreviewError}
+            />
+          )
         ) : (
           <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0.05)' }}>
             <ImageIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
