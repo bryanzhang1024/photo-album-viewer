@@ -11,6 +11,8 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import CHANNELS from '../common/ipc-channels';
 import Box from '@mui/material/Box';
 import AppTitleBar from './components/AppTitleBar';
+import Sidebar from './shell/Sidebar';
+import { useBreakpoint } from './hooks/useBreakpoint';
 import { MAC_TITLEBAR_HEIGHT } from '../common/window-chrome';
 import { createAppTheme } from './theme/appTheme';
 import { paletteByMode } from './theme/tokens';
@@ -80,6 +82,23 @@ function App() {
   // 保存滚动位置的状态
   const [scrollPositions, setScrollPositions] = useState({});
   const cosViewStates = useRef(new Map());
+  const { isCompact } = useBreakpoint();
+  const [sidebarPreference, setSidebarPreference] = useState(() => {
+    const saved = localStorage.getItem('shell.sidebarCollapsed');
+    return saved === '1';
+  });
+  const [narrowSidebarOpen, setNarrowSidebarOpen] = useState(false);
+  const sidebarCollapsed = isCompact ? !narrowSidebarOpen : sidebarPreference;
+  const toggleSidebar = () => {
+    if (isCompact) {
+      setNarrowSidebarOpen((open) => !open);
+      return;
+    }
+    setSidebarPreference((collapsed) => {
+      localStorage.setItem('shell.sidebarCollapsed', collapsed ? '0' : '1');
+      return !collapsed;
+    });
+  };
 
   // 滚动条颜色跟随主题 token
   useEffect(() => {
@@ -154,8 +173,10 @@ function App() {
           <ScrollPositionContext.Provider value={scrollContext}>
             <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column',
               '--app-chrome-height': window.electronAPI?.platform === 'darwin' ? `${MAC_TITLEBAR_HEIGHT}px` : '36px' }}>
-            <AppTitleBar />
-            <Box sx={{ flex: 1, minHeight: 0 }}>
+            <AppTitleBar onToggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} />
+            <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <Sidebar collapsed={sidebarCollapsed} />
+            <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
             <Routes>
               <Route path="/" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
               <Route path="/browse/*" element={<BrowserPage colorMode={colorMode} scrollContext={scrollContext} />} />
@@ -163,6 +184,7 @@ function App() {
               <Route path="/settings" element={<SettingsPage colorMode={colorMode} />} />
               <Route path="/cos/*" element={<CosLibraryPage colorMode={colorMode} />} />
             </Routes>
+            </Box>
             </Box>
             </Box>
           </ScrollPositionContext.Provider>
