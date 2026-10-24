@@ -73,28 +73,30 @@ export default function Toolbar({ onToggleSidebar = null, sidebarCollapsed = fal
           </span>
         </Tooltip>
         <Box sx={{ width: 1, height: 14, bgcolor: 'divider', mx: 0.5 }} />
-        <Box sx={{ display: 'flex', bgcolor: 'hover', borderRadius: 1, p: '2px' }}>
-          <IconButton
-            size="small"
-            aria-label="图标视图"
-            aria-pressed={actions.viewMode === 'grid'}
-            onClick={() => actions.onViewModeChange?.('grid')}
-            disabled={!actions.onViewModeChange}
-            sx={{ width: 24, height: 20, borderRadius: 0.75, bgcolor: actions.viewMode === 'grid' ? 'selection' : 'transparent' }}
-          >
-            <GridViewRoundedIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-          <IconButton
-            size="small"
-            aria-label="列表视图"
-            aria-pressed={actions.viewMode === 'list'}
-            onClick={() => actions.onViewModeChange?.('list')}
-            disabled={!actions.onViewModeChange}
-            sx={{ width: 24, height: 20, borderRadius: 0.75, bgcolor: actions.viewMode === 'list' ? 'selection' : 'transparent' }}
-          >
-            <ViewListRoundedIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Box>
+        {actions.viewMode ? (
+          <Box sx={{ display: 'flex', bgcolor: 'hover', borderRadius: 1, p: '2px' }}>
+            <IconButton
+              size="small"
+              aria-label="图标视图"
+              aria-pressed={actions.viewMode === 'grid'}
+              onClick={() => actions.onViewModeChange?.('grid')}
+              disabled={!actions.onViewModeChange}
+              sx={{ width: 24, height: 20, borderRadius: 0.75, bgcolor: actions.viewMode === 'grid' ? 'selection' : 'transparent' }}
+            >
+              <GridViewRoundedIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+            <IconButton
+              size="small"
+              aria-label="列表视图"
+              aria-pressed={actions.viewMode === 'list'}
+              onClick={() => actions.onViewModeChange?.('list')}
+              disabled={!actions.onViewModeChange}
+              sx={{ width: 24, height: 20, borderRadius: 0.75, bgcolor: actions.viewMode === 'list' ? 'selection' : 'transparent' }}
+            >
+              <ViewListRoundedIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Box>
+        ) : null}
       </Box>
       <Typography component="span" sx={{
         position: 'absolute',
