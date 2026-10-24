@@ -1,0 +1,634 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>头部空间优化 · 三版对比</title>
+<style>
+:root{--bg:#111113;--content:#1c1c1e;--chrome:#2a2a2c;--sidebar:#232325;--sep:rgba(255,255,255,.085);
+--text:#e9e9ec;--dim:#98989f;--dimmer:#6f6f76;--accent:#0a84ff;--sel:rgba(255,255,255,.10);--hover:rgba(255,255,255,.055)}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;font-size:13px}
+.page{display:flex;gap:26px;padding:30px 34px 40px}
+.nav{width:210px;flex-shrink:0}
+.nav h1{font-size:13px;margin:0 0 3px;font-weight:600}
+.nav .sub{font-size:11px;color:var(--dimmer);margin:0 0 16px;line-height:1.6}
+.nav button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--dim);
+  font:inherit;font-size:12px;padding:6px 9px;border-radius:6px;cursor:pointer;margin-bottom:1px}
+.nav button:hover{background:var(--hover);color:var(--text)}
+.nav button.on{background:var(--sel);color:var(--text)}
+.screen{display:none;flex:1}.screen.on{display:block}
+.win{width:1280px;height:800px;border-radius:11px;overflow:hidden;display:flex;flex-direction:column;
+  background:var(--content);box-shadow:0 0 0 1px rgba(255,255,255,.07),0 28px 70px rgba(0,0,0,.6);position:relative}
+.toolbar{height:46px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--chrome);border-bottom:1px solid var(--sep)}
+.lights{display:flex;gap:8px;margin-right:8px}
+.lights i{width:12px;height:12px;border-radius:50%;display:block;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.35)}
+.lights .r{background:#ff5f57}.lights .y{background:#febc2e}.lights .g{background:#28c840}
+.tb-group{display:flex;gap:2px}
+.tb-icon{width:28px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--dim);display:grid;place-items:center;cursor:pointer;font:inherit}
+.tb-icon:hover{background:var(--hover);color:var(--text)}
+.tb-icon.on{background:var(--sel);color:var(--text)}
+.tb-icon.disabled{color:#4a4a4f}
+.tb-title{flex:1;text-align:center;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden}
+.tb-right{display:flex;align-items:center;gap:6px}
+.seg{display:flex;background:rgba(255,255,255,.06);border-radius:7px;padding:2px}
+.seg-btn{border:0;background:transparent;color:var(--dim);font:inherit;font-size:12px;padding:3px 9px;border-radius:5.5px;cursor:pointer;display:flex;align-items:center;gap:5px}
+.seg-btn.on{background:rgba(255,255,255,.14);color:var(--text);box-shadow:0 .5px 1.5px rgba(0,0,0,.3)}
+.search{display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;min-width:150px;background:rgba(255,255,255,.07);border-radius:6px;color:var(--dimmer);font-size:12px}
+.search.active{box-shadow:inset 0 0 0 2px rgba(10,132,255,.45);background:rgba(10,132,255,.12);color:var(--text)}
+.tabbar{height:30px;flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:0 10px;background:var(--chrome);border-bottom:1px solid var(--sep)}
+.tab{display:flex;align-items:center;gap:8px;height:25px;padding:0 10px;border-radius:6px 6px 0 0;color:var(--dim);font-size:12px;max-width:240px}
+.tab.active{background:var(--content);color:var(--text)}
+.tab span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab .tx{display:flex;color:var(--dimmer)}
+.tab-add{align-self:center;width:22px;height:22px;border:0;border-radius:5px;background:transparent;color:var(--dim);display:grid;place-items:center;cursor:pointer;margin-left:4px}
+.body{flex:1;min-height:0;display:flex}
+.sidebar{width:216px;flex-shrink:0;background:var(--sidebar);border-right:1px solid var(--sep);display:flex;flex-direction:column}
+.sidebar.collapsed{width:0;overflow:hidden;border-right:0}
+.side-scroll{flex:1;overflow:auto;padding:8px 8px 0}
+.side-group{font-size:11px;color:var(--dimmer);font-weight:600;padding:12px 8px 5px}
+.side-item{display:flex;align-items:center;gap:9px;height:28px;padding:0 8px;border-radius:6px;font-size:12.5px}
+.side-item svg{color:var(--accent);flex-shrink:0}
+.side-item.active{background:var(--sel)}
+.side-bottom{padding:8px;border-top:1px solid var(--sep)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--content)}
+.head{padding:14px 22px 0;flex-shrink:0}
+.crumbs{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--dim)}
+.crumbs i{color:var(--dimmer);font-style:normal}
+.crumbs .cur{color:var(--text)}
+.head-title{display:flex;align-items:baseline;gap:9px;margin-top:7px}
+.head-title h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.head-title .count{font-size:12px;color:var(--dim)}
+.head-right{margin-left:auto;font-size:11.5px;color:var(--dimmer)}
+.head-tools{display:flex;align-items:center;gap:8px;margin-top:12px;padding-bottom:12px;border-bottom:1px solid var(--sep)}
+.head-spacer{flex:1}
+.tool-text{display:flex;align-items:center;gap:5px;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12px;padding:4px 7px;border-radius:6px;cursor:pointer}
+.tool-text:hover{background:var(--hover);color:var(--text)}
+.tool-text .cd{margin-left:3px;display:flex}
+.density{width:74px;height:4px;border-radius:2px;background:rgba(255,255,255,.16);position:relative}
+.density i{position:absolute;left:58%;top:-4px;width:11px;height:11px;border-radius:50%;background:#d8d8dc}
+.content{flex:1;min-height:0;overflow:auto;padding:16px 22px 8px;position:relative}
+.grid{display:grid;gap:16px 14px}
+.grid{grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+.grid.photos{grid-template-columns:repeat(auto-fill,minmax(178px,1fr))}
+.grid.chars{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+.grid.big{grid-template-columns:repeat(3,1fr)}
+.grid.roots{grid-template-columns:repeat(3,1fr)}
+.card{border-radius:7px;position:relative}
+.cover{aspect-ratio:3/4;border-radius:7px;overflow:hidden;background:#2b2b2d;position:relative}
+.cover.ratio45{aspect-ratio:4/5}
+.cover img{width:100%;height:100%;object-fit:cover;display:block}
+.cover.blank{display:grid;place-items:center;color:#4a4a4f;background:#262628}
+.cname{margin-top:7px;font-size:12px;line-height:1.35;min-height:2.7em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cname.small{font-size:11px;min-height:1.4em;color:var(--dim);-webkit-line-clamp:1}
+.cmeta{margin-top:2px;font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmeta.row2{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cmeta.row2 svg{flex-shrink:0;color:var(--dimmer)}
+.favon{color:#ff375f}
+.card.sel .cover{box-shadow:inset 0 0 0 3px var(--accent)}
+.selmark{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--accent);
+  color:#fff;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.folder-big{background:transparent}
+.folder-big .cover{aspect-ratio:4/3}
+.fb-name{margin-top:8px;font-size:13px;font-weight:600}
+.fb-meta{font-size:11.5px;color:var(--dim);margin-top:2px}
+.bigcard{display:flex;flex-direction:column;background:var(--sidebar);border:1px solid var(--sep);border-radius:9px;overflow:hidden}
+.bc-cover{height:186px;overflow:hidden}
+.bc-cover img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.bc-body{padding:12px 14px 14px;position:relative}
+.bc-body h2{margin:0;font-size:15px}
+.bc-body p{margin:3px 0 0;font-size:12px}
+.bc-body .dim{color:var(--dim);font-size:11.5px}
+.bc-tail{position:absolute;right:14px;top:12px;font-size:11.5px;color:var(--dim)}
+.roots-row{display:flex;align-items:center;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid var(--sep);font-size:12px}
+.sec-head{font-size:11px;color:var(--dimmer);font-weight:600;margin:22px 0 10px}
+.grid.recent{grid-template-columns:repeat(6,1fr)}
+.win{width:auto;height:auto}
+.sz-xl .sidebar{width:240px}
+.sz-md .sidebar,.sz-sm .sidebar,.sz-xs .sidebar,.sz-tall .sidebar{display:none}
+.sz-md .density,.sz-sm .density,.sz-xs .density,.sz-tall .density{display:none}
+.sz-sm .tool-text span,.sz-xs .tool-text span,.sz-tall .tool-text span{display:none}
+.sz-sm .search,.sz-xs .search,.sz-tall .search{min-width:0;width:30px;padding:0 7px}
+.sz-sm .search span,.sz-xs .search span,.sz-tall .search span{display:none}
+.sz-xs .hint,.sz-tall .hint{display:none}
+.sz-xs .tab{max-width:120px}
+.sz-tall .tab{max-width:150px}
+.sz-sm .head h1{font-size:19px}
+.sz-xs .head h1{font-size:17px}
+.sz-xs .list.fourp .list-head,.sz-xs .list.fourp .row{grid-template-columns:1fr 72px}
+.sz-xs .list.fourp .c-kind,.sz-xs .list.fourp .c-date{display:none}
+.sz-sm .list.fourp .list-head,.sz-sm .list.fourp .row{grid-template-columns:1fr 72px 150px}
+.sz-sm .list.fourp .c-kind{display:none}
+.cap{margin-top:10px;font-size:11.5px;color:var(--dimmer);line-height:1.7;max-width:1280px}
+.hdr-inline{display:flex;align-items:center;gap:10px;padding:13px 22px 11px;border-bottom:1px solid var(--sep);flex-shrink:0}
+.hdr-inline .h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.hdr-inline .cnt{font-size:12px;color:var(--dim)}
+.hdr-inline .sp{flex:1}
+.hdr-compact{display:flex;align-items:center;gap:9px;padding:8px 18px;border-bottom:1px solid var(--sep);flex-shrink:0;font-size:11.5px;color:var(--dim)}
+.hdr-compact .sep{color:var(--dimmer)}
+.hdr-compact .h1{font-size:14.5px;font-weight:650;color:var(--text)}
+.hdr-compact .cnt{color:var(--dimmer)}
+.hdr-compact .sp{flex:1}
+.rowgroup{display:flex;align-items:center;gap:6px}
+.list.fourp .list-head,.list.fourp .row{grid-template-columns:1fr 78px 116px 156px}
+.list.files .list-head,.list.files .row{grid-template-columns:1fr 112px 156px}
+.cmp-header{padding:4px 0 18px}
+.cmp-header h1{margin:0;font-size:19px}
+.cmp-header p{margin:6px 0 0;font-size:12px;color:var(--dim)}
+.cmp-cols{display:grid;grid-template-columns:170px repeat(3,220px);gap:16px;font-size:11px;color:var(--dimmer);padding-bottom:6px}
+.cmp-row{display:grid;grid-template-columns:170px repeat(3,220px);gap:16px;align-items:start;padding:10px 0;border-top:1px solid var(--sep)}
+.cmp-label b{display:block;font-size:12.5px;font-weight:600}
+.cmp-label span{font-size:11.5px;color:var(--dim)}
+.win.compare{width:1080px;height:auto;padding:26px 30px;display:block}
+.roots-row .dim{color:var(--dimmer)}
+.chip{border:1px solid var(--sep);border-radius:6px;padding:3px 9px;font-size:11.5px;color:var(--text);display:flex;align-items:center;gap:5px}
+.chip.add{color:var(--dim)}
+.list{display:flex;flex-direction:column}
+.list-head,.row{display:grid;grid-template-columns:1fr 92px 150px;align-items:center;gap:10px;height:34px;padding:0 8px;font-size:12.5px}
+.list.four .list-head,.list.four .row{grid-template-columns:1fr 92px 118px 156px}
+.list-head{height:26px;color:var(--dim);font-size:11px;border-bottom:1px solid var(--sep);position:sticky;top:0;background:var(--content);z-index:2}
+.list-head>div{border-right:1px solid var(--sep);height:26px;display:flex;align-items:center}
+.list-head>div:last-child{border-right:0}
+.list-head>div.sortable{cursor:pointer;display:flex;align-items:center;gap:4px}
+.list-head>div.sortable:hover{color:var(--text)}
+.list-head>div.sorted{color:var(--text)}
+.sortarrow{display:flex;opacity:.9}
+.row{border-bottom:1px solid rgba(255,255,255,.045);border-radius:4px}
+.row.hovered{background:var(--sel)}
+.c-name{display:flex;align-items:center;gap:8px;min-width:0}
+.c-name img{width:22px;height:29px;object-fit:cover;border-radius:3px;flex-shrink:0;background:#333}
+.c-name svg{color:var(--accent);flex-shrink:0}
+.c-name span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-num,.c-kind,.c-date{color:var(--dim);padding-left:8px;white-space:nowrap}
+.c-date{font-variant-numeric:tabular-nums}
+.result-group{padding:14px 8px 6px;font-size:11px;color:var(--dimmer);font-weight:600}
+.menu{position:absolute;top:196px;left:180px;background:#2c2c2e;border:1px solid var(--sep);border-radius:8px;
+  padding:5px;min-width:196px;box-shadow:0 12px 32px rgba(0,0,0,.55);z-index:10;font-size:12.5px}
+.menu-item{display:flex;align-items:center;gap:8px;height:26px;padding:0 9px;border-radius:5px}
+.menu-item svg{color:var(--dim)}
+.menu-sep{height:1px;background:var(--sep);margin:5px 7px}
+.empty{display:grid;place-items:center}
+.empty-box{max-width:420px;text-align:center;margin-top:-40px}
+.empty-ico{font-size:0;color:var(--dim);display:grid;place-items:center;margin-bottom:14px}
+.empty-ico svg{width:44px;height:44px}
+.empty-box h2{margin:0 0 8px;font-size:17px}
+.empty-box p{margin:0;color:var(--dim);font-size:12.5px;line-height:1.7}
+.empty-actions{display:flex;gap:10px;justify-content:center;margin-top:18px}
+.btn{border:1px solid var(--sep);background:rgba(255,255,255,.08);color:var(--text);border-radius:7px;padding:7px 14px;font:inherit;font-size:12.5px}
+.btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+.status{height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:11px;color:var(--dimmer);border-top:1px solid var(--sep);background:var(--chrome)}
+.hint{letter-spacing:.02em}
+/* viewer */
+.win.viewer{position:relative}
+.v-top{height:46px;display:flex;align-items:center;gap:8px;padding:0 12px;background:rgba(20,20,22,.92);border-bottom:1px solid var(--sep);z-index:3}
+.v-title{flex:1;text-align:center;font-size:12.5px;color:var(--dim)}
+.v-title span{color:var(--dimmer)}
+.v-right{display:flex;gap:4px}
+.v-stage{flex:1;min-height:0;display:grid;place-items:center;background:#0b0b0d;margin-right:300px;padding:18px 18px 78px}
+.v-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:2px}
+.v-info{position:absolute;top:46px;right:0;bottom:64px;width:300px;background:rgba(26,26,28,.96);border-left:1px solid var(--sep);padding:14px 16px;font-size:12px}
+.vi-head{font-size:11px;color:var(--dimmer);font-weight:600;margin-bottom:10px}
+.v-info dl{margin:0;display:grid;grid-template-columns:72px 1fr;gap:8px 10px}
+.v-info dt{color:var(--dimmer)}
+.v-info dd{margin:0;color:var(--text);word-break:break-all}
+.v-info dd.path{font-size:11px;color:var(--dim);line-height:1.5}
+.v-bar{position:absolute;bottom:0;left:0;right:0;height:64px;display:flex;align-items:center;gap:6px;padding:0 16px;
+  background:rgba(20,20,22,.92);border-top:1px solid var(--sep)}
+.vsep{width:1px;height:18px;background:var(--sep);margin:0 6px}
+.vspacer{flex:1}
+.danger{color:#ff6b6b}
+.zoom{font-size:11.5px;color:var(--dim);min-width:42px;text-align:center}
+/* settings */
+.win.settings{width:760px;height:560px}
+.set-body{padding:22px 26px;overflow:auto}
+.set-title{font-size:11px;color:var(--dimmer);font-weight:600;margin:4px 0 8px}
+.set-row{display:flex;align-items:center;gap:12px;height:38px;border-bottom:1px solid rgba(255,255,255,.05);font-size:12.5px}
+.set-row>span:first-child{width:150px}
+.set-val{color:var(--dim)}
+.set-hint{margin-left:auto;color:var(--dimmer);font-size:11px}
+</style></head><body><div class="page"><div class="nav"><h1>界面清单</h1><p class="sub">12 个屏幕，真实图库数据。点左边切换。</p><button data-s="a" class="on">1. 现在：三行头部</button><button data-s="b">2. 方案一：标题与控件同行</button><button data-s="c">3. 方案二：单行头部</button><button data-s="d">4. 方案二 · 720 × 480</button></div><div class="main-col"><div class="screen on" id="a"><div><div class="win " style="width:1280px;height:800px"><div class="toolbar">
+    <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="tb-group">
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="2.4" width="13" height="11.2" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 2.4v11.2" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M9.8 3.4 5 8l4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M6.2 3.4 11 8l-4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="tb-title">300-Cos套图库</div>
+    <div class="tb-right">
+      <div class="seg"><button class="seg-btn"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg></button><button class="seg-btn on"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="3" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="7.2" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="11.4" width="13" height="1.7" rx=".85" fill="currentColor"/></svg></button></div>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M2.2 4.4h2.6l6 7.2h2.6M11.2 3.4l2.2 1-2.2 1M2.2 11.6h2.6l2-2.4M11.2 10.6l2.2 1-2.2 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="search"><svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="4.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.3 10.3 3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>搜索</span></div>
+    </div>
+  </div><div class="tabbar">
+    <div class="tab active"><span>300-Cos套图库</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <div class="tab"><span>Cos 图库 / 半半子</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <button class="tab-add"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+  </div><div class="body"><aside class="sidebar">
+    <div class="side-scroll"><div class="side-group">浏览</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>文件夹</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 13.6S2.2 10.2 2.2 6.4c0-1.9 1.5-3.4 3.3-3.4 1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.8 0 3.3 1.5 3.3 3.4 0 3.8-5.8 7.2-5.8 7.2z" fill="currentColor"/></svg><span>我的收藏</span></div><div class="side-group">Cos 图库</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>Cos 图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>全部作品</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按角色</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按署名</span></div><div class="side-group">照片来源</div><div class="side-item active"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>300-Cos套图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>400-散图合集</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>Collection</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>001-点子图片</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>002-画师</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>003-banana pro</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>下载</span></div></div>
+    <div class="side-bottom"><div class="side-item"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>打开文件夹</span></div></div>
+  </aside><main class="main"><div class="head">
+    <div class="crumbs"><span>文件夹</span><i>›</i><span class="cur">300-Cos套图库</span></div>
+    <div class="head-title"><h1>300-Cos套图库</h1><span class="count">9,591 个文件夹</span></div>
+    <div class="head-tools"><div class="head-spacer"></div>
+      <button class="tool-text"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>名称</span><i class="cd"><svg viewBox="0 0 16 16" width="11" height="11"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></i></button>
+      <div class="density"><i></i></div></div>
+  </div>
+  <div class="content"><div class="list fourp">
+    <div class="list-head">
+      <div class="c-name sortable">名称</div>
+      <div class="c-num sortable sorted">图片<span class="sortarrow"><svg viewBox="0 0 16 16" width="11" height="11"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="c-kind sortable">子文件夹</div>
+      <div class="c-date sortable">修改日期</div>
+    </div>
+    
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜春日椿·导游服（蔚蓝档案）</span></div>
+    <div class="c-num">86 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜优菈（原神）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:35</div>
+  </div>
+  <div class="row hovered">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜艾玛·Nikke＋秘书（胜利女神：妮姬）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·废稿礼装（碧蓝航线）</span></div>
+    <div class="c-num">66 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜调月莉音·竞泳泳装（蔚蓝档案）</span></div>
+    <div class="c-num">65 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月1日 14:39</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜布兰儿·Nikke（胜利女神：妮姬）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜恰巴耶夫·礼服（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月21日 00:28</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·旗袍（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 22:59</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜&面饼仙儿 少女幻想の刻（原创写真）</span></div>
+    <div class="c-num">79 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜来一份下午茶吧（原创写真）</span></div>
+    <div class="c-num">77 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Bunny Vol.02（原创写真）</span></div>
+    <div class="c-num">75 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Maid姉妹（原创写真）</span></div>
+    <div class="c-num">74 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:13</div>
+  </div></div></div><div class="status"><span>9,591 个文件夹，345.26 GB 可用</span><span class="hint">⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索</span></div></main></div></div><div class="cap">面包屑、大标题、控件各占一行，列表排序控件还单独占了一行。</div></div></div><div class="screen" id="b"><div><div class="win " style="width:1280px;height:800px"><div class="toolbar">
+    <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="tb-group">
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="2.4" width="13" height="11.2" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 2.4v11.2" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M9.8 3.4 5 8l4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M6.2 3.4 11 8l-4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="tb-title">300-Cos套图库</div>
+    <div class="tb-right">
+      <div class="seg"><button class="seg-btn"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg></button><button class="seg-btn on"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="3" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="7.2" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="11.4" width="13" height="1.7" rx=".85" fill="currentColor"/></svg></button></div>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M2.2 4.4h2.6l6 7.2h2.6M11.2 3.4l2.2 1-2.2 1M2.2 11.6h2.6l2-2.4M11.2 10.6l2.2 1-2.2 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="search"><svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="4.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.3 10.3 3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>搜索</span></div>
+    </div>
+  </div><div class="tabbar">
+    <div class="tab active"><span>300-Cos套图库</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <div class="tab"><span>Cos 图库 / 半半子</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <button class="tab-add"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+  </div><div class="body"><aside class="sidebar">
+    <div class="side-scroll"><div class="side-group">浏览</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>文件夹</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 13.6S2.2 10.2 2.2 6.4c0-1.9 1.5-3.4 3.3-3.4 1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.8 0 3.3 1.5 3.3 3.4 0 3.8-5.8 7.2-5.8 7.2z" fill="currentColor"/></svg><span>我的收藏</span></div><div class="side-group">Cos 图库</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>Cos 图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>全部作品</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按角色</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按署名</span></div><div class="side-group">照片来源</div><div class="side-item active"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>300-Cos套图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>400-散图合集</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>Collection</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>001-点子图片</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>002-画师</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>003-banana pro</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>下载</span></div></div>
+    <div class="side-bottom"><div class="side-item"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>打开文件夹</span></div></div>
+  </aside><main class="main"><div class="hdr-inline">
+    <div class="h1">300-Cos套图库</div><span class="cnt">9,591 个文件夹</span><span class="sp"></span>
+    <button class="tool-text"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>名称</span><i class="cd"><svg viewBox="0 0 16 16" width="11" height="11"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></i></button>
+    <div class="density"><i></i></div>
+  </div>
+  <div class="content"><div class="list fourp">
+    <div class="list-head">
+      <div class="c-name sortable">名称</div>
+      <div class="c-num sortable sorted">图片<span class="sortarrow"><svg viewBox="0 0 16 16" width="11" height="11"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="c-kind sortable">子文件夹</div>
+      <div class="c-date sortable">修改日期</div>
+    </div>
+    
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜春日椿·导游服（蔚蓝档案）</span></div>
+    <div class="c-num">86 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜优菈（原神）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:35</div>
+  </div>
+  <div class="row hovered">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜艾玛·Nikke＋秘书（胜利女神：妮姬）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·废稿礼装（碧蓝航线）</span></div>
+    <div class="c-num">66 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜调月莉音·竞泳泳装（蔚蓝档案）</span></div>
+    <div class="c-num">65 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月1日 14:39</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜布兰儿·Nikke（胜利女神：妮姬）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜恰巴耶夫·礼服（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月21日 00:28</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·旗袍（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 22:59</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜&面饼仙儿 少女幻想の刻（原创写真）</span></div>
+    <div class="c-num">79 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜来一份下午茶吧（原创写真）</span></div>
+    <div class="c-num">77 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Bunny Vol.02（原创写真）</span></div>
+    <div class="c-num">75 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Maid姉妹（原创写真）</span></div>
+    <div class="c-num">74 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:13</div>
+  </div></div></div><div class="status"><span>9,591 个文件夹，345.26 GB 可用</span><span class="hint">⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索</span></div></main></div></div><div class="cap">砍掉控件那一行，标题右侧直接放排序与密度。</div></div></div><div class="screen" id="c"><div><div class="win " style="width:1280px;height:800px"><div class="toolbar">
+    <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="tb-group">
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="2.4" width="13" height="11.2" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 2.4v11.2" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M9.8 3.4 5 8l4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M6.2 3.4 11 8l-4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="tb-title">300-Cos套图库</div>
+    <div class="tb-right">
+      <div class="seg"><button class="seg-btn"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg></button><button class="seg-btn on"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="3" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="7.2" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="11.4" width="13" height="1.7" rx=".85" fill="currentColor"/></svg></button></div>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M2.2 4.4h2.6l6 7.2h2.6M11.2 3.4l2.2 1-2.2 1M2.2 11.6h2.6l2-2.4M11.2 10.6l2.2 1-2.2 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="search"><svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="4.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.3 10.3 3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>搜索</span></div>
+    </div>
+  </div><div class="tabbar">
+    <div class="tab active"><span>300-Cos套图库</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <div class="tab"><span>Cos 图库 / 半半子</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <button class="tab-add"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+  </div><div class="body"><aside class="sidebar">
+    <div class="side-scroll"><div class="side-group">浏览</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>文件夹</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 13.6S2.2 10.2 2.2 6.4c0-1.9 1.5-3.4 3.3-3.4 1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.8 0 3.3 1.5 3.3 3.4 0 3.8-5.8 7.2-5.8 7.2z" fill="currentColor"/></svg><span>我的收藏</span></div><div class="side-group">Cos 图库</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>Cos 图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>全部作品</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按角色</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按署名</span></div><div class="side-group">照片来源</div><div class="side-item active"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>300-Cos套图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>400-散图合集</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>Collection</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>001-点子图片</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>002-画师</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>003-banana pro</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>下载</span></div></div>
+    <div class="side-bottom"><div class="side-item"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>打开文件夹</span></div></div>
+  </aside><main class="main"><div class="hdr-compact">
+    <span>文件夹</span><span class="sep">›</span><span class="h1">300-Cos套图库</span><span class="cnt">9,591 个文件夹</span>
+    <span class="sp"></span>
+    <button class="tool-text"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>添加文件夹</span></button>
+  </div>
+  <div class="content"><div class="list fourp">
+    <div class="list-head">
+      <div class="c-name sortable">名称</div>
+      <div class="c-num sortable sorted">图片<span class="sortarrow"><svg viewBox="0 0 16 16" width="11" height="11"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="c-kind sortable">子文件夹</div>
+      <div class="c-date sortable">修改日期</div>
+    </div>
+    
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜春日椿·导游服（蔚蓝档案）</span></div>
+    <div class="c-num">86 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜优菈（原神）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:35</div>
+  </div>
+  <div class="row hovered">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜艾玛·Nikke＋秘书（胜利女神：妮姬）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·废稿礼装（碧蓝航线）</span></div>
+    <div class="c-num">66 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜调月莉音·竞泳泳装（蔚蓝档案）</span></div>
+    <div class="c-num">65 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月1日 14:39</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜布兰儿·Nikke（胜利女神：妮姬）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜恰巴耶夫·礼服（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月21日 00:28</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·旗袍（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 22:59</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜&面饼仙儿 少女幻想の刻（原创写真）</span></div>
+    <div class="c-num">79 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜来一份下午茶吧（原创写真）</span></div>
+    <div class="c-num">77 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Bunny Vol.02（原创写真）</span></div>
+    <div class="c-num">75 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Maid姉妹（原创写真）</span></div>
+    <div class="c-num">74 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:13</div>
+  </div></div></div><div class="status"><span>9,591 个文件夹，345.26 GB 可用</span><span class="hint">⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索</span></div></main></div></div><div class="cap">面包屑与标题压成一行，排序改用列头，工具栏承载视图切换。</div></div></div><div class="screen" id="d"><div><div class="win sz-xs" style="width:720px;height:480px"><div class="toolbar">
+    <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="tb-group">
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="2.4" width="13" height="11.2" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.4 2.4v11.2" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M9.8 3.4 5 8l4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M6.2 3.4 11 8l-4.8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="tb-title">300-Cos套图库</div>
+    <div class="tb-right">
+      <div class="seg"><button class="seg-btn"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg></button><button class="seg-btn on"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="3" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="7.2" width="13" height="1.7" rx=".85" fill="currentColor"/><rect x="1.5" y="11.4" width="13" height="1.7" rx=".85" fill="currentColor"/></svg></button></div>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb-icon"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M2.2 4.4h2.6l6 7.2h2.6M11.2 3.4l2.2 1-2.2 1M2.2 11.6h2.6l2-2.4M11.2 10.6l2.2 1-2.2 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="search"><svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="4.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.3 10.3 3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>搜索</span></div>
+    </div>
+  </div><div class="tabbar">
+    <div class="tab active"><span>300-Cos套图库</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <div class="tab"><span>Cos 图库 / 半半子</span><i class="tx"><svg viewBox="0 0 16 16" width="10" height="10"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></i></div>
+    <button class="tab-add"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+  </div><div class="body"><aside class="sidebar">
+    <div class="side-scroll"><div class="side-group">浏览</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>文件夹</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 13.6S2.2 10.2 2.2 6.4c0-1.9 1.5-3.4 3.3-3.4 1.1 0 2 .6 2.5 1.5.5-.9 1.4-1.5 2.5-1.5 1.8 0 3.3 1.5 3.3 3.4 0 3.8-5.8 7.2-5.8 7.2z" fill="currentColor"/></svg><span>我的收藏</span></div><div class="side-group">Cos 图库</div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>Cos 图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1.2" fill="currentColor"/></svg><span>全部作品</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按角色</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="5.2" r="2.9" fill="currentColor"/><path d="M2.6 13.6c0-2.6 2.4-4.4 5.4-4.4s5.4 1.8 5.4 4.4z" fill="currentColor"/></svg><span>按署名</span></div><div class="side-group">照片来源</div><div class="side-item active"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>300-Cos套图库</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>400-散图合集</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>Collection</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>001-点子图片</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>002-画师</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>003-banana pro</span></div><div class="side-item"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>下载</span></div></div>
+    <div class="side-bottom"><div class="side-item"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>打开文件夹</span></div></div>
+  </aside><main class="main"><div class="hdr-compact">
+    <span>文件夹</span><span class="sep">›</span><span class="h1">300-Cos套图库</span><span class="cnt">9,591 个文件夹</span>
+    <span class="sp"></span>
+    <button class="tool-text"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>添加文件夹</span></button>
+  </div>
+  <div class="content"><div class="list fourp">
+    <div class="list-head">
+      <div class="c-name sortable">名称</div>
+      <div class="c-num sortable sorted">图片<span class="sortarrow"><svg viewBox="0 0 16 16" width="11" height="11"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="c-kind sortable">子文件夹</div>
+      <div class="c-date sortable">修改日期</div>
+    </div>
+    
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜春日椿·导游服（蔚蓝档案）</span></div>
+    <div class="c-num">86 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜优菈（原神）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:35</div>
+  </div>
+  <div class="row hovered">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜艾玛·Nikke＋秘书（胜利女神：妮姬）</span></div>
+    <div class="c-num">76 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·废稿礼装（碧蓝航线）</span></div>
+    <div class="c-num">66 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜调月莉音·竞泳泳装（蔚蓝档案）</span></div>
+    <div class="c-num">65 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月1日 14:39</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜布兰儿·Nikke（胜利女神：妮姬）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 11:53</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜恰巴耶夫·礼服（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月21日 00:28</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜柴郡·旗袍（碧蓝航线）</span></div>
+    <div class="c-num">64 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 22:59</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜&面饼仙儿 少女幻想の刻（原创写真）</span></div>
+    <div class="c-num">79 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜来一份下午茶吧（原创写真）</span></div>
+    <div class="c-num">77 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年10月8日 12:22</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Bunny Vol.02（原创写真）</span></div>
+    <div class="c-num">75 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年9月12日 11:31</div>
+  </div>
+  <div class="row">
+    <div class="c-name"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M1.5 4.2c0-.7.6-1.2 1.2-1.2h3.1c.4 0 .7.2.9.4l.8.9h5.8c.7 0 1.2.6 1.2 1.2v6.1c0 .7-.6 1.2-1.2 1.2H2.7c-.7 0-1.2-.6-1.2-1.2V4.2z" fill="currentColor"/></svg><span>半半子｜Maid姉妹（原创写真）</span></div>
+    <div class="c-num">74 张</div>
+    <div class="c-kind">—</div>
+    <div class="c-date">2026年8月20日 23:13</div>
+  </div></div></div><div class="status"><span>9,591 个文件夹，345.26 GB 可用</span><span class="hint">⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索</span></div></main></div></div><div class="cap">最小窗口下头部只占一行，列表能多显示三行内容。</div></div></div></div></div>
+<script>
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.getElementById(b.dataset.s).classList.add('on');
+}));
+</script></body></html>
