@@ -916,6 +916,7 @@ function CosLibraryPage({ colorMode }) {
               columns={columns}
               customScrollParent={scrollContainerRef.current || undefined}
               endReached={loadMore}
+              isRowSelected={(item) => selectedItemId === item.id}
               onRowClick={(item) => setSelectedItemId(item.id)}
               onRowDoubleClick={(item) => {
                 if (item.id === '__all__') {

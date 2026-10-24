@@ -836,12 +836,15 @@ function HomePage({
           overscan={480}
           itemContent={(_rowIndex, item) => {
             const isImage = item.itemKind === 'image';
+            const itemPath = isImage ? item.image.path : item.node.path;
+            const handleSelect = () => setSelectedPath(itemPath);
             const handleOpen = isImage
               ? () => handleDirectImageClick(directImageIndexByPath[item.image.path] ?? 0)
               : () => handleNodeClick(item.node);
             return (
               <Box
-                onClick={handleOpen}
+                onClick={handleSelect}
+                onDoubleClick={handleOpen}
                 sx={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 84px 96px 152px',
@@ -852,6 +855,7 @@ function HomePage({
                   borderBottom: 1,
                   borderColor: 'divider',
                   cursor: 'pointer',
+                  bgcolor: selectedPath === itemPath ? 'selection' : 'transparent',
                   '&:hover': { bgcolor: 'hover' }
                 }}
               >

@@ -801,6 +801,7 @@ function AlbumPage({
         <FileListView
           rows={images}
           customScrollParent={virtualScrollParent || undefined}
+          isRowSelected={(row) => row.path === selectedImagePath}
           onRowClick={(row) => setSelectedImagePath(row.path)}
           onRowDoubleClick={(row) => {
             const index = images.findIndex((image) => image.path === row.path);
