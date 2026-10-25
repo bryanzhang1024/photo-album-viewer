@@ -155,6 +155,8 @@ section h2{font-size:18px;margin:0 0 8px;letter-spacing:-.01em}
     <tr><td>设置窗口的旧样张（第 12 屏）与新的四标签内容不一致。</td><td>旧第 12 屏</td><td>删除旧屏，统一用 7.1 的四标签。</td></tr>
     <tr><td>此前评审用的是 1200px 宽的截图，放大后看不清。</td><td>全部</td><td>这本书改为内嵌可交互 HTML，任意放大都不失真；截图只留在 screens/ 作为存档。</td></tr><tr><td>文件夹列表的样张还是旧的「张数 / 种类」两列，与定稿的四列不一致。</td><td>旧第 3 屏</td><td>重画为 2.3：名称 / 图片 / 子文件夹 / 修改日期，单行头部，排序用列头。</td></tr>
     <tr><td>设置窗口的旧样张（第 12 屏）与新的四标签内容不一致。</td><td>旧第 12 屏</td><td>删除旧屏，统一用 7.1 的四标签。</td></tr>
+    <tr><td>此前评审用的是 1200px 宽的截图，放大后看不清。</td><td>全部</td><td>这本书改为内嵌可交互 HTML，任意放大都不失真；截图只留在 screens/ 作为存档。</td></tr><tr><td>文件夹列表的样张还是旧的「张数 / 种类」两列，与定稿的四列不一致。</td><td>旧第 3 屏</td><td>重画为 2.3：名称 / 图片 / 子文件夹 / 修改日期，单行头部，排序用列头。</td></tr>
+    <tr><td>设置窗口的旧样张（第 12 屏）与新的四标签内容不一致。</td><td>旧第 12 屏</td><td>删除旧屏，统一用 7.1 的四标签。</td></tr>
     <tr><td>此前评审用的是 1200px 宽的截图，放大后看不清。</td><td>全部</td><td>这本书改为内嵌可交互 HTML，任意放大都不失真；截图只留在 screens/ 作为存档。</td></tr></tbody>
 </table>
 </section>
@@ -173,6 +175,7 @@ section h2{font-size:18px;margin:0 0 8px;letter-spacing:-.01em}
   <li><b>每个文件夹分别记住视图与排序</b>（用户确认）：下载这类目录可以固定用列表 + 按修改时间倒序。</li>
   <li><b>样张合并成一份</b>：37 屏按用途分十六节，这份就是实现和验收的唯一对照。</li>
 <li><b>设计稿改为可交互</b>：每个屏幕都是内嵌的实时 HTML，点开可放大、可滚动，不再用截图评审。</li>
+  <li><b>修正旧样张</b>：2.3 列表改为四列并换单行头部；删掉与新设置内容冲突的旧设置屏。</li><li><b>设计稿改为可交互</b>：每个屏幕都是内嵌的实时 HTML，点开可放大、可滚动，不再用截图评审。</li>
   <li><b>修正旧样张</b>：2.3 列表改为四列并换单行头部；删掉与新设置内容冲突的旧设置屏。</li><li><b>设计稿改为可交互</b>：每个屏幕都是内嵌的实时 HTML，点开可放大、可滚动，不再用截图评审。</li>
   <li><b>修正旧样张</b>：2.3 列表改为四列并换单行头部；删掉与新设置内容冲突的旧设置屏。</li></ul>
 </section>
@@ -244,21 +247,16 @@ section h2{font-size:18px;margin:0 0 8px;letter-spacing:-.01em}
   document.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
   window.__openLive=openLive;
 
-  var io=new IntersectionObserver(function(entries){
-    entries.forEach(function(en){
-      if(!en.isIntersecting) return;
-      var el=en.target; io.unobserve(el);
-      var w=+el.dataset.w, h=+el.dataset.h;
-      var f=document.createElement('iframe');
-      f.width=w; f.height=h; f.src=el.dataset.src; f.loading='lazy'; f.setAttribute('scrolling','no');
-      el.appendChild(f);
-      function fit(){ var s=el.clientWidth/w; f.style.transform='scale('+s+')'; }
-      fit();
-      if(window.ResizeObserver) new ResizeObserver(fit).observe(el); else window.addEventListener('resize',fit);
-      el.addEventListener('click', function(){ openLive(el.dataset.src,w,h,el.dataset.title||''); });
-    });
-  },{rootMargin:'700px'});
-  document.querySelectorAll('.live').forEach(function(el){ io.observe(el); });
+  document.querySelectorAll('.live').forEach(function(el){
+    var w=+el.dataset.w, h=+el.dataset.h;
+    var f=document.createElement('iframe');
+    f.width=w; f.height=h; f.src=el.dataset.src; f.setAttribute('scrolling','no');
+    el.appendChild(f);
+    function fit(){ var s=el.clientWidth/w; f.style.transform='scale('+s+')'; }
+    fit();
+    if(window.ResizeObserver) new ResizeObserver(fit).observe(el); else window.addEventListener('resize',fit);
+    el.addEventListener('click', function(){ openLive(el.dataset.src,w,h,el.dataset.title||''); });
+  });
 })();
 </script>
 </body></html>
