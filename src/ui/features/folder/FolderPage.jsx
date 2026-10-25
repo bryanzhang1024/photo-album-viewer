@@ -3,6 +3,7 @@ import PageHeader from '../../shell/PageHeader';
 import StatusBar from '../../shell/StatusBar';
 import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon } from '../../icons';
 import useFolderSnapshot from './useFolderSnapshot';
+import useOtherFiles from './useOtherFiles';
 import VirtualGrid from './VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
@@ -12,6 +13,8 @@ import {
   loadFavorites, isAlbumFavorited, toggleAlbumFavorite
 } from '../../data/favorites';
 import { invoke, CHANNELS } from '../../data/ipc';
+import { openExternal } from '../../data/files';
+import { getFolderSort, setFolderSort } from '../../data/prefs';
 import './folder.css';
 
 const SORT_FIELDS = [
@@ -35,7 +38,8 @@ function fitStorageKey(sourceId, relativePath) {
 
 export default function FolderPage({ source, relativePath, viewMode, onViewModeChange, onOpenFolder, siblings = null }) {
   const { status, snapshot, items, error } = useFolderSnapshot(source, relativePath);
-  const [sortKey, setSortKey] = useState('name');
+  const { files: otherFiles } = useOtherFiles(source, relativePath);
+  const [sortKey, setSortKey] = useState(() => getFolderSort(source.sourceId, relativePath));
   const [density, setDensity] = useState(1);
   const [selectedKey, setSelectedKey] = useState('');
   const [viewerIndex, setViewerIndex] = useState(null);
@@ -70,15 +74,18 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
 
   const segments = relativePath.split('/').filter(Boolean);
   const title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
-  const crumbs = ['文件夹', source?.label, ...segments.slice(0, -1)].filter(Boolean);
+  const crumbs = segments.length > 0
+    ? ['文件夹', source?.label, ...segments.slice(0, -1)].filter(Boolean)
+    : ['文件夹'];
   const ready = status === 'ready';
   const formatCount = (value) => Number(value).toLocaleString('zh-CN');
   const folders = ready ? snapshot.facts.childDirectoryCount : 0;
   const totalImages = ready ? snapshot.facts.directMediaCount : 0;
+  const otherCount = otherFiles.length;
   const countText = ready
     ? (folders > 0
-      ? `${formatCount(folders)} 个文件夹${totalImages > 0 ? ` · ${formatCount(totalImages)} 张图片` : ''}`
-      : `${formatCount(totalImages)} 张照片`)
+      ? `${formatCount(folders)} 个文件夹${totalImages > 0 ? ` · ${formatCount(totalImages)} 张图片` : ''}${otherCount > 0 ? ` · ${otherCount} 个其他文件` : ''}`
+      : `${formatCount(totalImages)} 张照片${otherCount > 0 ? ` · ${otherCount} 个其他文件` : ''}`)
     : status === 'error' ? '读取失败' : '读取中…';
 
   const toggleFit = () => {
@@ -196,7 +203,10 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
         className="ctrl-select"
         aria-label="排序"
         value={sortKey}
-        onChange={(event) => setSortKey(event.target.value)}
+        onChange={(event) => {
+          setSortKey(event.target.value);
+          setFolderSort(source.sourceId, relativePath, event.target.value);
+        }}
       >
         {SORT_FIELDS.map((field) => (
           <option key={field.key} value={field.key}>{field.label}</option>
@@ -227,7 +237,13 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
       <div className="folder-body">
         {status === 'loading' ? <div className="folder-state">正在读取目录…</div> : null}
         {status === 'error' ? <div className="folder-state error">{error}</div> : null}
-        {ready && sorted.length === 0 ? <div className="folder-state">这个文件夹是空的</div> : null}
+        {ready && sorted.length === 0 && otherCount === 0 ? <div className="folder-state">这个文件夹是空的</div> : null}
+        {ready && sorted.length === 0 && otherCount > 0 && viewMode === 'grid' ? (
+          <div className="folder-state">
+            <div>这个文件夹里没有图片，有 {otherCount} 个其他文件。</div>
+            <button className="btn-primary" type="button" onClick={() => onViewModeChange('list')}>用列表查看</button>
+          </div>
+        ) : null}
         {ready && sorted.length > 0 && viewMode === 'grid' ? (
           <VirtualGrid
             items={sorted}
@@ -249,10 +265,15 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
         {ready && sorted.length > 0 && viewMode === 'list' ? (
           <FolderList
             items={sorted}
+            otherFiles={otherFiles}
             rootPath={source.rootPath}
             selectedKey={selectedKey}
             onSelect={(item) => setSelectedKey(item.key)}
             onOpen={handleOpen}
+            onOpenFile={(file) => {
+              openExternal(albumImageAbsolutePath(source.rootPath, file.name))
+                .catch((reason) => window.alert(reason?.message || '打开文件失败'));
+            }}
           />
         ) : null}
       </div>

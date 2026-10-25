@@ -154,3 +154,46 @@ export const FitIcon = () => (
     <path d="M5.2 8h5.6M6.4 6.6 5 8l1.4 1.4M9.6 6.6 11 8l-1.4 1.4" />
   </svg>
 );
+
+export const VideoIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <rect x="1.5" y="3" width="13" height="10" rx="2" />
+    <path d="M6.6 6.1v3.8l3.4-1.9z" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const ArchiveIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <rect x="2" y="2.6" width="12" height="10.8" rx="1.6" />
+    <path d="M8 2.6v3.2M8 8v1.4" />
+  </svg>
+);
+
+export const DocumentIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M3.4 2.5h6l3.2 3.2v7.8H3.4z" />
+    <path d="M9.2 2.6v3.2h3.2M5.4 8.2h5.2M5.4 10.6h5.2" />
+  </svg>
+);
+
+export const AudioIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M6.2 11.4V4.2l5.6-1.4v7" />
+    <circle cx="4.6" cy="11.6" r="1.6" />
+    <circle cx="10.2" cy="10.2" r="1.6" />
+  </svg>
+);
+
+export const InstallerIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <rect x="2" y="2.6" width="12" height="10.8" rx="1.6" />
+    <path d="M8 5v4M6.2 7.4 8 9.2l1.8-1.8" />
+  </svg>
+);
+
+export const FileIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M3.4 2.5h6l3.2 3.2v7.8H3.4z" />
+    <path d="M9.2 2.6v3.2h3.2" />
+  </svg>
+);

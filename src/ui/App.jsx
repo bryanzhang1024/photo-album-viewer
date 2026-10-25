@@ -5,6 +5,7 @@ import TabBar from './shell/TabBar';
 import Sidebar from './shell/Sidebar';
 import useBreakpoint from './hooks/useBreakpoint';
 import { listSourceRoots } from './data/sources';
+import { getFolderView, setFolderView } from './data/prefs';
 import RootsPage from './features/roots/RootsPage';
 import FolderPage from './features/folder/FolderPage';
 
@@ -46,6 +47,19 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (location.kind === 'folder' && source) {
+      setViewMode(getFolderView(source.sourceId, location.relativePath || ''));
+    }
+  }, [location, source]);
+
+  const changeViewMode = (mode) => {
+    setViewMode(mode);
+    if (location.kind === 'folder' && source) {
+      setFolderView(source.sourceId, location.relativePath || '', mode);
+    }
+  };
+
   const navigate = (next) => {
     setHistory((prev) => [...prev.slice(0, historyIndex + 1), next]);
     setHistoryIndex((index) => index + 1);
@@ -86,9 +100,9 @@ export default function App() {
         right={location.kind === 'folder' ? (
           <div className="segmented">
             <button className="icon-button" type="button" aria-label="图标视图"
-              aria-pressed={viewMode === 'grid'} onClick={() => setViewMode('grid')}><GridIcon /></button>
+              aria-pressed={viewMode === 'grid'} onClick={() => changeViewMode('grid')}><GridIcon /></button>
             <button className="icon-button" type="button" aria-label="列表视图"
-              aria-pressed={viewMode === 'list'} onClick={() => setViewMode('list')}><ListIcon /></button>
+              aria-pressed={viewMode === 'list'} onClick={() => changeViewMode('list')}><ListIcon /></button>
           </div>
         ) : null}
       />
@@ -113,7 +127,7 @@ export default function App() {
               source={source}
               relativePath={location.relativePath}
               viewMode={viewMode}
-              onViewModeChange={setViewMode}
+              onViewModeChange={changeViewMode}
               siblings={location.siblings || null}
               onOpenFolder={(relativePath, context) => navigate({
                 kind: 'folder',

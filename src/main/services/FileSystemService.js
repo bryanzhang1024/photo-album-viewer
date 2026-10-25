@@ -1027,11 +1027,58 @@ async function scanDirectoryTree(rootPath, depth = 0, maxDepth = 3) {
   }
 }
 
+
+const FILE_KIND_TABLE = [
+  ['video', ['.mp4', '.mkv', '.mov', '.avi', '.webm', '.wmv', '.flv', '.m4v', '.mpg', '.mpeg']],
+  ['archive', ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz']],
+  ['document', ['.pdf', '.txt', '.md', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.csv']],
+  ['audio', ['.mp3', '.flac', '.wav', '.m4a', '.aac', '.ogg']],
+  ['installer', ['.apk', '.dmg', '.pkg', '.exe']],
+  ['image', ['.psd', '.pxd', '.raw', '.tif', '.tiff', '.svg']]
+];
+
+function classifyOtherFile(extension) {
+  for (const [kind, extensions] of FILE_KIND_TABLE) {
+    if (extensions.includes(extension)) return kind;
+  }
+  return 'other';
+}
+
+/**
+ * 列出当前目录里的非图片文件（不递归）。网格不显示它们，列表用。
+ * 返回 [{ name, ext, size, mtimeMs, kind }]，kind 为 video/archive/document/audio/installer/image/other。
+ */
+async function listDirectoryFiles(directoryPath) {
+  const entries = await readdir(directoryPath, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || entry.name.startsWith('.')) continue;
+    const extension = path.extname(entry.name).toLowerCase();
+    if (SUPPORTED_FORMATS.includes(extension)) continue;
+    try {
+      const info = await stat(path.join(directoryPath, entry.name));
+      if (!info.isFile()) continue;
+      files.push({
+        name: entry.name,
+        ext: extension,
+        size: info.size,
+        mtimeMs: info.mtimeMs,
+        kind: classifyOtherFile(extension)
+      });
+    } catch (_error) {
+      // 读不到的条目跳过，不影响其余文件
+    }
+  }
+  files.sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN', { numeric: true }));
+  return files;
+}
+
 module.exports = {
     scanNavigationLevel,
     getAlbumImages,
     getAlbumImagesPage,
     getAlbumImageCount,
+    listDirectoryFiles,
     clearAlbumImageMetadataCache,
     DEFAULT_ALBUM_PAGE_SIZE,
     mapWithConcurrency,

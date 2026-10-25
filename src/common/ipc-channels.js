@@ -12,6 +12,8 @@ module.exports = {
     CANCEL_THUMBNAILS: 'cancel-thumbnails',
     GET_ALBUM_IMAGES: 'get-album-images',
     GET_ALBUM_IMAGE_COUNT: 'get-album-image-count',
+    LIST_DIRECTORY_FILES_V1: 'list-directory-files-v1',
+    OPEN_PATH_EXTERNAL: 'open-path-external',
     UPDATE_PERFORMANCE_SETTINGS: 'update-performance-settings',
     GET_CACHE_STATS: 'get-cache-stats',
     SAVE_FAVORITES: 'save-favorites',
