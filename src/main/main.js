@@ -19,7 +19,7 @@ const {
 } = require('../common/path-codec');
 const { createSourceRootService } = require('./services/SourceRootService');
 const { createFolderCoverService } = require('./services/FolderCoverService');
-const { createPathApprovalService } = require('./services/PathApprovalService');
+const { createPathApprovalService, isFilesystemRootPath } = require('./services/PathApprovalService');
 const { CosLibraryService } = require('./services/CosLibraryService');
 const { registerCosLibraryIpcHandlers } = require('./services/CosLibraryIpc');
 const {
@@ -392,8 +392,23 @@ app.whenReady().then(async () => {
   // 把来源注册表里的根补登记到访问白名单，老用户升级后不用重新选目录
   try {
     const existingSources = await sourceRootService.listSourceRoots();
+    const unsafeSources = [];
     for (const source of (Array.isArray(existingSources) ? existingSources : [])) {
-      if (source?.rootPath) await registerApprovedRoot(source.rootPath, { persist: false });
+      if (!source?.rootPath) continue;
+      if (isFilesystemRootPath(source.rootPath)) {
+        // 整盘根目录等于默认授权一切，不再作为合法来源
+        unsafeSources.push(source);
+        continue;
+      }
+      await registerApprovedRoot(source.rootPath, { persist: false });
+    }
+    for (const source of unsafeSources) {
+      try {
+        await sourceRootService.removeSourceRoot(source.sourceId);
+        console.warn('[Security] 已移除整盘根来源:', source.rootPath);
+      } catch (error) {
+        console.warn('[Security] 移除整盘根来源失败:', error?.message || error);
+      }
     }
   } catch (error) {
     console.warn('[Security] 补登记来源目录失败:', error?.message || error);
@@ -557,7 +572,7 @@ ipcMain.handle(CHANNELS.SELECT_DIRECTORY, async () => {
 // 新的智能导航API
 ipcMain.handle(CHANNELS.SCAN_NAVIGATION_LEVEL, async (event, targetPath) => {
   try {
-    const isAllowed = await assertApprovedPath(targetPath, { bootstrapWhenEmpty: true });
+    const isAllowed = await assertApprovedPath(targetPath);
     if (!isAllowed) {
       return FileSystemService.createErrorResponse('访问路径不在已授权照片目录范围内', targetPath);
     }
@@ -706,6 +721,12 @@ ipcMain.handle(CHANNELS.SAVE_SOURCE_ROOT_V1, async (event, request) => {
   }
 
   try {
+    if (isFilesystemRootPath(request.rootPath)) {
+      return createSourceRootServiceErrorEnvelope(Object.assign(
+        new Error('不支持把整盘根目录加为照片来源，请选择具体文件夹'),
+        { code: 'UNSAFE_SOURCE_ROOT' }
+      ));
+    }
     const result = await sourceRootService.saveSourceRoot({
       sourceId: request.sourceId,
       rootPath: request.rootPath,

@@ -347,8 +347,8 @@ describe('SourceRoot V1 IPC', () => {
 
       expect(listSourceRoots).toHaveBeenCalled();
       expect(saveSourceRoot).not.toHaveBeenCalled();
-      // 现有「电脑」来源根就是 /，路径已在授权范围内，不需要再单独登记
-      expect(approvedRootStat).toHaveBeenCalledWith('/');
+      // 整盘根来源会被移除，启动参数里的具体目录会被登记为允许目录
+      expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup');
       expect(WindowService.createWindow).toHaveBeenCalledWith({
         sourceId: source.sourceId,
         relativePath: 'Photos/Startup',

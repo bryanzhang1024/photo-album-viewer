@@ -58,10 +58,18 @@ function createPathApprovalService({
       try {
         const content = await fsApi.readFile(rootsFilePath, 'utf8');
         const parsed = JSON.parse(content);
+        let droppedRootEntries = false;
         for (const rootPath of Array.isArray(parsed?.roots) ? parsed.roots : []) {
           const normalized = normalize(rootPath);
-          if (normalized) roots.add(normalized);
+          if (!normalized) continue;
+          // 旧版本可能把整盘根 / 写进过白名单：读入时丢掉并回写清理
+          if (isFilesystemRootPath(normalized)) {
+            droppedRootEntries = true;
+            continue;
+          }
+          roots.add(normalized);
         }
+        if (droppedRootEntries) await persist();
       } catch (error) {
         if (error?.code !== 'ENOENT') {
           logger.warn('[Security] 加载允许目录失败:', error?.message || error);
@@ -157,4 +165,11 @@ function createPathApprovalService({
   return { load, register, unregister, isWithin, assert, list, size };
 }
 
-module.exports = { createPathApprovalService };
+function isFilesystemRootPath(inputPath) {
+  if (!inputPath || typeof inputPath !== 'string') return false;
+  if (!path.isAbsolute(inputPath)) return false;
+  const normalized = path.resolve(path.normalize(inputPath));
+  return normalized === path.parse(normalized).root;
+}
+
+module.exports = { createPathApprovalService, isFilesystemRootPath };

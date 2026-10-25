@@ -4,7 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { createPathApprovalService } = require('../../../src/main/services/PathApprovalService');
+const {
+  createPathApprovalService,
+  isFilesystemRootPath
+} = require('../../../src/main/services/PathApprovalService');
 
 function makeService() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-approve-'));
@@ -119,5 +122,31 @@ describe('PathApprovalService', () => {
     const root = fs.mkdtempSync(path.join(dir, 'photos-'));
     await service.register(root);
     expect(await service.isWithin(path.join(root, '不存在.jpg'))).toBe(false);
+  });
+});
+
+describe('PathApprovalService · 整盘根', () => {
+  test('识别整盘根目录', () => {
+    expect(isFilesystemRootPath('/')).toBe(true);
+    expect(isFilesystemRootPath('/Volumes')).toBe(false);
+    expect(isFilesystemRootPath('/Users/clover')).toBe(false);
+    expect(isFilesystemRootPath('relative/path')).toBe(false);
+  });
+
+  test('旧白名单里存了 / 也会在读入时被丢掉并回写', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-approve-root-'));
+    const rootsFile = path.join(dir, 'approved-roots.json');
+    fs.writeFileSync(rootsFile, JSON.stringify({ roots: ['/', '/Volumes'] }));
+
+    const service = createPathApprovalService({
+      rootsFilePath: rootsFile,
+      logger: { log: () => {}, warn: () => {} }
+    });
+    await service.load();
+
+    expect(await service.isWithin('/tmp')).toBe(false);
+    const stored = JSON.parse(fs.readFileSync(rootsFile, 'utf8'));
+    expect(stored.roots).not.toContain('/');
+    expect(stored.roots).toContain('/Volumes');
   });
 });

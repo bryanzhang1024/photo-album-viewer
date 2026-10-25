@@ -345,3 +345,12 @@ v2 变更：按反方审查 [spec-review](redteam/2026-10-25-spec-review.md) 的
 | SEC-04 | 封面 IPC 仍接受 `rootPath: '/'` | 显式拒绝根目录，并保留「必须是已注册照片来源根」的双重校验 | 已修 |
 
 验证（全新隔离 profile，无任何来源）：封面 `/tmp`、`/` 均被拒；`list-directory-files('/tmp')` 被拒；`local-image-protocol` 加载未授权图片被拒。e2e 新增第 8 步安全边界断言，8/8 通过。
+
+### 17.6 安全修复第三轮（整盘根来源）
+
+| # | 问题 | 处理 | 状态 |
+|---|---|---|---|
+| SEC-05 | `SCAN_NAVIGATION_LEVEL` 仍带 `bootstrapWhenEmpty`，空 profile 调用即可登记任意目录 | 去掉该通道的 bootstrap，只认已授权路径；e2e 增加 scan 通道断言 | 已修 |
+| SEC-06 | 旧 profile 里的「电脑 /」来源在启动时被补登记，等于全盘可读 | 启动时把整盘根来源从注册表移除；保存来源时直接拒绝整盘根；旧 approved-roots 文件里的 `/` 读入时丢弃并回写 | 已修 |
+
+验证：复制真实 profile 的最小副本启动后，「电脑」来源已被移除，`list-directory-files('/tmp')`、`get-folder-cover('/')`、`local-image-protocol` 全部被拒；453 个用例通过、e2e 8/8（含 scan 通道断言）、扫描通过。

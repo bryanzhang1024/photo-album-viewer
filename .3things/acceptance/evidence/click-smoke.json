@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T09:21:01.797Z",
+  "at": "2026-10-25T09:29:13.157Z",
   "attempt": 1,
   "passed": 8,
   "total": 8,
@@ -10,7 +10,7 @@
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›pav-e2e-9GXYYG",
+        "crumbs": "文件夹›pav-e2e-CGhYE0",
         "searchLabel": "搜索这个文件夹"
       }
     },
@@ -89,7 +89,9 @@
           "success": false,
           "files": [],
           "error": "访问路径不在已授权照片目录范围内"
-        }
+        },
+        "scanTmp": "denied",
+        "scanRoot": "denied"
       }
     },
     {

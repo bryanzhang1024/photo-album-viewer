@@ -294,11 +294,17 @@ const STEPS = [
           rootPath: '/', relativePath: 'tmp'
         });
         const listTmp = await window.electronAPI.invoke('list-directory-files-v1', '/tmp');
+        const scanTmp = await window.electronAPI.invoke('scan-navigation-level', '/tmp');
+        const scanRoot = await window.electronAPI.invoke('scan-navigation-level', '/');
         return {
           ok: coverTmp?.success === false
             && coverRoot?.success === false
-            && listTmp?.success === false,
-          coverTmp, coverRoot, listTmp
+            && listTmp?.success === false
+            && scanTmp?.success === false
+            && scanRoot?.success === false,
+          coverTmp, coverRoot, listTmp,
+          scanTmp: scanTmp?.success === false ? 'denied' : scanTmp,
+          scanRoot: scanRoot?.success === false ? 'denied' : scanRoot
         };
       })()`);
       assert(detail.ok, '未授权路径没有被拒绝', detail);
