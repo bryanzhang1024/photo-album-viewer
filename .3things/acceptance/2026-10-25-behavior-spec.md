@@ -354,3 +354,12 @@ v2 变更：按反方审查 [spec-review](redteam/2026-10-25-spec-review.md) 的
 | SEC-06 | 旧 profile 里的「电脑 /」来源在启动时被补登记，等于全盘可读 | 启动时把整盘根来源从注册表移除；保存来源时直接拒绝整盘根；旧 approved-roots 文件里的 `/` 读入时丢弃并回写 | 已修 |
 
 验证：复制真实 profile 的最小副本启动后，「电脑」来源已被移除，`list-directory-files('/tmp')`、`get-folder-cover('/')`、`local-image-protocol` 全部被拒；453 个用例通过、e2e 8/8（含 scan 通道断言）、扫描通过。
+
+### 17.7 安全修复第四轮（整盘根的所有入口）
+
+| # | 问题 | 处理 | 状态 |
+|---|---|---|---|
+| SEC-07 | `resolve-dropped-folders(['/'])` 与 `SELECT_DIRECTORY` 仍能把 `/` 登记为授权根 | 在 `PathApprovalService.register` 里统一按 realpath 拒绝整盘根，所有入口（拖入、选目录、启动 --folder、保存来源）复用同一处判断 | 已修 |
+| SEC-08 | 指向 `/` 的软链接绕过词法判断 | 同上，realpath 后再判断；`save-source-root` 也先 realpath 校验 | 已修 |
+
+验证：单测覆盖直接 `/` 与软链接两种登记被拒；e2e 安全步骤新增 `resolve-dropped-folders(['/'])`、`save-source-root('/')`、`save-source-root(→/)` 三条断言，均被拒，8/8 通过。

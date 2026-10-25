@@ -296,15 +296,32 @@ const STEPS = [
         const listTmp = await window.electronAPI.invoke('list-directory-files-v1', '/tmp');
         const scanTmp = await window.electronAPI.invoke('scan-navigation-level', '/tmp');
         const scanRoot = await window.electronAPI.invoke('scan-navigation-level', '/');
+        const dropRoot = await window.electronAPI.invoke('resolve-dropped-folders', ['/']);
+        const saveRoot = await window.electronAPI.invoke('save-source-root-v1', {
+          contractVersion: 1, sourceId: null, rootPath: '/', label: null
+        });
+        const saveLink = await window.electronAPI.invoke('save-source-root-v1', {
+          contractVersion: 1, sourceId: null, rootPath: window.__pavRootLink, label: null
+        });
+        const dropRootDenied = (dropRoot?.folders || []).length === 0
+          && (dropRoot?.rejected || []).includes('/');
+        const saveRootDenied = saveRoot?.ok === false;
+        const saveLinkDenied = saveLink?.ok === false;
         return {
           ok: coverTmp?.success === false
             && coverRoot?.success === false
             && listTmp?.success === false
             && scanTmp?.success === false
-            && scanRoot?.success === false,
+            && scanRoot?.success === false
+            && dropRootDenied
+            && saveRootDenied
+            && saveLinkDenied,
           coverTmp, coverRoot, listTmp,
           scanTmp: scanTmp?.success === false ? 'denied' : scanTmp,
-          scanRoot: scanRoot?.success === false ? 'denied' : scanRoot
+          scanRoot: scanRoot?.success === false ? 'denied' : scanRoot,
+          dropRootDenied,
+          saveRootDenied,
+          saveLinkDenied
         };
       })()`);
       assert(detail.ok, '未授权路径没有被拒绝', detail);
@@ -354,14 +371,14 @@ function writeReport(results, attempt) {
     attempt,
     passed: results.filter((row) => row.ok).length,
     total: STEPS.length,
-    failed: results.some((row) => !row.ok),
+    failed: results.length < STEPS.length || results.some((row) => !row.ok),
     results
   }, null, 2));
   return reportPath;
 }
 
 /** 跑一次完整流程。隔离 user-data-dir：不碰真实来源注册表，也不会被用户正在开的实例挡住。 */
-async function runOnce({ profileDir, fixtureDir, label, attempt }) {
+async function runOnce({ profileDir, fixtureDir, label, attempt, rootLinkPath }) {
   const child = spawn(APP_BINARY, [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${profileDir}`
@@ -388,6 +405,7 @@ async function runOnce({ profileDir, fixtureDir, label, attempt }) {
         contractVersion: 1, sourceId: null, rootPath: ${JSON.stringify(fixtureDir)}, label: null
       });
       window.sessionStorage.setItem('pavE2ELabel', ${JSON.stringify(label)});
+      window.__pavRootLink = ${JSON.stringify(rootLinkPath)};
       window.sessionStorage.setItem('pavE2ESourceId', res?.data?.source?.sourceId || '');
       return { ok: Boolean(res?.ok), sourceId: res?.data?.source?.sourceId || null, error: res?.error?.message || null };
     })()`);
@@ -469,11 +487,17 @@ async function main() {
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-e2e-profile-'));
   const fixtureDir = prepareFixture();
   const label = path.basename(fixtureDir);
+  const rootLinkPath = path.join(fixtureDir, 'rootlink');
+  try {
+    fs.symlinkSync('/', rootLinkPath, 'dir');
+  } catch (_error) {
+    // 不支持软链接时该步会因 rootlink 不存在而拒绝，断言仍成立
+  }
 
   let outcome = { results: [], failed: true };
   let attempt = 0;
   for (attempt = 1; attempt <= 2; attempt += 1) {
-    outcome = await runOnce({ profileDir, fixtureDir, label, attempt });
+    outcome = await runOnce({ profileDir, fixtureDir, label, attempt, rootLinkPath });
     if (!outcome.failed) break;
     if (attempt < 2) {
       console.error('第一次没跑通，重试一次…');

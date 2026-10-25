@@ -721,7 +721,9 @@ ipcMain.handle(CHANNELS.SAVE_SOURCE_ROOT_V1, async (event, request) => {
   }
 
   try {
-    if (isFilesystemRootPath(request.rootPath)) {
+    const realRequestRoot = await fs.promises.realpath(request.rootPath).catch(() => null);
+    if (isFilesystemRootPath(request.rootPath)
+      || (realRequestRoot && isFilesystemRootPath(realRequestRoot))) {
       return createSourceRootServiceErrorEnvelope(Object.assign(
         new Error('不支持把整盘根目录加为照片来源，请选择具体文件夹'),
         { code: 'UNSAFE_SOURCE_ROOT' }

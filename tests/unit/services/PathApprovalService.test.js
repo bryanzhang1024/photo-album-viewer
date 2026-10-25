@@ -150,3 +150,31 @@ describe('PathApprovalService · 整盘根', () => {
     expect(stored.roots).toContain('/Volumes');
   });
 });
+
+describe('PathApprovalService · 拒绝整盘根', () => {
+  test('直接登记 / 会被拒绝', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-root-'));
+    const service = createPathApprovalService({
+      rootsFilePath: path.join(dir, 'roots.json'),
+      logger: { log: () => {}, warn: () => {} }
+    });
+    expect(await service.register('/')).toBe(false);
+    expect(await service.isWithin('/tmp')).toBe(false);
+  });
+
+  test('指向 / 的软链接也不能登记', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-root-link-'));
+    const link = path.join(dir, 'rootlink');
+    try {
+      fs.symlinkSync('/', link, 'dir');
+    } catch (_error) {
+      return; // 文件系统不支持软链接时跳过
+    }
+    const service = createPathApprovalService({
+      rootsFilePath: path.join(dir, 'roots.json'),
+      logger: { log: () => {}, warn: () => {} }
+    });
+    expect(await service.register(link)).toBe(false);
+    expect(await service.isWithin('/tmp')).toBe(false);
+  });
+});

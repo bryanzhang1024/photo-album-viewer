@@ -62,12 +62,13 @@ function createPathApprovalService({
         for (const rootPath of Array.isArray(parsed?.roots) ? parsed.roots : []) {
           const normalized = normalize(rootPath);
           if (!normalized) continue;
-          // 旧版本可能把整盘根 / 写进过白名单：读入时丢掉并回写清理
-          if (isFilesystemRootPath(normalized)) {
+          const realRoot = (await realpathOrNull(normalized)) || normalized;
+          // 旧版本可能把整盘根 /（或指向它的软链接）写进过白名单：读入时丢掉并回写清理
+          if (isFilesystemRootPath(normalized) || isFilesystemRootPath(realRoot)) {
             droppedRootEntries = true;
             continue;
           }
-          roots.add(normalized);
+          roots.add(realRoot);
         }
         if (droppedRootEntries) await persist();
       } catch (error) {
@@ -101,6 +102,11 @@ function createPathApprovalService({
 
     const rootPath = stats.isDirectory() ? normalized : path.dirname(normalized);
     const realRoot = (await realpathOrNull(rootPath)) || rootPath;
+    // 整盘根（含通过软链接指向根的情况）不能作为授权根
+    if (isFilesystemRootPath(rootPath) || isFilesystemRootPath(realRoot)) {
+      logger.warn('[Security] 拒绝把整盘根目录加入允许列表:', rootPath);
+      return false;
+    }
     if (!roots.has(realRoot)) {
       roots.add(realRoot);
       logger.log(`[Security] 注册允许访问目录: ${realRoot}`);
