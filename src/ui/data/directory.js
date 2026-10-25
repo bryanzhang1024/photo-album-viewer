@@ -48,6 +48,15 @@ const folderCoverInflight = new Map();
  * 按需取文件夹封面（容器文件夹自己没图时，向下找几张）。
  * 结果按来源+路径缓存；失败也缓存空数组，避免反复请求。
  */
+/** 监听当前文件夹；ref 传 null 表示停止监听。 */
+export async function watchDirectory(ref) {
+  const response = await invoke(CHANNELS.WATCH_DIRECTORY_V1, {
+    contractVersion: 1,
+    ref: ref ? { sourceId: ref.sourceId, relativePath: ref.relativePath || '' } : null
+  });
+  return Boolean(response?.ok);
+}
+
 export async function loadFolderCover(source, relativePath) {
   const key = `${source?.sourceId || source?.rootPath}:${relativePath}`;
   if (folderCoverCache.has(key)) return folderCoverCache.get(key);

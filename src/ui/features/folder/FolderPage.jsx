@@ -18,6 +18,7 @@ import {
   isImageFavorited, toggleImageFavorite
 } from '../../data/favorites';
 import { invoke, CHANNELS } from '../../data/ipc';
+import { watchDirectory } from '../../data/directory';
 import { openExternal } from '../../data/files';
 import {
   getFolderSort, setFolderSort, defaultSortDirection, getFolderDensity, setFolderDensity
@@ -279,6 +280,26 @@ export default function FolderPage({
       console.warn('收藏失败:', error.message);
     }
   };
+
+  // 自动刷新：主进程监听当前文件夹，文件增删改名后重扫当前目录
+  useEffect(() => {
+    const currentRef = { sourceId: source.sourceId, relativePath: relativePath || '' };
+    watchDirectory(currentRef).catch(() => {});
+    const api = window.electronAPI;
+    let off = null;
+    if (typeof api?.on === 'function') {
+      off = api.on(CHANNELS.DIRECTORY_CHANGED_V1, (payload) => {
+        if (payload?.sourceId !== currentRef.sourceId) return;
+        if (String(payload?.relativePath || '') !== currentRef.relativePath) return;
+        reload();
+      });
+    }
+    return () => {
+      if (typeof off === 'function') off();
+      else api?.removeListener?.(CHANNELS.DIRECTORY_CHANGED_V1);
+      watchDirectory(null).catch(() => {});
+    };
+  }, [source.sourceId, relativePath, reload]);
 
   useEffect(() => {
     const onRefresh = () => reload();

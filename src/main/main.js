@@ -21,6 +21,7 @@ const { createSourceRootService } = require('./services/SourceRootService');
 const { createFolderCoverService } = require('./services/FolderCoverService');
 const { createPathApprovalService, isFilesystemRootPath } = require('./services/PathApprovalService');
 const { buildAppMenu } = require('./services/AppMenu');
+const { createDirectoryWatchService } = require('./services/DirectoryWatchService');
 const { CosLibraryService } = require('./services/CosLibraryService');
 const { registerCosLibraryIpcHandlers } = require('./services/CosLibraryIpc');
 const {
@@ -158,6 +159,8 @@ function isPathWithinRoot(targetPath, rootPath) {
 const testApprovedRoots = process.env.PAV_TEST_APPROVED_ROOTS
   ? process.env.PAV_TEST_APPROVED_ROOTS.split(path.delimiter).filter(Boolean)
   : [];
+const directoryWatchService = createDirectoryWatchService();
+const watchedWebContents = new Set();
 const pathApproval = createPathApprovalService({
   rootsFilePath: APPROVED_ROOTS_FILE,
   extraRoots: testApprovedRoots
@@ -575,6 +578,43 @@ ipcMain.handle(CHANNELS.SELECT_DIRECTORY, async () => {
   } catch (error) {
     console.error('Error selecting directory:', error);
     return null;
+  }
+});
+
+// 当前文件夹监听：文件增删改名后通知界面重扫
+ipcMain.handle(CHANNELS.WATCH_DIRECTORY_V1, async (event, request) => {
+  const webContents = event.sender;
+  const key = `wc:${webContents.id}`;
+  try {
+    if (!request || !request.ref) {
+      directoryWatchService.close(key);
+      return { ok: true, watching: false };
+    }
+    const source = await sourceRootService.getSourceRoot(request.ref.sourceId);
+    if (!source) return { ok: false, error: '来源不存在' };
+    const absolutePath = resolvePortableRelativePath(source.rootPath, request.ref.relativePath);
+    if (!(await assertApprovedPath(absolutePath))) {
+      return { ok: false, error: '路径不在已授权目录范围内' };
+    }
+    const changedRef = {
+      sourceId: request.ref.sourceId,
+      relativePath: request.ref.relativePath
+    };
+    const started = directoryWatchService.watch(key, absolutePath, () => {
+      if (!webContents.isDestroyed()) {
+        webContents.send(CHANNELS.DIRECTORY_CHANGED_V1, changedRef);
+      }
+    });
+    if (started && !watchedWebContents.has(webContents.id)) {
+      watchedWebContents.add(webContents.id);
+      webContents.once('destroyed', () => {
+        watchedWebContents.delete(webContents.id);
+        directoryWatchService.close(key);
+      });
+    }
+    return { ok: started, watching: started };
+  } catch (error) {
+    return { ok: false, error: error?.message || '监听目录失败' };
   }
 });
 
