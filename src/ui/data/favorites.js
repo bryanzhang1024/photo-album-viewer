@@ -34,3 +34,31 @@ export async function toggleImageFavorite(image, albumPath, albumName) {
   if (!updated) throw new Error('收藏保存失败');
   return !exists;
 }
+
+export function isAlbumFavorited(favorites, albumPath) {
+  return Boolean(favorites?.albums?.some(
+    (item) => item.path === albumPath && (item.kind || 'photoSet') === 'photoSet'
+  ));
+}
+
+/** 切换相簿（文件夹）收藏，写回 albums 数组，与旧界面同一份数据。 */
+export async function toggleAlbumFavorite(album) {
+  const favorites = await loadFavorites();
+  const albums = Array.isArray(favorites.albums) ? favorites.albums : [];
+  const exists = isAlbumFavorited(favorites, album.path);
+  const nextAlbums = exists
+    ? albums.filter((item) => !(item.path === album.path && (item.kind || 'photoSet') === 'photoSet'))
+    : [...albums, {
+      id: `album_${Date.now()}`,
+      kind: 'photoSet',
+      path: album.path,
+      name: album.name,
+      imageCount: album.imageCount || 0,
+      previewImages: album.previewImages || [],
+      previewImagePath: album.previewImagePath || '',
+      addedAt: Date.now()
+    }];
+  const updated = await saveFavorites({ ...favorites, albums: nextAlbums });
+  if (!updated) throw new Error('收藏保存失败');
+  return !exists;
+}

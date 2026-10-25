@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
 import StatusBar from '../../shell/StatusBar';
-import { FitIcon } from '../../icons';
+import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon } from '../../icons';
 import useFolderSnapshot from './useFolderSnapshot';
 import VirtualGrid from './VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
 import ImageViewer from '../../components/ImageViewer';
 import { albumImageAbsolutePath } from '../../data/album';
+import {
+  loadFavorites, isAlbumFavorited, toggleAlbumFavorite
+} from '../../data/favorites';
+import { invoke, CHANNELS } from '../../data/ipc';
 import './folder.css';
 
 const SORT_FIELDS = [
@@ -29,7 +33,7 @@ function fitStorageKey(sourceId, relativePath) {
   return `pav.fit.v1:${sourceId}:${relativePath}`;
 }
 
-export default function FolderPage({ source, relativePath, viewMode, onViewModeChange, onOpenFolder }) {
+export default function FolderPage({ source, relativePath, viewMode, onViewModeChange, onOpenFolder, siblings = null }) {
   const { status, snapshot, items, error } = useFolderSnapshot(source, relativePath);
   const [sortKey, setSortKey] = useState('name');
   const [density, setDensity] = useState(1);
@@ -39,6 +43,7 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
   const [fitMode, setFitMode] = useState(() => (
     window.localStorage.getItem(fitStorageKey(source.sourceId, relativePath)) === '1'
   ));
+  const [favorites, setFavorites] = useState(null);
 
   const sorted = useMemo(() => {
     const compare = (left, right) => {
@@ -87,9 +92,19 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     if (index >= 0) setViewerIndex(index);
   };
 
+  const folderSiblings = useMemo(
+    () => sorted.filter((item) => item.kind === 'folder').map((item) => item.relativePath),
+    [sorted]
+  );
+
+  const openFolder = (target) => {
+    const keepSiblings = Array.isArray(siblings) && siblings.includes(target);
+    onOpenFolder(target, { siblings: keepSiblings ? siblings : folderSiblings });
+  };
+
   const handleOpen = (item) => {
     if (item.kind === 'folder') {
-      onOpenFolder(item.relativePath);
+      openFolder(item.relativePath);
       return;
     }
     openImageByKey(item.key);
@@ -97,10 +112,45 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
 
   const handleGridClick = (item) => {
     if (item.kind === 'folder') {
-      onOpenFolder(item.relativePath);
+      openFolder(item.relativePath);
       return;
     }
     openImageByKey(item.key);
+  };
+
+  const albumPath = albumImageAbsolutePath(source.rootPath, relativePath);
+  const isAlbum = totalImages > 0 && folders === 0;
+  const siblingIndex = siblings ? siblings.indexOf(relativePath) : -1;
+  const canPrev = siblingIndex > 0;
+  const canNext = siblingIndex >= 0 && siblingIndex < siblings.length - 1;
+
+  useEffect(() => {
+    if (!isAlbum) return undefined;
+    let alive = true;
+    loadFavorites()
+      .then((data) => {
+        if (alive) setFavorites(data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isAlbum, albumPath]);
+
+  const favorited = isAlbumFavorited(favorites, albumPath);
+  const toggleFavorite = async () => {
+    try {
+      await toggleAlbumFavorite({
+        path: albumPath,
+        name: title,
+        imageCount: images.length,
+        previewImages: images.slice(0, 4).map((image) => ({ path: image.path, name: image.name })),
+        previewImagePath: images[0]?.path || ''
+      });
+      setFavorites(await loadFavorites());
+    } catch (error) {
+      console.warn('相簿收藏失败:', error.message);
+    }
   };
 
   useEffect(() => {
@@ -116,6 +166,21 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
 
   const controls = (
     <>
+      {isAlbum ? (
+        <div className="album-nav">
+          <button className="icon-button" type="button" aria-label="上一套" disabled={!canPrev}
+            onClick={() => canPrev && openFolder(siblings[siblingIndex - 1])}><ChevronLeftIcon /></button>
+          <span className="album-pos">{siblingIndex >= 0 ? `${siblingIndex + 1} / ${siblings.length}` : ''}</span>
+          <button className="icon-button" type="button" aria-label="下一套" disabled={!canNext}
+            onClick={() => canNext && openFolder(siblings[siblingIndex + 1])}><ChevronRightIcon /></button>
+        </div>
+      ) : null}
+      {isAlbum ? (
+        <button className={`icon-button${favorited ? ' favorited' : ''}`} type="button" aria-label="收藏这个相簿"
+          aria-pressed={favorited} onClick={toggleFavorite}><HeartIcon /></button>
+      ) : null}
+      <button className="icon-button" type="button" aria-label="设置"
+        onClick={() => invoke(CHANNELS.OPEN_SETTINGS_WINDOW)}><SettingsIcon /></button>
       {totalImages > 0 ? (
         <button
           className={`icon-button${fitMode ? ' active' : ''}`}

@@ -114,10 +114,12 @@ export default function App() {
               relativePath={location.relativePath}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
-              onOpenFolder={(relativePath) => navigate({
+              siblings={location.siblings || null}
+              onOpenFolder={(relativePath, context) => navigate({
                 kind: 'folder',
                 sourceId: source.sourceId,
-                relativePath
+                relativePath,
+                siblings: context?.siblings || null
               })}
             />
           ) : (
