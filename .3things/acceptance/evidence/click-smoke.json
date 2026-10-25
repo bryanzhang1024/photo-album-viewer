@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T14:47:21.216Z",
+  "at": "2026-10-25T15:02:32.684Z",
   "attempt": 1,
   "passed": 8,
   "total": 8,
@@ -10,7 +10,7 @@
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›pav-e2e-7BwQ0k",
+        "crumbs": "文件夹›pav-e2e-KKlopb",
         "searchLabel": "搜索这个文件夹"
       }
     },
@@ -20,7 +20,7 @@
       "detail": {
         "ok": true,
         "count": "0 个结果 · 搜索范围：当前文件夹",
-        "after": "2 个文件夹 · 2 张图片"
+        "after": "1 个文件夹 · 2 张图片"
       }
     },
     {
@@ -58,7 +58,7 @@
           "添加到收藏",
           "在 Finder 中显示"
         ],
-        "isFolderCard": true
+        "isFolderCard": false
       }
     },
     {
