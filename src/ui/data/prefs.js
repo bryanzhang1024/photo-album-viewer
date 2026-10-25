@@ -16,11 +16,11 @@ export function defaultSortDirection(field) {
   return SORT_DEFAULT_DIRECTION[field] || 'asc';
 }
 
-export function getFolderView(sourceId, relativePath) {
+export function getFolderView(sourceId, relativePath, fallback = DEFAULT_VIEW) {
   try {
-    return window.localStorage.getItem(viewKey(sourceId, relativePath)) || DEFAULT_VIEW;
+    return window.localStorage.getItem(viewKey(sourceId, relativePath)) || fallback;
   } catch (_error) {
-    return DEFAULT_VIEW;
+    return fallback;
   }
 }
 

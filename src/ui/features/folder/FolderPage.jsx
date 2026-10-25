@@ -5,6 +5,7 @@ import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon, So
 import useFolderSnapshot from './useFolderSnapshot';
 import useOtherFiles from './useOtherFiles';
 import useBreakpoint from '../../hooks/useBreakpoint';
+import useSettings from '../../hooks/useSettings';
 import VirtualGrid from './VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
@@ -60,6 +61,7 @@ export default function FolderPage({
 }) {
   const { status, snapshot, items, error, reload } = useFolderSnapshot(source, relativePath);
   const breakpoint = useBreakpoint();
+  const settings = useSettings();
   const compactHeader = viewMode === 'list' || breakpoint === 'medium' || breakpoint === 'small';
   const { files: otherFiles } = useOtherFiles(source, relativePath);
   const [sortState, setSortState] = useState(() => getFolderSort(source.sourceId, relativePath));
@@ -94,10 +96,15 @@ export default function FolderPage({
       return sign * (a - b);
     };
 
+    // 「混合」分组：只有名称/日期这类两层都有的字段才允许文件夹与图片混排；
+    // 按张数/大小排序时仍保持文件夹在前，否则拿两种单位互相比较没有意义。
+    if (settings.homeSortGrouping === 'mixed' && (field === 'name' || field === 'mtimeMs')) {
+      return [...items].sort(compareWith(field));
+    }
     const folders = items.filter((item) => item.kind === 'folder').sort(compareWith(folderField));
     const images = items.filter((item) => item.kind === 'image').sort(compareWith(imageField));
     return [...folders, ...images];
-  }, [items, sortState]);
+  }, [items, sortState, settings.homeSortGrouping]);
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -441,6 +448,8 @@ export default function FolderPage({
                 coverHeight={coverHeight}
                 selected={selectedKey === item.key}
                 contain={fitMode}
+                showFilename={settings.showFilename}
+                coverMode={settings.folderCoverMode}
                 favorited={isItemFavorited(item)}
                 onClick={handleGridClick}
                 onToggleFavorite={toggleItemFavorite}

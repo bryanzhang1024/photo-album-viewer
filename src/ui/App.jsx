@@ -5,8 +5,10 @@ import TabBar from './shell/TabBar';
 import Sidebar from './shell/Sidebar';
 import Menu from './components/Menu';
 import useBreakpoint from './hooks/useBreakpoint';
+import useSettings from './hooks/useSettings';
 import {
-  listSourceRoots, selectDirectory, saveSourceRoot, removeSourceRoot, openInNewWindow
+  listSourceRoots, selectDirectory, saveSourceRoot, removeSourceRoot, openInNewWindow,
+  resolveDroppedFolders
 } from './data/sources';
 import { getFolderView, setFolderView } from './data/prefs';
 import RootsPage from './features/roots/RootsPage';
@@ -16,7 +18,7 @@ import CosEntityPage from './features/cos/CosEntityPage';
 import CosSetListPage from './features/cos/CosSetListPage';
 import CosSetAlbumPage from './features/cos/CosSetAlbumPage';
 import FavoritesPage from './features/favorites/FavoritesPage';
-import { loadSettings, applyTheme } from './data/settings';
+import { applyTheme } from './data/settings';
 import { invoke, CHANNELS } from './data/ipc';
 
 /**
@@ -60,6 +62,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
   const breakpoint = useBreakpoint();
+  const settings = useSettings();
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
   const location = activeTab.history[activeTab.historyIndex];
@@ -77,7 +80,6 @@ export default function App() {
   }, [breakpoint, sidebarManuallyToggled]);
 
   useEffect(() => {
-    const settings = loadSettings();
     applyTheme(settings.theme);
     if (settings.theme === 'auto' && window.matchMedia) {
       const media = window.matchMedia('(prefers-color-scheme: light)');
@@ -86,7 +88,7 @@ export default function App() {
       return () => media.removeEventListener?.('change', handler);
     }
     return undefined;
-  }, []);
+  }, [settings.theme]);
 
   useEffect(() => {
     let alive = true;
@@ -104,9 +106,9 @@ export default function App() {
 
   useEffect(() => {
     if (location.kind === 'folder' && source) {
-      setViewMode(getFolderView(source.sourceId, location.relativePath || ''));
+      setViewMode(getFolderView(source.sourceId, location.relativePath || '', settings.defaultViewMode));
     }
-  }, [location, source]);
+  }, [location, source, settings.defaultViewMode]);
 
   useEffect(() => {
     setSearchQuery('');
@@ -173,6 +175,64 @@ export default function App() {
     setTabs(next);
   };
 
+  const closeOtherTabs = (id) => {
+    const keep = tabs.find((tab) => tab.id === id);
+    if (!keep) return;
+    setTabs([keep]);
+    setActiveTabId(keep.id);
+  };
+
+  const closeTabsToRight = (id) => {
+    const index = tabs.findIndex((tab) => tab.id === id);
+    if (index < 0) return;
+    const next = tabs.slice(0, index + 1);
+    setTabs(next);
+    if (!next.some((tab) => tab.id === activeTabId)) setActiveTabId(id);
+  };
+
+  const reorderTabs = (sourceId, targetId) => {
+    const from = tabs.findIndex((tab) => tab.id === sourceId);
+    const to = tabs.findIndex((tab) => tab.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...tabs];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setTabs(next);
+  };
+
+  const saveTabGroup = () => {
+    try {
+      window.localStorage.setItem('pav.tabgroup.v1', JSON.stringify(tabs.map((tab) => ({
+        history: tab.history,
+        historyIndex: tab.historyIndex
+      }))));
+      setSourceError('已保存当前标签组');
+    } catch (_error) {
+      setSourceError('保存标签组失败');
+    }
+  };
+
+  const restoreTabGroup = () => {
+    try {
+      const raw = window.localStorage.getItem('pav.tabgroup.v1');
+      if (!raw) {
+        setSourceError('还没有保存过标签组');
+        return;
+      }
+      const saved = JSON.parse(raw);
+      if (!Array.isArray(saved) || saved.length === 0) return;
+      const restored = saved.map((entry) => ({
+        id: (() => { tabSequence += 1; return `tab-${tabSequence}`; })(),
+        history: entry.history,
+        historyIndex: Math.min(entry.historyIndex, entry.history.length - 1)
+      }));
+      setTabs(restored);
+      setActiveTabId(restored[0].id);
+    } catch (_error) {
+      setSourceError('恢复标签组失败');
+    }
+  };
+
   const upsertSource = (nextSource) => {
     setSources((prev) => {
       const exists = prev.some((item) => item.sourceId === nextSource.sourceId);
@@ -215,6 +275,43 @@ export default function App() {
       setSourceError(error?.message || '移除照片来源失败');
     }
   };
+
+  useEffect(() => {
+    const onDragOver = (event) => {
+      event.preventDefault();
+    };
+    const onDrop = async (event) => {
+      event.preventDefault();
+      const dropped = [...(event.dataTransfer?.files || [])]
+        .map((file) => file.path)
+        .filter(Boolean);
+      if (dropped.length === 0) return;
+      try {
+        const { folders, rejected } = await resolveDroppedFolders(dropped);
+        const registered = [];
+        for (const folderPath of folders) {
+          registered.push(await saveSourceRoot(folderPath));
+        }
+        registered.forEach((item) => upsertSource(item));
+        if (rejected.length > 0) {
+          setSourceError('只支持拖入文件夹');
+        } else {
+          setSourceError('');
+        }
+        registered.forEach((item) => {
+          navigate({ kind: 'folder', sourceId: item.sourceId, relativePath: '' }, { newTab: true });
+        });
+      } catch (error) {
+        setSourceError(error?.message || '拖入文件夹失败');
+      }
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [navigate]);
 
   const onSidebarNavigate = (key, anchor) => {
     if (key === 'folder') {
@@ -351,6 +448,14 @@ export default function App() {
         }
       ];
     }
+    if (menu.kind === 'tab') {
+      return [
+        { key: 'other', label: '关闭其他标签页', onSelect: () => closeOtherTabs(menu.tabId) },
+        { key: 'right', label: '关闭右侧标签页', onSelect: () => closeTabsToRight(menu.tabId) },
+        { key: 'save-group', label: '保存当前标签组', onSelect: saveTabGroup },
+        { key: 'restore-group', label: '恢复已保存标签组', onSelect: restoreTabGroup }
+      ];
+    }
     if (menu.kind === 'remove-source') {
       return [
         {
@@ -422,7 +527,14 @@ export default function App() {
           </>
         ) : null}
       />
-      <TabBar tabs={tabItems} onSelect={selectTab} onClose={closeTab} onNew={openNewTab} />
+      <TabBar
+        tabs={tabItems}
+        onSelect={selectTab}
+        onClose={closeTab}
+        onNew={openNewTab}
+        onContextMenu={(event, id) => setMenu({ kind: 'tab', point: { x: event.clientX, y: event.clientY }, tabId: id })}
+        onReorder={reorderTabs}
+      />
       <div className="body">
         <Sidebar
           collapsed={sidebarCollapsed}
@@ -529,7 +641,8 @@ export default function App() {
         anchor={menu?.anchor}
         items={menuItems}
         onClose={() => setMenu(null)}
-        label={menu?.kind === 'remove-source' ? '移除照片来源' : '选择打开方式'}
+        label={menu?.kind === 'remove-source' ? '移除照片来源'
+          : (menu?.kind === 'tab' ? '标签页菜单' : '选择打开方式')}
       />
     </div>
   );

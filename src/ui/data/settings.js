@@ -24,8 +24,11 @@ export function loadSettings() {
   }
 }
 
+export const SETTINGS_STORAGE_KEY = SETTINGS_KEY;
+
 export function saveSettings(next) {
   window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('pav:settings-changed'));
 }
 
 export function applyTheme(theme) {

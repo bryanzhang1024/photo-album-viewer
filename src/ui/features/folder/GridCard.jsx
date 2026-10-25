@@ -8,9 +8,10 @@ export function formatDate(mtimeMs) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function Cover({ item, rootPath }) {
+function Cover({ item, rootPath, coverMode = 'auto' }) {
   const samples = (item.coverSamples || []).slice(0, 4);
-  if (item.childCount > 0 && samples.length >= 3) {
+  const collage = coverMode === 'collage' || (coverMode !== 'single' && item.childCount > 0);
+  if (collage && samples.length >= 3) {
     return (
       <div className="collage">
         {samples.map((sample) => (
@@ -41,6 +42,8 @@ export default function GridCard({
   selected,
   contain = false,
   favorited = false,
+  showFilename = true,
+  coverMode = 'auto',
   onClick,
   onToggleFavorite,
   onContextMenu
@@ -62,7 +65,7 @@ export default function GridCard({
       }}
     >
       <div className={`grid-card-cover${contain ? ' contain' : ''}`} style={{ height: coverHeight }}>
-        {isFolder ? <Cover item={item} rootPath={rootPath} /> : null}
+        {isFolder ? <Cover item={item} rootPath={rootPath} coverMode={coverMode} /> : null}
         {!isFolder ? (
           <Thumb rootPath={rootPath} relativePath={item.relativePath} />
         ) : null}
@@ -79,7 +82,7 @@ export default function GridCard({
           <HeartIcon />
         </button>
       </div>
-      <div className="grid-card-name">{item.name}</div>
+      {showFilename ? <div className="grid-card-name">{item.name}</div> : null}
       <div className="grid-card-meta">{meta}</div>
     </article>
   );

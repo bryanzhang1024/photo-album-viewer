@@ -6,6 +6,7 @@ import {
 import { localImageUrl } from '../data/album';
 import { loadFavorites, isImageFavorited, toggleImageFavorite } from '../data/favorites';
 import { invoke, CHANNELS } from '../data/ipc';
+import useSettings from '../hooks/useSettings';
 import './viewer.css';
 
 function formatSize(bytes) {
@@ -27,7 +28,8 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [dual, setDual] = useState(false);
+  const settings = useSettings();
+  const [dual, setDual] = useState(Boolean(settings.defaultDualPageViewer));
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [favorites, setFavorites] = useState(null);
   const dragRef = useRef(null);
@@ -55,6 +57,22 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   }, [dual, images.length]);
 
   const close = useCallback(() => onClose?.(), [onClose]);
+
+  // 旋转方向由设置决定：默认顺时针，选逆时针时整体反向。
+  const rotateBy = useCallback((steps) => {
+    const direction = settings.rotationDirection === 'left' ? -1 : 1;
+    setRotation((value) => value + direction * 90 * steps);
+  }, [settings.rotationDirection]);
+
+  // 竖图自动旋转：图片加载后如果是竖图且方向未动过，按设置转一次。
+  const onImageLoad = (event) => {
+    if (!settings.autoRotateVerticalImages) return;
+    const image = event.currentTarget;
+    if (rotation !== 0) return;
+    if (image.naturalHeight > image.naturalWidth) {
+      setRotation(settings.rotationDirection === 'left' ? -90 : 90);
+    }
+  };
 
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
@@ -139,9 +157,9 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       } else if (event.key === 'i' || event.key === 'I') {
         setInfoOpen((value) => !value);
       } else if (event.key === '+' || event.key === '=') {
-        setZoom((value) => Math.min(8, value * 1.2));
+        setZoom((value) => Math.min(8, value * (1 + settings.zoomStep)));
       } else if (event.key === '-') {
-        setZoom((value) => Math.max(0.2, value / 1.2));
+        setZoom((value) => Math.max(0.2, value / (1 + settings.zoomStep)));
       } else if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'c') {
         event.preventDefault();
         copyCurrent(event.shiftKey ? 'image' : 'file');
@@ -150,14 +168,14 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       } else if (String(event.key).toLowerCase() === 'f') {
         toggleFullscreen();
       } else if (String(event.key).toLowerCase() === 'e') {
-        setRotation((value) => value + 90);
+        rotateBy(1);
       } else if (String(event.key).toLowerCase() === 'r') {
-        setRotation((value) => value - 90);
+        rotateBy(-1);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [close, go, infoOpen, copyCurrent, toggleFullscreen]);
+  }, [close, go, infoOpen, copyCurrent, toggleFullscreen, rotateBy, settings.zoomStep]);
 
   const deleteCurrent = async () => {
     if (!current) return;
@@ -213,12 +231,14 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       >
         {dual ? (
           <div className="viewer-pair">
-            <img src={localImageUrl(current.path)} alt={current.name} style={{ transform }} draggable={false} />
-            {next ? <img src={localImageUrl(next.path)} alt={next.name} style={{ transform }} draggable={false} /> : null}
+            <img src={localImageUrl(current.path)} alt={current.name} style={{ transform }}
+              draggable={false} onLoad={onImageLoad} />
+            {next ? <img src={localImageUrl(next.path)} alt={next.name} style={{ transform }}
+              draggable={false} onLoad={onImageLoad} /> : null}
           </div>
         ) : (
           <img className="viewer-image" src={localImageUrl(current.path)} alt={current.name}
-            style={{ transform }} draggable={false} />
+            style={{ transform }} draggable={false} onLoad={onImageLoad} />
         )}
         <button className="viewer-nav left" type="button" aria-label="上一张" onClick={() => go(-1)} disabled={index === 0}>
           <ChevronLeftIcon />
@@ -241,11 +261,11 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       ) : null}
 
       <div className="viewer-bar">
-        <button className="icon-button" type="button" aria-label="缩小" onClick={() => setZoom((v) => Math.max(0.2, v / 1.2))}>−</button>
+        <button className="icon-button" type="button" aria-label="缩小" onClick={() => setZoom((v) => Math.max(0.2, v / (1 + settings.zoomStep)))}>−</button>
         <span className="viewer-zoom">{Math.round(zoom * 100)}%</span>
-        <button className="icon-button" type="button" aria-label="放大" onClick={() => setZoom((v) => Math.min(8, v * 1.2))}>＋</button>
+        <button className="icon-button" type="button" aria-label="放大" onClick={() => setZoom((v) => Math.min(8, v * (1 + settings.zoomStep)))}>＋</button>
         <span className="viewer-sep" />
-        <button className="icon-button" type="button" aria-label="向左旋转" onClick={() => setRotation((v) => v - 90)}><RotateIcon /></button>
+        <button className="icon-button" type="button" aria-label="旋转" onClick={() => rotateBy(1)}><RotateIcon /></button>
         <button className={`icon-button${dual ? ' active' : ''}`} type="button" aria-label="双页" aria-pressed={dual}
           onClick={() => setDual((value) => !value)}><DualPageIcon /></button>
         <button className="icon-button" type="button" aria-label="全屏" onClick={toggleFullscreen}><FullscreenIcon /></button>

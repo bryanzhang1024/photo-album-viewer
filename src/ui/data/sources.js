@@ -56,3 +56,12 @@ export async function openInNewWindow({ sourceId, relativePath = '' }) {
   }
   return response;
 }
+
+/** 拖入的路径里挑出文件夹并完成授权；返回 { folders, rejected }。 */
+export async function resolveDroppedFolders(paths) {
+  const response = await invoke(CHANNELS.RESOLVE_DROPPED_FOLDERS, paths);
+  return {
+    folders: Array.isArray(response?.folders) ? response.folders : [],
+    rejected: Array.isArray(response?.rejected) ? response.rejected : []
+  };
+}

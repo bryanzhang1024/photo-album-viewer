@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import TabBar from '../../src/ui/shell/TabBar';
@@ -35,5 +35,17 @@ describe('标签栏', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '新建标签页' }));
     expect(onNew).toHaveBeenCalledTimes(1);
+  });
+
+  test('拖动标签到另一个位置会请求重排', () => {
+    const onReorder = jest.fn();
+    render(<TabBar tabs={TABS} onReorder={onReorder} />);
+
+    const [first, second] = screen.getAllByRole('tab');
+    fireEvent.dragStart(first, { dataTransfer: { setData: jest.fn(), effectAllowed: '' } });
+    fireEvent.dragOver(second, { dataTransfer: { getData: () => 'tab-1' } });
+    fireEvent.drop(second, { dataTransfer: { getData: () => 'tab-1' } });
+
+    expect(onReorder).toHaveBeenCalledWith('tab-1', 'tab-2');
   });
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import App from '../../src/ui/App';
@@ -63,7 +63,7 @@ describe('App · 标签页与照片来源', () => {
     await userEvent.click(screen.getAllByRole('button', { name: '关闭 文件夹' })[0]);
     expect(screen.getAllByRole('tab')).toHaveLength(1);
 
-    await userEvent.click(screen.getByRole('button', { name: '关闭 文件夹' }));
+    await userEvent.click(screen.getAllByRole('button', { name: '关闭 文件夹' })[1]);
     expect(screen.getAllByRole('tab')).toHaveLength(1);
   });
 
@@ -180,5 +180,125 @@ describe('App · 标签页与照片来源', () => {
     expect(searchBoxes).toHaveLength(1);
     expect(searchBoxes[0]).toHaveAccessibleName('搜索这个文件夹');
     expect(screen.getByLabelText('窗口工具栏')).toContainElement(searchBoxes[0]);
+  });
+
+  test('设置里选「默认列表」后，进入文件夹直接是列表视图', async () => {
+    window.localStorage.setItem('photoViewerSettings', JSON.stringify({ defaultViewMode: 'list' }));
+    const invoke = jest.fn(async (channel) => {
+      if (channel === 'load-source-roots-v1') {
+        return { ok: true, data: { sources: [{ sourceId: 'src_a', label: 'A-库', rootPath: '/A' }] } };
+      }
+      if (channel === 'get-directory-level-v1') {
+        return {
+          ok: true,
+          data: {
+            locator: { sourceId: 'src_a', relativePath: '', absolutePath: '/A' },
+            facts: { childDirectoryCount: 1, directMediaCount: 0 },
+            children: [{
+              name: '套图一',
+              ref: { sourceId: 'src_a', relativePath: '套图一' },
+              status: 'ok',
+              facts: { directMediaCount: 0, childDirectoryCount: 0 },
+              mtimeMs: 1,
+              approximate: { coverSamples: [] }
+            }],
+            directMedia: [],
+            approximate: { coverSamples: [] }
+          }
+        };
+      }
+      if (channel === 'list-directory-files-v1') return { ok: true, data: { files: [] } };
+      if (channel === 'load-favorites') return { folders: [], albums: [], images: [] };
+      return { ok: true, data: {} };
+    });
+    window.electronAPI = { invoke, platform: 'darwin' };
+    if (!window.ResizeObserver) {
+      window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+    }
+
+    const { container } = render(<App />);
+    await sidebar().findByText('A-库');
+    await userEvent.click(sidebar().getByText('A-库').closest('button'));
+
+    await waitFor(() => expect(container.querySelector('.folder-list-head')).toBeTruthy());
+    expect(container.querySelector('.grid-card')).toBeNull();
+    window.localStorage.clear();
+  });
+
+  test('标签右键菜单：关闭其他标签页', async () => {
+    installElectronMock();
+    render(<App />);
+    await screen.findByRole('tablist');
+
+    await userEvent.click(screen.getByRole('button', { name: '新建标签页' }));
+    await userEvent.click(screen.getByRole('button', { name: '新建标签页' }));
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+
+    const firstTab = screen.getAllByRole('tab')[0];
+    fireEvent.contextMenu(firstTab);
+    const menu = await screen.findByRole('menu', { name: '标签页菜单' });
+    await userEvent.click(within(menu).getByRole('menuitem', { name: '关闭其他标签页' }));
+
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+  });
+
+  test('标签组：保存后关掉再恢复，标签数量回来', async () => {
+    installElectronMock();
+    render(<App />);
+    await screen.findByRole('tablist');
+
+    await userEvent.click(screen.getByRole('button', { name: '新建标签页' }));
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+
+    fireEvent.contextMenu(screen.getAllByRole('tab')[0]);
+    let menu = await screen.findByRole('menu', { name: '标签页菜单' });
+    await userEvent.click(within(menu).getByRole('menuitem', { name: '保存当前标签组' }));
+
+    await userEvent.click(screen.getAllByRole('button', { name: '关闭 文件夹' })[1]);
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+
+    fireEvent.contextMenu(screen.getAllByRole('tab')[0]);
+    menu = await screen.findByRole('menu', { name: '标签页菜单' });
+    await userEvent.click(within(menu).getByRole('menuitem', { name: '恢复已保存标签组' }));
+
+    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2));
+  });
+
+  test('拖入文件夹：注册为来源并在新标签打开；非文件夹提示', async () => {
+    const invoke = jest.fn(async (channel) => {
+      if (channel === 'load-source-roots-v1') return { ok: true, data: { sources: [] } };
+      if (channel === 'resolve-dropped-folders') return { folders: ['/tmp/raw'], rejected: ['/tmp/a.txt'] };
+      if (channel === 'save-source-root-v1') {
+        return { ok: true, data: { source: { sourceId: 'src_drop', label: 'raw', rootPath: '/tmp/raw' } } };
+      }
+      if (channel === 'get-directory-level-v1') {
+        return {
+          ok: true,
+          data: {
+            locator: { sourceId: 'src_drop', relativePath: '', absolutePath: '/tmp/raw' },
+            facts: { childDirectoryCount: 0, directMediaCount: 0 },
+            children: [],
+            directMedia: [],
+            approximate: { coverSamples: [] }
+          }
+        };
+      }
+      if (channel === 'list-directory-files-v1') return { ok: true, data: { files: [] } };
+      if (channel === 'load-favorites') return { folders: [], albums: [], images: [] };
+      return { ok: true, data: {} };
+    });
+    window.electronAPI = { invoke, platform: 'darwin' };
+    if (!window.ResizeObserver) {
+      window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+    }
+
+    render(<App />);
+    await screen.findByRole('tablist');
+
+    fireEvent.drop(window, { dataTransfer: { files: [{ path: '/tmp/raw' }, { path: '/tmp/a.txt' }] } });
+
+    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2));
+    expect(invoke.mock.calls.some(([channel]) => channel === 'resolve-dropped-folders')).toBe(true);
+    expect(await screen.findByText('只支持拖入文件夹')).toBeInTheDocument();
   });
 });
