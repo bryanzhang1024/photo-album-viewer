@@ -32,9 +32,10 @@ function Cover({ item, rootPath }) {
 /** 网格卡片：文件夹与图片共用同一套文字层级。 */
 export default function GridCard({ item, rootPath, width, coverHeight, selected, onClick }) {
   const isFolder = item.kind === 'folder';
-  const meta = isFolder
-    ? (item.childCount > 0 ? `${item.childCount} 个子文件夹 · ${item.imageCount} 张` : `${item.imageCount} 张`)
-    : `${Math.round(item.size / 1024)} KB · ${formatDate(item.mtimeMs)}`;
+  const folderMeta = item.childCount > 0
+    ? `${item.childCount} 个子文件夹 · ${item.imageCount} 张`
+    : `${item.imageCount} 张${item.mtimeMs ? ` · ${formatDate(item.mtimeMs)}` : ''}`;
+  const meta = isFolder ? folderMeta : `${Math.round(item.size / 1024)} KB · ${formatDate(item.mtimeMs)}`;
   return (
     <article
       className={`grid-card${selected ? ' selected' : ''}`}

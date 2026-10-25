@@ -27,6 +27,7 @@ export function toFolderItems(snapshot) {
     status: child.status,
     imageCount: child.facts?.directMediaCount ?? 0,
     childCount: child.facts?.childDirectoryCount ?? 0,
+    mtimeMs: Number.isFinite(child.mtimeMs) ? child.mtimeMs : 0,
     coverSamples: child.approximate?.coverSamples || []
   }));
   const images = snapshot.directMedia.map((media) => ({

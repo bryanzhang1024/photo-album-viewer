@@ -27,7 +27,7 @@ const CHILD_COMPLETENESS_FIELDS = new Set(['directMedia', 'children']);
 const FACT_FIELDS = new Set(['directMediaCount', 'childDirectoryCount']);
 const MEDIA_FIELDS = new Set(['relativePath', 'name', 'size', 'mtimeMs']);
 const CHILD_FIELDS = new Set([
-  'ref', 'name', 'status', 'completeness', 'facts', 'approximate'
+  'ref', 'name', 'status', 'completeness', 'facts', 'approximate', 'mtimeMs'
 ]);
 const APPROXIMATE_FIELDS = new Set([
   'coverSamples', 'hasDescendantMedia', 'observedAt', 'truncated'
@@ -549,6 +549,10 @@ function validateMediaAt(value, path, rootRelativePath, issues) {
     }
   }
 
+  if (hasOwn(record, 'mtimeMs')) {
+    validateRequiredFiniteNumber(record, 'mtimeMs', path, issues);
+  }
+
   let nameValid = false;
   if (!hasOwn(record, 'name')) {
     addIssue(issues, `${path}.name`, 'required', 'name is required');
@@ -587,6 +591,10 @@ function validateChildAt(value, path, rootRef, issues) {
       'invariant',
       'Child ref must be exactly one segment below the snapshot'
     );
+  }
+
+  if (hasOwn(record, 'mtimeMs')) {
+    validateRequiredFiniteNumber(record, 'mtimeMs', path, issues);
   }
 
   let nameValid = false;
