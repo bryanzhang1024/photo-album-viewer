@@ -171,4 +171,44 @@ describe('查看器 · Esc 分层与输入', () => {
       expect(button.className).toContain('favorited');
     });
   });
+
+  test('顶部显示当前图片文件名，而不是文件夹名', async () => {
+    renderViewer();
+    const title = screen.getByText(/1\.jpg/);
+    expect(title).toBeInTheDocument();
+    expect(title.textContent).toContain('1 / 3');
+  });
+
+  test('底部按钮都有说明性 tooltip', async () => {
+    renderViewer();
+    expect(screen.getByRole('button', { name: '复制文件' }).getAttribute('title')).toContain('⌘C');
+    expect(screen.getByRole('button', { name: '复制像素' }).getAttribute('title')).toContain('⌘⇧C');
+    expect(screen.getByRole('button', { name: '旋转' }).getAttribute('title')).toContain('旋转');
+    expect(screen.getByRole('button', { name: '移到废纸篓' }).getAttribute('title')).toContain('废纸篓');
+  });
+
+  test('最后一张的「下一张」不再禁用，点击会循环回第一张', async () => {
+    window.electronAPI = {
+      platform: 'darwin',
+      invoke: jest.fn(async (channel) => {
+        if (channel === 'load-favorites') return { folders: [], albums: [], images: [] };
+        return { success: true };
+      })
+    };
+    render(
+      <ImageViewer
+        images={IMAGES}
+        initialIndex={2}
+        title="套图"
+        albumPath="/A/a"
+        albumName="套图"
+        onClose={jest.fn()}
+      />
+    );
+
+    const next = screen.getByRole('button', { name: '下一张' });
+    expect(next).not.toBeDisabled();
+    await userEvent.click(next);
+    await waitFor(() => expect(screen.getAllByText(/1 \/ 3/).length).toBeGreaterThan(0));
+  });
 });

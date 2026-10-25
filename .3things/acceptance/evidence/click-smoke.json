@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T08:47:57.163Z",
+  "at": "2026-10-25T08:57:03.864Z",
   "attempt": 1,
   "passed": 7,
   "total": 7,
@@ -10,7 +10,7 @@
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›pav-e2e-YlyJKD",
+        "crumbs": "文件夹›pav-e2e-9FHshY",
         "searchLabel": "搜索这个文件夹"
       }
     },

@@ -254,14 +254,17 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       }}
     >
       <div className="viewer-top">
-        <button className="icon-button" type="button" aria-label="关闭" onClick={close}><ChevronLeftIcon /></button>
-        <div className="viewer-title">
-          {title} <span>· {index + 1}{dual && next ? `–${index + 2}` : ''} / {images.length}</span>
+        <button className="icon-button" type="button" aria-label="关闭" title="关闭查看器（Esc）"
+          onClick={close}><ChevronLeftIcon /></button>
+        <div className="viewer-title" title={albumPath}>
+          {current.name} <span>· {index + 1}{dual && next ? `–${index + 2}` : ''} / {images.length}</span>
         </div>
         <div className="viewer-top-right">
           <button className={`icon-button${infoOpen ? ' active' : ''}`} type="button" aria-label="图片信息"
-            aria-pressed={infoOpen} onClick={() => setInfoOpen((value) => !value)}><InfoIcon /></button>
+            title="图片信息（i）" aria-pressed={infoOpen}
+            onClick={() => setInfoOpen((value) => !value)}><InfoIcon /></button>
           <button className={`icon-button favorite-toggle${favorited ? ' favorited' : ''}`} type="button" aria-label="收藏"
+            title={favorited ? '取消收藏' : '收藏这张图片'}
             aria-pressed={favorited} onClick={toggleFavorite}><HeartIcon /></button>
         </div>
       </div>
@@ -295,11 +298,14 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
           <img className="viewer-image" src={localImageUrl(current.path)} alt={current.name}
             style={{ transform }} draggable={false} onLoad={onImageLoad} onError={() => setBroken(true)} />
         )}
-        <button className="viewer-nav left" type="button" aria-label="上一张" onClick={() => go(-1)} disabled={index === 0}>
+        <button className="viewer-nav left" type="button" aria-label="上一张"
+          title="上一张（←，到头会回到最后一张）" onClick={() => go(-1)}>
           <ChevronLeftIcon />
         </button>
-        <button className="viewer-nav right" type="button" aria-label="下一张" onClick={() => go(1)}
-          disabled={index >= images.length - 1}><ChevronRightIcon /></button>
+        <button className="viewer-nav right" type="button" aria-label="下一张"
+          title="下一张（→，到头会回到第一张）" onClick={() => go(1)}>
+          <ChevronRightIcon />
+        </button>
       </div>
 
       {infoOpen ? (
@@ -307,6 +313,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
           <div className="vi-head">图片信息</div>
           <dl>
             <dt>文件名</dt><dd>{current.name}</dd>
+            <dt>所属</dt><dd>{albumName || title || '—'}</dd>
             <dt>大小</dt><dd>{formatSize(current.size)}</dd>
             <dt>尺寸</dt><dd>{naturalSize ? `${naturalSize.width} × ${naturalSize.height}` : '—'}</dd>
             <dt>修改时间</dt><dd>{formatDate(current.lastModified || current.mtimeMs)}</dd>
@@ -317,22 +324,22 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       ) : null}
 
       <div className={`viewer-bar${barVisible ? '' : ' hidden'}`}>
-        <button className="icon-button" type="button" aria-label="缩小" onClick={() => setZoom((v) => Math.max(0.2, v / (1 + settings.zoomStep)))}>−</button>
+        <button className="icon-button" type="button" aria-label="缩小" title="缩小（- 或 ⌘滚轮）" onClick={() => setZoom((v) => Math.max(0.2, v / (1 + settings.zoomStep)))}>−</button>
         <span className="viewer-zoom">{Math.round(zoom * 100)}%</span>
-        <button className="icon-button" type="button" aria-label="放大" onClick={() => setZoom((v) => Math.min(8, v * (1 + settings.zoomStep)))}>＋</button>
+        <button className="icon-button" type="button" aria-label="放大" title="放大（+ 或 ⌘滚轮）" onClick={() => setZoom((v) => Math.min(8, v * (1 + settings.zoomStep)))}>＋</button>
         <span className="viewer-sep" />
-        <button className="icon-button" type="button" aria-label="旋转" onClick={() => rotateBy(1)}><RotateIcon /></button>
-        <button className={`icon-button${dual ? ' active' : ''}`} type="button" aria-label="双页" aria-pressed={dual}
+        <button className="icon-button" type="button" aria-label="旋转" title="旋转 90°（E / R）" onClick={() => rotateBy(1)}><RotateIcon /></button>
+        <button className={`icon-button${dual ? ' active' : ''}`} type="button" aria-label="双页" title="双页查看（V）" aria-pressed={dual}
           onClick={() => setDual((value) => !value)}><DualPageIcon /></button>
-        <button className="icon-button" type="button" aria-label="适应窗口"
+        <button className="icon-button" type="button" aria-label="适应窗口" title="适应窗口：缩放到能看全整张（100%）"
           onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}><FitIcon /></button>
-        <button className="icon-button" type="button" aria-label="全屏" onClick={toggleFullscreen}><FullscreenIcon /></button>
+        <button className="icon-button" type="button" aria-label="全屏" title="进入 / 退出全屏（F）" onClick={toggleFullscreen}><FullscreenIcon /></button>
         <span className="viewer-sep" />
-        <button className="icon-button" type="button" aria-label="复制文件" onClick={() => copyCurrent('file')}><CopyIcon /></button>
-        <button className="icon-button" type="button" aria-label="复制像素" onClick={() => copyCurrent('image')}><CopyIcon /></button>
-        <button className="icon-button" type="button" aria-label="在 Finder 中显示" onClick={revealCurrent}><RevealIcon /></button>
+        <button className="icon-button" type="button" aria-label="复制文件" title="复制原始文件，可粘贴到 Finder（⌘C）" onClick={() => copyCurrent('file')}><CopyIcon /></button>
+        <button className="icon-button" type="button" aria-label="复制像素" title="复制图片像素，可粘贴到聊天或文档（⌘⇧C）" onClick={() => copyCurrent('image')}><CopyIcon /></button>
+        <button className="icon-button" type="button" aria-label="在 Finder 中显示" title="在访达中显示这张图" onClick={revealCurrent}><RevealIcon /></button>
         <span className="viewer-spacer" />
-        <button className="icon-button danger" type="button" aria-label="移到废纸篓" onClick={deleteCurrent}><TrashIcon /></button>
+        <button className="icon-button danger" type="button" aria-label="移到废纸篓" title="把这张图移到废纸篓（会二次确认）" onClick={deleteCurrent}><TrashIcon /></button>
       </div>
       {wrapNotice ? <div className="viewer-toast" role="status">{wrapNotice}</div> : null}
     </div>
