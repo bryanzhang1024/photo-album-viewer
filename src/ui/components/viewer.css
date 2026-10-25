@@ -1,0 +1,203 @@
+body.viewer-open {
+  overflow: hidden;
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background: #0b0b0d;
+  color: var(--text);
+}
+
+.viewer-top {
+  height: 46px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 78px;
+  background: rgba(20, 20, 22, 0.92);
+  border-bottom: 1px solid var(--separator);
+}
+
+.viewer-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewer-title span {
+  color: var(--text-dimmer);
+}
+
+.viewer-top-right {
+  display: flex;
+  gap: 4px;
+}
+
+.icon-button.active {
+  color: var(--accent);
+}
+
+.icon-button.favorited {
+  color: #ff375f;
+}
+
+.viewer-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: grab;
+  background: #0b0b0d;
+}
+
+.viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.08s ease-out;
+}
+
+.viewer-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-pair img {
+  max-width: 48.5%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.08s ease-out;
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 64px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0.45;
+}
+
+.viewer-nav:hover {
+  opacity: 1;
+}
+
+.viewer-nav.left {
+  left: 12px;
+}
+
+.viewer-nav.right {
+  right: 12px;
+}
+
+.viewer-nav:disabled {
+  opacity: 0.12;
+  cursor: default;
+}
+
+.viewer-info {
+  position: absolute;
+  top: 46px;
+  right: 0;
+  bottom: 64px;
+  width: 300px;
+  padding: 14px 16px;
+  background: rgba(26, 26, 28, 0.96);
+  border-left: 1px solid var(--separator);
+  font-size: 12px;
+  overflow: auto;
+}
+
+.vi-head {
+  margin-bottom: 10px;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-dimmer);
+}
+
+.viewer-info dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px 10px;
+}
+
+.viewer-info dt {
+  color: var(--text-dimmer);
+}
+
+.viewer-info dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.viewer-info dd.path {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.viewer-bar {
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  background: rgba(20, 20, 22, 0.92);
+  border-top: 1px solid var(--separator);
+}
+
+.viewer-zoom {
+  min-width: 44px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.viewer-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--separator);
+}
+
+.viewer-spacer {
+  flex: 1;
+}
+
+.icon-button.danger {
+  color: #ff6b6b;
+}
+
+/* 网格「完整显示」模式：不裁切，按原比例放进卡片 */
+.grid-card-cover.contain {
+  background: #0b0b0d;
+}
+
+.grid-card-cover.contain .thumb {
+  object-fit: contain;
+}

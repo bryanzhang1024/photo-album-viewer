@@ -112,3 +112,45 @@ export const PlusIcon = () => (
     <path d="M8 3v10M3 8h10" />
   </svg>
 );
+
+export const InfoIcon = () => (
+  <svg {...base} width={16} height={16}>
+    <circle cx="8" cy="8" r="6.2" />
+    <circle cx="8" cy="5.1" r=".95" fill="currentColor" stroke="none" />
+    <rect x="7.25" y="7" width="1.5" height="4.6" rx=".75" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const RotateIcon = () => (
+  <svg {...base} width={17} height={17}>
+    <path d="M3.2 8.4A4.9 4.9 0 1 0 5 4.2" />
+    <path d="M2.6 2.6v3.2h3.2" />
+  </svg>
+);
+
+export const FullscreenIcon = () => (
+  <svg {...base} width={16} height={16}>
+    <path d="M2.4 6V2.6H6M10 2.6h3.6V6M13.6 10v3.4H10M6 13.4H2.4V10" />
+  </svg>
+);
+
+export const DualPageIcon = () => (
+  <svg {...base} width={16} height={16}>
+    <rect x="1.6" y="3" width="5.6" height="10" rx="1.2" />
+    <rect x="8.8" y="3" width="5.6" height="10" rx="1.2" />
+  </svg>
+);
+
+export const TrashIcon = () => (
+  <svg {...base} width={16} height={16}>
+    <path d="M2.8 4.4h10.4M6.2 4.4V2.9c0-.5.4-.9.9-.9h1.8c.5 0 .9.4.9.9v1.5" />
+    <path d="M4 4.4l.7 8.4c.1.8.7 1.4 1.5 1.4h3.6c.8 0 1.4-.6 1.5-1.4l.7-8.4" />
+  </svg>
+);
+
+export const FitIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <rect x="2" y="3" width="12" height="10" rx="1.6" />
+    <path d="M5.2 8h5.6M6.4 6.6 5 8l1.4 1.4M9.6 6.6 11 8l-1.4 1.4" />
+  </svg>
+);

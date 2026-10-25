@@ -1,0 +1,208 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ChevronLeftIcon, ChevronRightIcon, InfoIcon, RotateIcon, FullscreenIcon,
+  DualPageIcon, TrashIcon, HeartIcon
+} from '../icons';
+import { localImageUrl } from '../data/album';
+import { loadFavorites, isImageFavorited, toggleImageFavorite } from '../data/favorites';
+import { invoke, CHANNELS } from '../data/ipc';
+import './viewer.css';
+
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** 大图查看器：单页 / 双页、缩放、旋转、信息面板、收藏、移到废纸篓、Esc 关闭。 */
+export default function ImageViewer({ images, initialIndex = 0, title, albumPath, albumName, onClose, onDeleted }) {
+  const [index, setIndex] = useState(initialIndex);
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [dual, setDual] = useState(false);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [favorites, setFavorites] = useState(null);
+  const dragRef = useRef(null);
+  const current = images[index];
+  const next = images[index + 1];
+
+  useEffect(() => {
+    document.body.classList.add('viewer-open');
+    return () => document.body.classList.remove('viewer-open');
+  }, []);
+
+  useEffect(() => {
+    loadFavorites().then(setFavorites).catch(() => setFavorites(null));
+  }, []);
+
+  const go = useCallback((delta) => {
+    setIndex((value) => {
+      const step = dual ? 2 : 1;
+      const target = value + delta * step;
+      return Math.max(0, Math.min(images.length - 1, target));
+    });
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setRotation(0);
+  }, [dual, images.length]);
+
+  const close = useCallback(() => onClose?.(), [onClose]);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      } else if (event.key === 'ArrowRight') {
+        go(1);
+      } else if (event.key === 'ArrowLeft') {
+        go(-1);
+      } else if (event.key === 'i' || event.key === 'I') {
+        setInfoOpen((value) => !value);
+      } else if (event.key === '+' || event.key === '=') {
+        setZoom((value) => Math.min(8, value * 1.2));
+      } else if (event.key === '-') {
+        setZoom((value) => Math.max(0.2, value / 1.2));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [close, go]);
+
+  const onWheel = (event) => {
+    if (event.ctrlKey || event.metaKey) return;
+    event.preventDefault();
+    const factor = event.deltaY > 0 ? 0.9 : 1.1;
+    setZoom((value) => Math.min(8, Math.max(0.2, value * factor)));
+  };
+
+  const onMouseDown = (event) => {
+    dragRef.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
+  };
+  const onMouseMove = (event) => {
+    if (!dragRef.current) return;
+    setPan({
+      x: dragRef.current.px + (event.clientX - dragRef.current.x),
+      y: dragRef.current.py + (event.clientY - dragRef.current.y)
+    });
+  };
+  const endDrag = () => {
+    dragRef.current = null;
+  };
+
+  const favorited = current ? isImageFavorited(favorites, current.path) : false;
+  const toggleFavorite = async () => {
+    if (!current) return;
+    try {
+      await toggleImageFavorite(current, albumPath, albumName);
+      const fresh = await loadFavorites();
+      setFavorites(fresh);
+    } catch (error) {
+      console.warn('收藏失败:', error.message);
+    }
+  };
+
+  const deleteCurrent = async () => {
+    if (!current) return;
+    const confirmed = window.confirm('把这张图片移到废纸篓？');
+    if (!confirmed) return;
+    const result = await invoke(CHANNELS.TRASH_IMAGE, current.path);
+    if (!result?.success) {
+      window.alert(result?.error || '移到废纸篓失败');
+      return;
+    }
+    onDeleted?.(current);
+    if (images.length <= 1) {
+      close();
+      return;
+    }
+    setIndex((value) => Math.min(value, images.length - 2));
+  };
+
+  if (!current) return null;
+  const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`;
+
+  return (
+    <div className="viewer" role="dialog" aria-label="大图查看器">
+      <div className="viewer-top">
+        <button className="icon-button" type="button" aria-label="关闭" onClick={close}><ChevronLeftIcon /></button>
+        <div className="viewer-title">
+          {title} <span>· {index + 1}{dual && next ? `–${index + 2}` : ''} / {images.length}</span>
+        </div>
+        <div className="viewer-top-right">
+          <button className={`icon-button${infoOpen ? ' active' : ''}`} type="button" aria-label="图片信息"
+            aria-pressed={infoOpen} onClick={() => setInfoOpen((value) => !value)}><InfoIcon /></button>
+          <button className={`icon-button${favorited ? ' favorited' : ''}`} type="button" aria-label="收藏"
+            aria-pressed={favorited} onClick={toggleFavorite}><HeartIcon /></button>
+        </div>
+      </div>
+
+      <div
+        className="viewer-stage"
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        style={{ marginRight: infoOpen ? 300 : 0 }}
+      >
+        {dual ? (
+          <div className="viewer-pair">
+            <img src={localImageUrl(current.path)} alt={current.name} style={{ transform }} draggable={false} />
+            {next ? <img src={localImageUrl(next.path)} alt={next.name} style={{ transform }} draggable={false} /> : null}
+          </div>
+        ) : (
+          <img className="viewer-image" src={localImageUrl(current.path)} alt={current.name}
+            style={{ transform }} draggable={false} />
+        )}
+        <button className="viewer-nav left" type="button" aria-label="上一张" onClick={() => go(-1)} disabled={index === 0}>
+          <ChevronLeftIcon />
+        </button>
+        <button className="viewer-nav right" type="button" aria-label="下一张" onClick={() => go(1)}
+          disabled={index >= images.length - 1}><ChevronRightIcon /></button>
+      </div>
+
+      {infoOpen ? (
+        <aside className="viewer-info">
+          <div className="vi-head">图片信息</div>
+          <dl>
+            <dt>文件名</dt><dd>{current.name}</dd>
+            <dt>大小</dt><dd>{formatSize(current.size)}</dd>
+            <dt>修改时间</dt><dd>{formatDate(current.lastModified || current.mtimeMs)}</dd>
+            <dt>序号</dt><dd>{index + 1} / {images.length}</dd>
+            <dt>位置</dt><dd className="path">{albumPath}</dd>
+          </dl>
+        </aside>
+      ) : null}
+
+      <div className="viewer-bar">
+        <button className="icon-button" type="button" aria-label="缩小" onClick={() => setZoom((v) => Math.max(0.2, v / 1.2))}>−</button>
+        <span className="viewer-zoom">{Math.round(zoom * 100)}%</span>
+        <button className="icon-button" type="button" aria-label="放大" onClick={() => setZoom((v) => Math.min(8, v * 1.2))}>＋</button>
+        <span className="viewer-sep" />
+        <button className="icon-button" type="button" aria-label="向左旋转" onClick={() => setRotation((v) => v - 90)}><RotateIcon /></button>
+        <button className={`icon-button${dual ? ' active' : ''}`} type="button" aria-label="双页" aria-pressed={dual}
+          onClick={() => setDual((value) => !value)}><DualPageIcon /></button>
+        <button className="icon-button" type="button" aria-label="全屏" onClick={toggleFullscreen}><FullscreenIcon /></button>
+        <span className="viewer-spacer" />
+        <button className="icon-button danger" type="button" aria-label="移到废纸篓" onClick={deleteCurrent}><TrashIcon /></button>
+      </div>
+    </div>
+  );
+}
