@@ -40,7 +40,7 @@ function sourceLabel(source, allSources) {
   return `${source.label} · ${sourceSuffix(source)}`;
 }
 
-export default function Sidebar({ collapsed, sources = [], sourceError = '', active = 'folder' }) {
+export default function Sidebar({ collapsed, sources = [], sourceError = '', active = 'folder', onNavigate }) {
   return (
     <aside className="sidebar" data-collapsed={collapsed ? 'true' : 'false'} aria-label="侧栏">
       <div className="sidebar-scroll">
@@ -55,6 +55,7 @@ export default function Sidebar({ collapsed, sources = [], sourceError = '', act
                   className="sidebar-item"
                   type="button"
                   aria-current={active === item.key ? 'page' : undefined}
+                  onClick={() => onNavigate?.(item.key)}
                 >
                   <Icon />
                   <span>{item.label}</span>
@@ -72,6 +73,7 @@ export default function Sidebar({ collapsed, sources = [], sourceError = '', act
             type="button"
             aria-current={active === source.sourceId ? 'page' : undefined}
             title={source.rootPath}
+            onClick={() => onNavigate?.(source.sourceId)}
           >
             <FolderIcon />
             <span>{sourceLabel(source, sources)}</span>
@@ -84,7 +86,7 @@ export default function Sidebar({ collapsed, sources = [], sourceError = '', act
         ) : null}
       </div>
       <div className="sidebar-bottom">
-        <button className="sidebar-item" type="button">
+        <button className="sidebar-item" type="button" onClick={() => onNavigate?.('open-folder')}>
           <PlusIcon />
           <span>打开文件夹</span>
         </button>

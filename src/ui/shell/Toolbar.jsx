@@ -5,7 +5,7 @@ import { SidebarIcon, ChevronLeftIcon, ChevronRightIcon } from '../icons';
  * 窗口工具栏：侧栏开关、前进后退、居中标题。
  * macOS 上左侧给红绿灯留出拖拽区；工具栏本身是窗口拖拽区。
  */
-export default function Toolbar({ title, sidebarCollapsed, onToggleSidebar, onBack, onForward, canGoBack = false, canGoForward = false }) {
+export default function Toolbar({ title, sidebarCollapsed, onToggleSidebar, onBack, onForward, canGoBack = false, canGoForward = false, right = null }) {
   const isMac = window.electronAPI?.platform === 'darwin';
   return (
     <header
@@ -29,6 +29,7 @@ export default function Toolbar({ title, sidebarCollapsed, onToggleSidebar, onBa
         <ChevronRightIcon />
       </button>
       <span className="toolbar-title">{title}</span>
+      {right ? <div className="toolbar-right">{right}</div> : null}
     </header>
   );
 }

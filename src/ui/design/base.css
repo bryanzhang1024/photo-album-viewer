@@ -130,6 +130,13 @@ button {
   -webkit-app-region: no-drag;
 }
 
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .toolbar-title {
   position: absolute;
   left: 50%;

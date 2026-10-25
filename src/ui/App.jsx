@@ -1,23 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Toolbar from './shell/Toolbar';
+import { GridIcon, ListIcon } from './icons';
 import TabBar from './shell/TabBar';
 import Sidebar from './shell/Sidebar';
-import PageHeader from './shell/PageHeader';
-import StatusBar from './shell/StatusBar';
 import useBreakpoint from './hooks/useBreakpoint';
 import { listSourceRoots } from './data/sources';
-
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索　⌘, 设置　⌘W 关闭标签';
+import RootsPage from './features/roots/RootsPage';
+import FolderPage from './features/folder/FolderPage';
 
 /**
- * 4.0 外壳。S0 只搭骨架并验证数据层：侧栏的照片来源来自真实 IPC。
- * 页面内容从 S1 起按设计稿逐屏接入。
+ * 4.0 外壳与导航。位置模型：{ kind: 'roots' } 或 { kind: 'folder', sourceId, relativePath }。
+ * S1 范围：照片来源页 + 文件夹网格 / 列表。
  */
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sources, setSources] = useState([]);
   const [sourceError, setSourceError] = useState('');
+  const [viewMode, setViewMode] = useState('grid');
+  const [history, setHistory] = useState([{ kind: 'roots' }]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const breakpoint = useBreakpoint();
+
+  const location = history[historyIndex];
+  const source = location.kind === 'folder'
+    ? sources.find((item) => item.sourceId === location.sourceId)
+    : null;
 
   useEffect(() => {
     if (breakpoint === 'medium' || breakpoint === 'small') {
@@ -39,31 +46,83 @@ export default function App() {
     };
   }, []);
 
+  const navigate = (next) => {
+    setHistory((prev) => [...prev.slice(0, historyIndex + 1), next]);
+    setHistoryIndex((index) => index + 1);
+  };
+
+  const onSidebarNavigate = (key) => {
+    if (key === 'folder') {
+      navigate({ kind: 'roots' });
+      return;
+    }
+    if (sources.some((item) => item.sourceId === key)) {
+      navigate({ kind: 'folder', sourceId: key, relativePath: '' });
+    }
+  };
+
+  const segments = location.kind === 'folder'
+    ? String(location.relativePath || '').split('/').filter(Boolean)
+    : [];
+  const title = location.kind === 'folder'
+    ? (segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹'))
+    : '文件夹';
+
+  const activeKey = useMemo(() => {
+    if (location.kind === 'roots') return 'folder';
+    return location.sourceId;
+  }, [location]);
+
   return (
     <div className="app">
       <Toolbar
-        title="文件夹"
+        title={title}
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
-      />
-      <TabBar tabs={[{ id: 'folder', title: '文件夹', active: true }]} />
-      <div className="body">
-        <Sidebar collapsed={sidebarCollapsed} sources={sources} sourceError={sourceError} active="folder" />
-        <main className="main">
-          <PageHeader title="照片来源" count="S0 · 地基" />
-          <div className="content">
-            <div className="s0-note">
-              <h2>4.0 界面重写 · S0</h2>
-              <p>
-                新外壳已经跑起来：侧栏、工具栏、标签栏、页头、状态栏都来自设计稿；
-                照片来源列表读的是真实 IPC。S1 开始接文件夹浏览的网格与列表。
-              </p>
-            </div>
+        canGoBack={historyIndex > 0}
+        canGoForward={historyIndex < history.length - 1}
+        onBack={() => setHistoryIndex((index) => Math.max(0, index - 1))}
+        onForward={() => setHistoryIndex((index) => Math.min(history.length - 1, index + 1))}
+        right={location.kind === 'folder' ? (
+          <div className="segmented">
+            <button className="icon-button" type="button" aria-label="图标视图"
+              aria-pressed={viewMode === 'grid'} onClick={() => setViewMode('grid')}><GridIcon /></button>
+            <button className="icon-button" type="button" aria-label="列表视图"
+              aria-pressed={viewMode === 'list'} onClick={() => setViewMode('list')}><ListIcon /></button>
           </div>
-          <StatusBar
-            left={sources.length > 0 ? `${sources.length} 个来源` : '未加载来源'}
-            right={STATUS_HINTS}
-          />
+        ) : null}
+      />
+      <TabBar tabs={[{ id: 'current', title, active: true }]} />
+      <div className="body">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          sources={sources}
+          sourceError={sourceError}
+          active={activeKey}
+          onNavigate={onSidebarNavigate}
+        />
+        <main className="main">
+          {location.kind === 'roots' ? (
+            <RootsPage
+              sources={sources}
+              onOpen={(item) => navigate({ kind: 'folder', sourceId: item.sourceId, relativePath: '' })}
+            />
+          ) : source ? (
+            <FolderPage
+              key={`${source.sourceId}:${location.relativePath}`}
+              source={source}
+              relativePath={location.relativePath}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onOpenFolder={(relativePath) => navigate({
+                kind: 'folder',
+                sourceId: source.sourceId,
+                relativePath
+              })}
+            />
+          ) : (
+            <div style={{ padding: 48, color: "var(--text-dim)", textAlign: "center", fontSize: 12.5 }}>正在加载来源…</div>
+          )}
         </main>
       </div>
     </div>

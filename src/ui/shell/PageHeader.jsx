@@ -17,6 +17,7 @@ export default function PageHeader({ variant = 'inline', crumbs = [], title, cou
             </span>
           </React.Fragment>
         ))}
+        <span className="page-header-sep">›</span>
         <span className="page-header-title-compact">{title}</span>
         {count ? <span className="page-header-count">{count}</span> : null}
         <span className="page-header-spacer" />
