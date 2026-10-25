@@ -6,7 +6,9 @@ import { getDirectoryLevel } from '../../data/directory';
 import Thumb from '../../components/Thumb';
 import './roots.css';
 
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标签';
+import { statusHint } from '../../data/shortcuts';
+
+const STATUS_HINTS = statusHint('roots');
 
 /** 照片来源页（2.1）：每个根的封面、文件夹数与位置。 */
 export default function RootsPage({ sources, onOpen, onOpenFolder }) {

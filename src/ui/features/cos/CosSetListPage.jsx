@@ -9,7 +9,9 @@ import useCosPagedList from './useCosPagedList';
 import CosLoadMore from './CosLoadMore';
 import './cos.css';
 
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标签';
+import { statusHint } from '../../data/shortcuts';
+
+const STATUS_HINTS = statusHint('cosSearch');
 
 /** 套图列表：按角色 / 按署名 / 全部作品三种入口共用。 */
 export default function CosSetListPage({ viewKind = 'all', entity, onOpenSet }) {

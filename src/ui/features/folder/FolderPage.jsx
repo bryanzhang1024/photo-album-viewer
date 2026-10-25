@@ -43,7 +43,9 @@ const DENSITIES = [
   { key: 'comfortable', minWidth: 196 }
 ];
 
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索　⌘, 设置　⌘W 关闭标签';
+import { statusHint } from '../../data/shortcuts';
+
+const STATUS_HINTS = statusHint('folder');
 
 function fitStorageKey(sourceId, relativePath) {
   return `pav.fit.v1:${sourceId}:${relativePath}`;
