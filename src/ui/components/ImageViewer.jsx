@@ -71,7 +71,6 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     setRotation(0);
   }, [dual, images.length]);
 
-
   useEffect(() => {
     if (!wrapNotice) return undefined;
     const timer = setTimeout(() => setWrapNotice(''), 3000);
@@ -185,41 +184,6 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     }
   }, [current]);
 
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        if (infoOpen) {
-          setInfoOpen(false);
-          return;
-        }
-        close();
-      } else if (event.key === 'ArrowRight') {
-        go(1);
-      } else if (event.key === 'ArrowLeft') {
-        go(-1);
-      } else if (event.key === 'i' || event.key === 'I') {
-        setInfoOpen((value) => !value);
-      } else if (event.key === '+' || event.key === '=') {
-        setZoom((value) => Math.min(8, value * (1 + settings.zoomStep)));
-      } else if (event.key === '-') {
-        setZoom((value) => Math.max(0.2, value / (1 + settings.zoomStep)));
-      } else if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'c') {
-        event.preventDefault();
-        copyCurrent(event.shiftKey ? 'image' : 'file');
-      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'v') {
-        setDual((value) => !value);
-      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'f') {
-        toggleFullscreen();
-      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'e') {
-        rotateBy(1);
-      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'r') {
-        rotateBy(-1);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [close, go, infoOpen, copyCurrent, toggleFullscreen, rotateBy, settings.zoomStep]);
 
   useEffect(() => {
     const onZoomCommand = (event) => {
@@ -258,6 +222,98 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     }
     setIndex((value) => Math.min(value, images.length - 2));
   };
+
+  // 查看器键位：恢复旧版习惯（A/D 翻页、Backspace 关闭、Delete 删除、O Finder、
+  // T 底栏、C 收藏、Q 左旋、R 随机），并保留 Esc 分层与双页/全屏。
+  useEffect(() => {
+    const isPlainKey = (event) => !event.metaKey && !event.ctrlKey && !event.altKey;
+    const resetView = () => {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      setRotation(0);
+      setBroken(false);
+    };
+    const randomImage = () => {
+      if (images.length < 2) return;
+      setIndex((value) => {
+        let next = value;
+        while (next === value) next = Math.floor(Math.random() * images.length);
+        return next;
+      });
+      resetView();
+    };
+    const closeLayer = () => {
+      if (infoOpen) {
+        setInfoOpen(false);
+        return;
+      }
+      close();
+    };
+    const onKey = (event) => {
+      const key = event.key;
+      const lower = String(key).toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && lower === 'c') {
+        event.preventDefault();
+        copyCurrent(event.shiftKey ? 'image' : 'file');
+        return;
+      }
+      if (key === 'Escape' || key === 'Backspace') {
+        event.preventDefault();
+        closeLayer();
+        return;
+      }
+      if (key === 'ArrowLeft' || (isPlainKey(event) && lower === 'a')) {
+        go(-1);
+        return;
+      }
+      if (key === 'ArrowRight' || (isPlainKey(event) && lower === 'd')) {
+        go(1);
+        return;
+      }
+      if (key === '+' || key === '=') {
+        setZoom((value) => Math.min(8, value * (1 + settings.zoomStep)));
+        return;
+      }
+      if (key === '-' || key === '_') {
+        setZoom((value) => Math.max(0.2, value / (1 + settings.zoomStep)));
+        return;
+      }
+      if (!isPlainKey(event)) return;
+      if (lower === 'i') {
+        setInfoOpen((value) => !value);
+      } else if (lower === 'v') {
+        setDual((value) => !value);
+      } else if (lower === 'f') {
+        toggleFullscreen();
+      } else if (lower === 'e') {
+        rotateBy(1);
+      } else if (lower === 'q') {
+        rotateBy(-1);
+      } else if (lower === 'r') {
+        randomImage();
+      } else if (lower === 'c') {
+        toggleFavorite();
+      } else if (lower === 't') {
+        setBarVisible((value) => !value);
+      } else if (lower === 'o') {
+        revealCurrent();
+      }
+    };
+    const onDeleteKey = (event) => {
+      if (event.key !== 'Delete' || !isPlainKey(event)) return;
+      event.preventDefault();
+      deleteCurrent();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onDeleteKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onDeleteKey);
+    };
+  }, [
+    close, go, infoOpen, copyCurrent, toggleFullscreen, rotateBy,
+    settings.zoomStep, toggleFavorite, revealCurrent, deleteCurrent, images.length
+  ]);
 
   if (!current) return null;
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`;

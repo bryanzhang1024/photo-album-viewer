@@ -432,6 +432,8 @@ export default function App() {
       setActiveTabId(tabs[next].id);
     };
     const onKey = (event) => {
+      // 查看器打开时，⌘[ ⌘] ⌘W ⌘F 等窗口级组合键不作用在背后的主窗口
+      if (viewerOpen()) return;
       if (isEditable(event.target)) return;
       if (!(event.metaKey || event.ctrlKey)) return;
       const key = event.key;
@@ -502,8 +504,11 @@ export default function App() {
         if (typeof input.select === 'function') input.select();
       }
     };
+    const viewerCommands = new Set(['copy', 'zoom-in', 'zoom-out', 'zoom-reset']);
     const onCommand = (payload) => {
       const command = payload?.command;
+      // 查看器打开时，导航/标签/视图类菜单命令不应作用到背后窗口
+      if (document.querySelector('[role="dialog"]') && !viewerCommands.has(command)) return;
       switch (command) {
         case 'new-tab':
           openNewTab();

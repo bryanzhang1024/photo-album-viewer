@@ -114,4 +114,23 @@ describe('菜单命令 → 渲染层行为', () => {
     send('refresh');
     await waitFor(() => expect(calls.filter((c) => c === 'get-directory-level-v1').length).toBeGreaterThan(before));
   });
+
+  test('查看器打开时，标签/视图类菜单命令不作用到背后窗口', async () => {
+    render(<App />);
+    await screen.findByRole('tablist');
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+
+    const fakeViewer = document.createElement('div');
+    fakeViewer.setAttribute('role', 'dialog');
+    document.body.appendChild(fakeViewer);
+    try {
+      send('new-tab');
+      send('close-tab');
+      send('view-grid');
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+    } finally {
+      fakeViewer.remove();
+    }
+  });
 });
