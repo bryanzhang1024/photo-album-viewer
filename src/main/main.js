@@ -750,6 +750,22 @@ ipcMain.handle(CHANNELS.SAVE_SOURCE_ROOT_V1, async (event, request) => {
   }
 });
 
+ipcMain.handle(CHANNELS.REORDER_SOURCE_ROOTS_V1, async (event, request) => {
+  if (!request || typeof request !== 'object' || request.contractVersion !== 1
+    || !Array.isArray(request.sourceIds)) {
+    return createNavigationRequestErrorEnvelope({
+      valid: false,
+      issues: [{ path: '$.sourceIds', code: 'invalid', message: 'sourceIds is required' }]
+    });
+  }
+  try {
+    const result = await sourceRootService.reorderSourceRoots(request.sourceIds);
+    return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1({ sources: result.sources }));
+  } catch (error) {
+    return createSourceRootServiceErrorEnvelope(error);
+  }
+});
+
 ipcMain.handle(CHANNELS.REMOVE_SOURCE_ROOT_V1, async (event, request) => {
   const sourceId = request && typeof request.sourceId === 'string' ? request.sourceId : null;
   if (sourceId === null) {

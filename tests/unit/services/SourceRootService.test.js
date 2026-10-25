@@ -148,6 +148,51 @@ describe('SourceRootService', () => {
     expect(writeTargets(fakeFs)).toEqual([]);
   });
 
+  test('reorders sources and persists the new order', async () => {
+    const thirdId = 'src_33333333-3333-4333-8333-333333333333';
+    const document = createSourceRootRegistryV1({
+      sources: [
+        createSourceRootV1(),
+        createSourceRootV1({ sourceId: SECOND_SOURCE_ID, label: '第二', rootPath: '/Photos/2' }),
+        createSourceRootV1({ sourceId: thirdId, label: '第三', rootPath: '/Photos/3' })
+      ]
+    });
+    const fakeFs = createFakeFs({
+      initialRegistry: document,
+      directories: ['/Photos', '/Photos/2', '/Photos/3']
+    });
+    const service = loadService(fakeFs);
+    await service.initialize();
+
+    const result = await service.reorderSourceRoots([thirdId, SOURCE_ID, SECOND_SOURCE_ID]);
+
+    const expected = [thirdId, SOURCE_ID, SECOND_SOURCE_ID];
+    expect(result.sources.map((source) => source.sourceId)).toEqual(expected);
+    expect((await service.listSourceRoots()).map((source) => source.sourceId)).toEqual(expected);
+    expect(fakeFs.getRegistryDocument().sources.map((source) => source.sourceId)).toEqual(expected);
+  });
+
+  test('rejects a reorder list that is not a permutation of current sources', async () => {
+    const fakeFs = createFakeFs({
+      initialRegistry: createSourceRootRegistryV1({
+        sources: [
+          createSourceRootV1(),
+          createSourceRootV1({ sourceId: SECOND_SOURCE_ID, label: '第二', rootPath: '/Photos/2' })
+        ]
+      }),
+      directories: ['/Photos', '/Photos/2']
+    });
+    const service = loadService(fakeFs);
+    await service.initialize();
+
+    await expect(service.reorderSourceRoots([SECOND_SOURCE_ID]))
+      .rejects.toMatchObject({ code: 'INVALID_SOURCE_ROOT_REQUEST' });
+    await expect(service.reorderSourceRoots([SECOND_SOURCE_ID, SECOND_SOURCE_ID]))
+      .rejects.toMatchObject({ code: 'INVALID_SOURCE_ROOT_REQUEST' });
+    await expect(service.reorderSourceRoots(['src_44444444-4444-4444-8444-444444444444', SOURCE_ID]))
+      .rejects.toMatchObject({ code: 'INVALID_SOURCE_ROOT_REQUEST' });
+  });
+
   test('reloads a valid versioned registry', async () => {
     const document = createSourceRootRegistryV1();
     const fakeFs = createFakeFs({ initialRegistry: document });

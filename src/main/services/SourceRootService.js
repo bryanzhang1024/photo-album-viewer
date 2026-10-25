@@ -387,6 +387,36 @@ function createSourceRootService({
     });
   }
 
+  async function reorderSourceRoots(orderedSourceIds) {
+    return enqueueMutation(async () => {
+      await requireReady();
+      if (!Array.isArray(orderedSourceIds)) {
+        throw createServiceError(
+          'INVALID_SOURCE_ROOT_REQUEST',
+          'A list of sourceIds is required to reorder SourceRoots'
+        );
+      }
+      const currentIds = sources.map((source) => source.sourceId);
+      if (orderedSourceIds.length !== currentIds.length) {
+        throw createServiceError('INVALID_SOURCE_ROOT_REQUEST', 'The reorder list must include every source');
+      }
+      const seen = new Set();
+      const byId = new Map(sources.map((source) => [source.sourceId.toLowerCase(), source]));
+      const nextSources = [];
+      for (const rawId of orderedSourceIds) {
+        const id = typeof rawId === 'string' ? rawId.toLowerCase() : '';
+        if (!byId.has(id) || seen.has(id)) {
+          throw createServiceError('INVALID_SOURCE_ROOT_REQUEST', 'The reorder list must be a permutation of current sources');
+        }
+        seen.add(id);
+        nextSources.push(byId.get(id));
+      }
+      await persistSources(nextSources.map((source) => cloneSource(source)));
+      sources = cloneSources(nextSources);
+      return { sources: cloneSources(sources) };
+    });
+  }
+
   async function listSourceRoots() {
     await requireReady();
     return cloneSources(sources);
@@ -427,6 +457,7 @@ function createSourceRootService({
     initialize,
     listSourceRoots,
     removeSourceRoot,
+    reorderSourceRoots,
     resolveNavigationTarget,
     saveSourceRoot
   };

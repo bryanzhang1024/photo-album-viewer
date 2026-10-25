@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import Sidebar from '../../src/ui/shell/Sidebar';
@@ -51,5 +51,36 @@ describe('侧栏 · 照片来源', () => {
   test('来源加载失败时把错误显示在侧栏', () => {
     render(<Sidebar sources={[]} sourceError="加载照片来源失败" />);
     expect(screen.getByText('加载照片来源失败')).toBeInTheDocument();
+  });
+
+  test('拖动来源可以调整顺序，回调拿到新的完整 id 顺序', async () => {
+    const onReorderSource = jest.fn();
+    render(<Sidebar sources={SOURCES} onReorderSource={onReorderSource} />);
+
+    const rowOf = (label) => screen.getByText(label).closest('.sidebar-item-row');
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: jest.fn(),
+      getData: jest.fn(() => 'src_collection_1tb')
+    };
+
+    fireEvent.dragStart(rowOf('Collection · 1TB'), { dataTransfer });
+    await waitFor(() => expect(rowOf('Collection · 1TB').className).toContain('dragging'));
+    fireEvent.dragOver(rowOf('300-Cosplayer'), { dataTransfer, clientY: 0 });
+    fireEvent.drop(rowOf('300-Cosplayer'), { dataTransfer, clientY: 0 });
+
+    expect(onReorderSource).toHaveBeenCalledTimes(1);
+    expect(onReorderSource.mock.calls[0][0]).toEqual([
+      'src_collection_1tb',
+      'src_300',
+      'src_collection'
+    ]);
+  });
+
+  test('没有传入排序回调时来源不可拖动', () => {
+    render(<Sidebar sources={SOURCES} />);
+    const row = screen.getByText('300-Cosplayer').closest('.sidebar-item-row');
+    expect(row.getAttribute('draggable')).toBe('false');
   });
 });

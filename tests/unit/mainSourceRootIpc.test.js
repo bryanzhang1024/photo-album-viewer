@@ -70,6 +70,34 @@ describe('SourceRoot V1 IPC', () => {
     expect(electron.ipcMain._handlers.has(CHANNELS.SAVE_SOURCE_ROOT_V1)).toBe(true);
   });
 
+  test('reorders SourceRoots and returns the new order', async () => {
+    const sources = [createSourceRootV1()];
+    const id = sources[0].sourceId;
+    const reorderSourceRoots = jest.fn().mockResolvedValue({ sources });
+    const { electron } = setupMainProcess({ sourceRootService: { reorderSourceRoots } });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.REORDER_SOURCE_ROOTS_V1, {
+      contractVersion: 1,
+      sourceIds: [id]
+    });
+
+    expect(result).toEqual({ contractVersion: 1, ok: true, data: { sources } });
+    expect(reorderSourceRoots).toHaveBeenCalledWith([id]);
+  });
+
+  test('rejects a malformed reorder request without touching the registry', async () => {
+    const reorderSourceRoots = jest.fn();
+    const { electron } = setupMainProcess({ sourceRootService: { reorderSourceRoots } });
+
+    const result = await electron.ipcMain.invoke(CHANNELS.REORDER_SOURCE_ROOTS_V1, {
+      contractVersion: 1,
+      sourceIds: 'not-an-array'
+    });
+
+    expect(result.ok).toBe(false);
+    expect(reorderSourceRoots).not.toHaveBeenCalled();
+  });
+
   test('loads SourceRoots in a strict success envelope', async () => {
     const sources = [createSourceRootV1()];
     const listSourceRoots = jest.fn().mockResolvedValue(sources);

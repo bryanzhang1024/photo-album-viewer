@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   FolderIcon, HeartIcon, CollectionsIcon, GridIcon, PersonIcon, PlusIcon
 } from '../icons';
@@ -46,8 +46,59 @@ export default function Sidebar({
   sourceError = '',
   active = 'folder',
   onNavigate,
-  onRequestRemoveSource
+  onRequestRemoveSource,
+  onReorderSource
 }) {
+  const [draggingId, setDraggingId] = useState('');
+  const [dropHint, setDropHint] = useState(null);
+  const sourceIds = sources.map((source) => source.sourceId);
+
+  const startDrag = (source, event) => {
+    if (!onReorderSource) return;
+    setDraggingId(source.sourceId);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', source.sourceId);
+    }
+  };
+
+  const dragOverRow = (index, event) => {
+    if (!draggingId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    setDropHint({ index, after });
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  };
+
+  const dropOnRow = (index, event) => {
+    if (!draggingId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    const from = sourceIds.indexOf(draggingId);
+    const target = index + (after ? 1 : 0);
+    setDraggingId('');
+    setDropHint(null);
+    if (from < 0) return;
+    const remaining = sourceIds.filter((id) => id !== draggingId);
+    const insertAt = from < target ? target - 1 : target;
+    const nextIds = [
+      ...remaining.slice(0, insertAt),
+      draggingId,
+      ...remaining.slice(insertAt)
+    ];
+    if (nextIds.join('\n') === sourceIds.join('\n')) return;
+    onReorderSource?.(nextIds);
+  };
+
+  const endDrag = () => {
+    setDraggingId('');
+    setDropHint(null);
+  };
+
   return (
     <aside className="sidebar" data-collapsed={collapsed ? 'true' : 'false'} aria-label="侧栏">
       <div className="sidebar-scroll">
@@ -73,8 +124,17 @@ export default function Sidebar({
         ))}
 
         <div className="sidebar-group">照片来源</div>
-        {sources.map((source) => (
-          <div key={source.sourceId} className="sidebar-item-row">
+        {sources.map((source, index) => (
+          <div
+            key={source.sourceId}
+            className={`sidebar-item-row${draggingId === source.sourceId ? ' dragging' : ''}${dropHint?.index === index ? (dropHint.after ? ' drop-after' : ' drop-before') : ''}`}
+            draggable={Boolean(onReorderSource)}
+            onDragStart={(event) => startDrag(source, event)}
+            onDragOver={(event) => dragOverRow(index, event)}
+            onDrop={(event) => dropOnRow(index, event)}
+            onDragEnd={endDrag}
+            title={onReorderSource ? '上下拖动可调整来源顺序' : undefined}
+          >
             <button
               className="sidebar-item"
               type="button"
@@ -88,6 +148,7 @@ export default function Sidebar({
             <button
               className="sidebar-item-remove"
               type="button"
+              draggable={false}
               aria-label={`移除来源 ${sourceLabel(source, sources)}`}
               title="移除来源（不会删除磁盘文件）"
               onClick={(event) => onRequestRemoveSource?.(source, event.currentTarget)}
