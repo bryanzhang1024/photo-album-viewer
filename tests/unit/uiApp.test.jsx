@@ -118,4 +118,31 @@ describe('App · 标签页与照片来源', () => {
     expect(screen.getByRole('button', { name: '后退' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '前进' })).toBeDisabled();
   });
+
+  test('⌘, 打开设置、⌘W 关闭标签、⌘↑ 返回上一级都由全局快捷键接管', async () => {
+    const { calls } = installElectronMock();
+    render(<App />);
+    await screen.findByRole('tablist');
+
+    await userEvent.keyboard('{Meta>},{/Meta}');
+    expect(calls.some(([channel]) => channel === 'open-settings-window')).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: '新建标签页' }));
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    await userEvent.keyboard('{Meta>}w{/Meta}');
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+  });
+
+  test('输入框里按快捷键不触发导航', async () => {
+    installElectronMock();
+    render(<App />);
+    await screen.findByRole('tablist');
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    await userEvent.keyboard('{Meta>}w{/Meta}');
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    input.remove();
+  });
 });

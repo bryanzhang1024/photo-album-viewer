@@ -202,16 +202,40 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     }
   };
 
+  const focusSearch = () => {
+    if (compactHeader) setSearchOpen(true);
+    requestAnimationFrame(() => {
+      const input = document.querySelector('.search-bar input, .cos-search input');
+      if (input) {
+        input.focus();
+        if (typeof input.select === 'function') input.select();
+      }
+    });
+  };
+
   useEffect(() => {
-    if (viewMode !== 'list') return undefined;
+    const onFocusSearch = () => focusSearch();
+    window.addEventListener('pav:focus-search', onFocusSearch);
+    return () => window.removeEventListener('pav:focus-search', onFocusSearch);
+  }, [compactHeader]);
+
+  useEffect(() => {
     const onKey = (event) => {
       if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'f') {
         event.preventDefault();
-        searchRef.current?.querySelector('input')?.focus();
+        focusSearch();
         return;
       }
-      if (event.key === 'Escape' && searchQuery) {
-        setSearchQuery('');
+      if (event.key === 'Escape') {
+        // 查看器自己处理 Esc（含先关信息面板），这里跳过。
+        if (viewerIndex !== null) return;
+        if (searchQuery) {
+          setSearchQuery('');
+          return;
+        }
+        const parent = segments.slice(0, -1).join('/');
+        if (parent) onOpenFolder(parent, { siblings: null });
+        else onOpenRoots?.();
         return;
       }
       if (event.key !== 'Enter' || !selectedKey || viewerIndex !== null) return;
@@ -220,7 +244,7 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [viewMode, selectedKey, viewerIndex, sorted, searchQuery]);
+  }, [selectedKey, viewerIndex, sorted, searchQuery, segments, onOpenFolder, onOpenRoots]);
 
   const controls = (
     <>

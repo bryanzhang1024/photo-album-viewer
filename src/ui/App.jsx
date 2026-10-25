@@ -17,6 +17,7 @@ import CosSetListPage from './features/cos/CosSetListPage';
 import CosSetAlbumPage from './features/cos/CosSetAlbumPage';
 import FavoritesPage from './features/favorites/FavoritesPage';
 import { loadSettings, applyTheme } from './data/settings';
+import { invoke, CHANNELS } from './data/ipc';
 
 /**
  * 4.1 外壳、导航与标签页。
@@ -242,6 +243,83 @@ export default function App() {
       navigate({ kind: 'folder', sourceId: key, relativePath: '' });
     }
   };
+
+  // 全局快捷键：输入框内不拦截；查看器打开时只让查看器处理方向键与 Esc。
+  useEffect(() => {
+    const isEditable = (target) => {
+      if (!target) return false;
+      const tag = target.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+    };
+    const viewerOpen = () => Boolean(document.querySelector('[role="dialog"]'));
+    const goUp = () => {
+      if (location.kind !== 'folder') return;
+      const segments = String(location.relativePath || '').split('/').filter(Boolean);
+      if (segments.length === 0) {
+        navigate({ kind: 'roots' });
+        return;
+      }
+      navigate({
+        kind: 'folder',
+        sourceId: location.sourceId,
+        relativePath: segments.slice(0, -1).join('/'),
+        siblings: null
+      });
+    };
+    const cycleTab = (step) => {
+      const index = tabs.findIndex((tab) => tab.id === activeTabId);
+      if (index < 0) return;
+      const next = (index + step + tabs.length) % tabs.length;
+      setActiveTabId(tabs[next].id);
+    };
+    const onKey = (event) => {
+      if (isEditable(event.target)) return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key;
+      if (key === '{' || (key === '[' && event.shiftKey)) {
+        event.preventDefault();
+        cycleTab(-1);
+        return;
+      }
+      if (key === '}' || (key === ']' && event.shiftKey)) {
+        event.preventDefault();
+        cycleTab(1);
+        return;
+      }
+      if (key === '[') {
+        event.preventDefault();
+        goBack();
+        return;
+      }
+      if (key === ']') {
+        event.preventDefault();
+        goForward();
+        return;
+      }
+      if (key === 'ArrowUp') {
+        if (viewerOpen()) return;
+        event.preventDefault();
+        goUp();
+        return;
+      }
+      if (key.toLowerCase() === 'f') {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('pav:focus-search'));
+        return;
+      }
+      if (key === ',') {
+        event.preventDefault();
+        invoke(CHANNELS.OPEN_SETTINGS_WINDOW).catch(() => {});
+        return;
+      }
+      if (key.toLowerCase() === 'w') {
+        event.preventDefault();
+        closeTab(activeTabId);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeTabId, tabs, location, activeTab.historyIndex]);
 
   const title = titleFor(location, sources);
 

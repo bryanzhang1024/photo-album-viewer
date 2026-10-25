@@ -68,6 +68,10 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     const onKey = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        if (infoOpen) {
+          setInfoOpen(false);
+          return;
+        }
         close();
       } else if (event.key === 'ArrowRight') {
         go(1);
@@ -83,13 +87,18 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [close, go]);
+  }, [close, go, infoOpen]);
 
+  // 旧版双模：普通滚轮翻页，⌘/Ctrl+滚轮缩放。
   const onWheel = (event) => {
-    if (event.ctrlKey || event.metaKey) return;
     event.preventDefault();
-    const factor = event.deltaY > 0 ? 0.9 : 1.1;
-    setZoom((value) => Math.min(8, Math.max(0.2, value * factor)));
+    if (event.ctrlKey || event.metaKey) {
+      const factor = event.deltaY > 0 ? 0.9 : 1.1;
+      setZoom((value) => Math.min(8, Math.max(0.2, value * factor)));
+      return;
+    }
+    if (event.deltaY > 0) go(1);
+    else if (event.deltaY < 0) go(-1);
   };
 
   const onMouseDown = (event) => {
@@ -139,7 +148,15 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`;
 
   return (
-    <div className="viewer" role="dialog" aria-label="大图查看器">
+    <div
+      className="viewer"
+      role="dialog"
+      aria-label="大图查看器"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        close();
+      }}
+    >
       <div className="viewer-top">
         <button className="icon-button" type="button" aria-label="关闭" onClick={close}><ChevronLeftIcon /></button>
         <div className="viewer-title">
