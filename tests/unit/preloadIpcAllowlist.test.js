@@ -114,9 +114,9 @@ describe('preload IPC allowlist', () => {
       const { api, electron } = loadPreload({ useFallback });
       const listener = jest.fn();
       expect(() => api.on(CHANNELS.COS_INDEX_PROGRESS, listener)).not.toThrow();
-      expect(electron.ipcRenderer.on).toHaveBeenCalledWith('cos-index-progress', listener);
+      expect(electron.ipcRenderer.on).toHaveBeenCalledWith('cos-index-progress', expect.any(Function));
       expect(() => api.on(CHANNELS.COS_LIBRARY_UPDATED, listener)).not.toThrow();
-      expect(electron.ipcRenderer.on).toHaveBeenCalledWith('cos-library-updated', listener);
+      expect(electron.ipcRenderer.on).toHaveBeenCalledWith('cos-library-updated', expect.any(Function));
     }
   });
 });

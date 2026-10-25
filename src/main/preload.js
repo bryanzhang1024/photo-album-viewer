@@ -148,14 +148,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (typeof listener !== 'function') {
       throw new Error('IPC listener must be a function');
     }
-    ipcRenderer.on(channel, listener);
+    // 只把主进程传的参数交给回调，不把 IpcRendererEvent 暴露出去；
+    // 返回取消订阅函数，调用方不用自己保存包装后的引用。
+    const wrapped = (_event, ...args) => listener(...args);
+    ipcRenderer.on(channel, wrapped);
+    return () => ipcRenderer.removeListener(channel, wrapped);
   },
   once(channel, listener) {
     ensureListenChannel(channel);
     if (typeof listener !== 'function') {
       throw new Error('IPC listener must be a function');
     }
-    ipcRenderer.once(channel, listener);
+    const wrapped = (_event, ...args) => listener(...args);
+    ipcRenderer.once(channel, wrapped);
   },
   removeListener(channel, listener) {
     ensureListenChannel(channel);

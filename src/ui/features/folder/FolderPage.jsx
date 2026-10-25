@@ -346,13 +346,14 @@ export default function FolderPage({
       }
       if (!plain) return;
 
-      if (event.key === 'ArrowDown') {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
         event.preventDefault();
         moveSelection(1);
         return;
       }
-      if (event.key === 'ArrowUp') {
+      if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
         event.preventDefault();
+        // 列表里左右与上下等价；网格里左右是一行内的移动
         moveSelection(-1);
         return;
       }
@@ -368,6 +369,14 @@ export default function FolderPage({
       }
       if (event.key === 'Enter') {
         if (selectedKey) openByKey(selectedKey);
+        return;
+      }
+      // R：随机打开当前文件夹里的一张图（网格/列表都可用）
+      if (event.key.toLowerCase() === 'r') {
+        if (images.length > 0) {
+          event.preventDefault();
+          setViewerIndex(Math.floor(Math.random() * images.length));
+        }
         return;
       }
       if (viewMode !== 'list') return;
@@ -404,7 +413,7 @@ export default function FolderPage({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [
-    selectedKey, viewerIndex, sorted, filtered, filteredOtherFiles, viewMode,
+    selectedKey, viewerIndex, sorted, filtered, filteredOtherFiles, viewMode, images,
     searchQuery, segments, onOpenFolder, onOpenRoots, onSearchChange,
     source.rootPath, toggleItemFavorite
   ]);
