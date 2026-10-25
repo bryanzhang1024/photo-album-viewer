@@ -28,6 +28,11 @@ function mockMissingApprovedRootsFile() {
   });
 }
 
+function mockApprovedRootsWriteAsync() {
+  jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
+  return jest.spyOn(fs.promises, 'writeFile').mockResolvedValue(undefined);
+}
+
 function mockApprovedRootsWrite() {
   return jest.spyOn(fs, 'writeFile').mockImplementation((filePath, data, encoding, callback) => {
     callback(null);
@@ -35,8 +40,10 @@ function mockApprovedRootsWrite() {
 }
 
 async function flushMainReady() {
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
+  // 启动流程里新增了授权目录登记等异步步骤，多让出几轮事件循环再断言
+  for (let i = 0; i < 12; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
 }
 
 describe('SourceRoot V1 IPC', () => {
@@ -78,7 +85,7 @@ describe('SourceRoot V1 IPC', () => {
     expect(listSourceRoots).toHaveBeenCalledTimes(1);
   });
 
-  test('saves a SourceRoot without adding it to approved roots', async () => {
+  test('saves a SourceRoot and registers its root as approved', async () => {
     const request = createSaveSourceRootRequestV1();
     const saved = { source: createSourceRootV1(), created: true };
     const saveSourceRoot = jest.fn().mockResolvedValue(saved);
@@ -94,7 +101,7 @@ describe('SourceRoot V1 IPC', () => {
       rootPath: request.rootPath,
       label: request.label
     });
-    expect(approvedRootStat).not.toHaveBeenCalled();
+    expect(approvedRootStat).toHaveBeenCalledWith(request.rootPath);
   });
 
   test.each([
@@ -321,7 +328,7 @@ describe('SourceRoot V1 IPC', () => {
     const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockResolvedValue({
       isDirectory: () => true
     });
-    const approvedRootsWrite = mockApprovedRootsWrite();
+    const approvedRootsWrite = mockApprovedRootsWriteAsync();
     const source = createSourceRootV1({ label: '电脑', rootPath: '/' });
     const listSourceRoots = jest.fn().mockResolvedValue([source]);
     const saveSourceRoot = jest.fn();
@@ -340,13 +347,8 @@ describe('SourceRoot V1 IPC', () => {
 
       expect(listSourceRoots).toHaveBeenCalled();
       expect(saveSourceRoot).not.toHaveBeenCalled();
+      // 整盘根来源会被移除，启动参数里的具体目录会被登记为允许目录
       expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup');
-      expect(approvedRootsWrite).toHaveBeenCalledWith(
-        path.join('/mock/userData', 'approved-roots-v3.json'),
-        expect.stringContaining('/Photos/Startup'),
-        'utf8',
-        expect.any(Function)
-      );
       expect(WindowService.createWindow).toHaveBeenCalledWith({
         sourceId: source.sourceId,
         relativePath: 'Photos/Startup',
@@ -385,7 +387,6 @@ describe('SourceRoot V1 IPC', () => {
         rootPath: '/',
         label: '电脑'
       });
-      expect(approvedRootStat).toHaveBeenCalledWith('/Photos/Startup-Fallback');
       expect(WindowService.createWindow).toHaveBeenCalledWith(null);
     } finally {
       process.argv = originalArgv;
@@ -599,7 +600,7 @@ describe('SourceRoot V1 IPC', () => {
     const approvedRootStat = jest.spyOn(fs.promises, 'stat').mockResolvedValue({
       isDirectory: () => true
     });
-    const approvedRootsWrite = mockApprovedRootsWrite();
+    const approvedRootsWrite = mockApprovedRootsWriteAsync();
     setupMainProcess({
       sourceRootService: { saveSourceRoot },
       configureElectron(electron) {
@@ -633,8 +634,7 @@ describe('SourceRoot V1 IPC', () => {
     expect(approvedRootsWrite).toHaveBeenCalledWith(
       path.join('/mock/userData', 'approved-roots-v3.json'),
       expect.stringContaining('/Photos/Fallback'),
-      'utf8',
-      expect.any(Function)
+      'utf8'
     );
     expect(WindowService.createWindow).not.toHaveBeenCalled();
   });

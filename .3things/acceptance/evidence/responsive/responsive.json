@@ -1,0 +1,90 @@
+{
+  "at": "2026-10-25T07:54:14.041Z",
+  "failed": false,
+  "results": [
+    {
+      "width": 1440,
+      "height": 900,
+      "label": "1440 宽屏",
+      "innerWidth": 1440,
+      "innerHeight": 900,
+      "overflowX": 0,
+      "columns": 7,
+      "tabbarScrollable": false,
+      "densityVisible": true,
+      "searchInput": true,
+      "statusShortcutHidden": false,
+      "file": ".3things/acceptance/evidence/responsive/w1440x900.png",
+      "ok": true
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "label": "1280 常规",
+      "innerWidth": 1280,
+      "innerHeight": 800,
+      "overflowX": 0,
+      "columns": 6,
+      "tabbarScrollable": false,
+      "densityVisible": true,
+      "searchInput": true,
+      "statusShortcutHidden": false,
+      "file": ".3things/acceptance/evidence/responsive/w1280x800.png",
+      "ok": true
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "label": "1024 中窗",
+      "innerWidth": 1024,
+      "innerHeight": 768,
+      "overflowX": 0,
+      "columns": 6,
+      "tabbarScrollable": false,
+      "densityVisible": false,
+      "searchInput": true,
+      "statusShortcutHidden": false,
+      "file": ".3things/acceptance/evidence/responsive/w1024x768.png",
+      "ok": true
+    },
+    {
+      "width": 800,
+      "height": 600,
+      "label": "800 窄窗",
+      "innerWidth": 800,
+      "innerHeight": 600,
+      "overflowX": 0,
+      "columns": 4,
+      "tabbarScrollable": false,
+      "densityVisible": false,
+      "searchInput": false,
+      "statusShortcutHidden": false,
+      "file": ".3things/acceptance/evidence/responsive/w800x600.png",
+      "ok": true
+    },
+    {
+      "width": 720,
+      "height": 480,
+      "label": "720×480 最小",
+      "innerWidth": 720,
+      "innerHeight": 480,
+      "overflowX": 0,
+      "columns": 3,
+      "tabbarScrollable": false,
+      "densityVisible": false,
+      "searchInput": false,
+      "statusShortcutHidden": true,
+      "file": ".3things/acceptance/evidence/responsive/w720x480.png",
+      "ok": true
+    },
+    {
+      "check": "list-hides-child-column",
+      "columns": [
+        "名称↑",
+        "图片 / 类型",
+        "修改日期"
+      ],
+      "ok": true
+    }
+  ]
+}

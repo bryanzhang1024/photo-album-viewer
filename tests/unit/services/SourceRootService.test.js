@@ -510,4 +510,70 @@ describe('SourceRootService', () => {
       sourceId: SECOND_SOURCE_ID
     }))).rejects.toMatchObject({ code: 'SOURCE_ROOT_NOT_FOUND' });
   });
+
+describe('SourceRootService 移除照片来源', () => {
+  function registry() {
+    return createSourceRootRegistryV1({
+      sources: [
+        createSourceRootV1(),
+        createSourceRootV1({ sourceId: SECOND_SOURCE_ID, rootPath: '/Other', label: 'Other' })
+      ]
+    });
+  }
+
+  test('移除一条来源并原子持久化，磁盘目录不受影响', async () => {
+    const fakeFs = createFakeFs({ directories: ['/Photos', '/Other'], initialRegistry: registry() });
+    const service = loadService(fakeFs);
+    await service.initialize();
+
+    const result = await service.removeSourceRoot(SOURCE_ID);
+
+    expect(result.removed).toBe(true);
+    expect(result.source.sourceId).toBe(SOURCE_ID);
+    expect(await service.listSourceRoots()).toHaveLength(1);
+    expect(await service.listSourceRoots()).toMatchObject([{ sourceId: SECOND_SOURCE_ID }]);
+    // 只写注册表，不删目录：fakeFs 的目录集合保持原样
+    expect(fakeFs.files.get(REGISTRY_PATH)).toContain(SECOND_SOURCE_ID);
+    expect(fakeFs.files.get(REGISTRY_PATH)).not.toContain(SOURCE_ID);
+  });
+
+  test('sourceId 大小写不敏感', async () => {
+    const fakeFs = createFakeFs({ directories: ['/Photos', '/Other'], initialRegistry: registry() });
+    const service = loadService(fakeFs);
+    await service.initialize();
+
+    await expect(service.removeSourceRoot(SOURCE_ID.toUpperCase())).resolves.toMatchObject({
+      removed: true
+    });
+    expect(await service.listSourceRoots()).toHaveLength(1);
+  });
+
+  test('不存在的来源报 SOURCE_ROOT_NOT_FOUND 且不写注册表', async () => {
+    const fakeFs = createFakeFs({ directories: ['/Photos', '/Other'], initialRegistry: registry() });
+    const service = loadService(fakeFs);
+    await service.initialize();
+    const before = fakeFs.files.get(REGISTRY_PATH);
+
+    await expect(service.removeSourceRoot('src_missing')).rejects.toMatchObject({
+      code: 'SOURCE_ROOT_NOT_FOUND'
+    });
+    expect(fakeFs.files.get(REGISTRY_PATH)).toBe(before);
+    expect(writeTargets(fakeFs)).toEqual([]);
+  });
+
+  test('非法 sourceId 报 INVALID_SOURCE_ROOT_REQUEST', async () => {
+    const fakeFs = createFakeFs({ directories: ['/Photos', '/Other'], initialRegistry: registry() });
+    const service = loadService(fakeFs);
+    await service.initialize();
+
+    await expect(service.removeSourceRoot('')).rejects.toMatchObject({
+      code: 'INVALID_SOURCE_ROOT_REQUEST'
+    });
+    await expect(service.removeSourceRoot(null)).rejects.toMatchObject({
+      code: 'INVALID_SOURCE_ROOT_REQUEST'
+    });
+    expect(await service.listSourceRoots()).toHaveLength(2);
+  });
+});
+
 });

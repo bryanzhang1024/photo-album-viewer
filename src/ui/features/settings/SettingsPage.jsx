@@ -129,14 +129,14 @@ export default function SettingsPage() {
         {tab === 1 ? (
           <>
             <div className="set-title">文件夹浏览</div>
-            <Row label="排序方式" hint="文件夹始终排在前面">
+            <Row label="排序方式" hint="文件夹置顶时文件夹始终在前；混排只在按名称/日期排序时生效">
               <select
                 className="ctrl-select"
                 value={settings.homeSortGrouping}
                 onChange={(event) => update('homeSortGrouping', event.target.value)}
               >
-                <option value="mixed">名称</option>
-                <option value="grouped">按类型分组</option>
+                <option value="grouped">文件夹置顶</option>
+                <option value="mixed">按名称混排</option>
               </select>
             </Row>
             <Row label="封面">

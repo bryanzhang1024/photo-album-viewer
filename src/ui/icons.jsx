@@ -49,12 +49,6 @@ export const ListIcon = () => (
   </svg>
 );
 
-export const SortIcon = () => (
-  <svg {...base} width={15} height={15}>
-    <path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" />
-  </svg>
-);
-
 export const ShuffleIcon = () => (
   <svg {...base} width={15} height={15}>
     <path d="M2.2 4.4h2.6l6 7.2h2.6M11.2 3.4l2.2 1-2.2 1M2.2 11.6h2.6l2-2.4M11.2 10.6l2.2 1-2.2 1" />
@@ -195,5 +189,31 @@ export const FileIcon = () => (
   <svg {...base} width={15} height={15}>
     <path d="M3.4 2.5h6l3.2 3.2v7.8H3.4z" />
     <path d="M9.2 2.6v3.2h3.2" />
+  </svg>
+);
+
+export const SortAscIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M4.6 13V3M2.2 5.4 4.6 3l2.4 2.4M11.4 13V3M9 5.4 11.4 3l2.4 2.4" />
+  </svg>
+);
+
+export const SortDescIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 3v10M9 10.6l2.4 2.4 2.4-2.4" />
+  </svg>
+);
+
+export const CopyIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <rect x="5.2" y="5.2" width="8.6" height="8.6" rx="1.6" />
+    <path d="M3.6 10.4V3.9c0-.7.5-1.3 1.2-1.3h6.5" />
+  </svg>
+);
+
+export const RevealIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M2.2 4.4h4l1.4 1.6h5.2v7.2H2.2z" />
+    <path d="M8.6 8.4v3.2M7 10l1.6 1.6L10.2 10" />
   </svg>
 );

@@ -80,3 +80,23 @@ if (typeof window !== 'undefined') {
 }
 
 global.electronMock = electronMock;
+
+
+// jsdom 没有 IntersectionObserver / ResizeObserver，列表分页与虚拟滚动都要用
+if (typeof window !== 'undefined') {
+  window.IntersectionObserver = window.IntersectionObserver || class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  window.ResizeObserver = window.ResizeObserver || class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+
+// 仅测试用：IPC 契约测试里的路径是假的（/Photos 之类），
+// 让授权服务在测试环境把根目录也当成已授权；生产不读这个变量。
+process.env.PAV_TEST_APPROVED_ROOTS = process.env.PAV_TEST_APPROVED_ROOTS || '/';

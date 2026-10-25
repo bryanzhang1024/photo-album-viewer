@@ -39,8 +39,18 @@ describe('新界面数据辅助函数', () => {
     setFolderView('src-a', 'album/one', 'grid');
     expect(getFolderView('src-a', '')).toBe('list');
     expect(getFolderView('src-a', 'album/one')).toBe('grid');
+
     setFolderSort('src-a', '', 'mtimeMs');
-    expect(getFolderSort('src-a', '')).toBe('mtimeMs');
-    expect(getFolderSort('src-a', 'album/one')).toBe('name');
+    expect(getFolderSort('src-a', '')).toEqual({ field: 'mtimeMs', direction: 'desc' });
+    expect(getFolderSort('src-a', 'album/one')).toEqual({ field: 'name', direction: 'asc' });
+
+    // 方向要跟着字段走，并且能单独记下来
+    setFolderSort('src-a', '', { field: 'name', direction: 'desc' });
+    expect(getFolderSort('src-a', '')).toEqual({ field: 'name', direction: 'desc' });
+  });
+
+  test('兼容只存字段名的旧排序值', () => {
+    window.localStorage.setItem('pav.sort.v1:src-a:legacy', 'mtimeMs');
+    expect(getFolderSort('src-a', 'legacy')).toEqual({ field: 'mtimeMs', direction: 'desc' });
   });
 });

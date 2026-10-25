@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
-import useBreakpoint from '../../hooks/useBreakpoint';
+import useBreakpoint, { isNarrowBreakpoint } from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import Thumb from '../../components/Thumb';
 import ImageViewer from '../../components/ImageViewer';
@@ -8,7 +8,7 @@ import { HeartIcon, GridIcon, ListIcon, FolderIcon } from '../../icons';
 import { loadFavorites, saveFavorites } from '../../data/favorites';
 import './favorites.css';
 
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索　⌘, 设置　⌘W 关闭标签';
+const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标签';
 
 function coverSamples(item) {
   if (Array.isArray(item.previewSamples) && item.previewSamples.length > 0) return item.previewSamples;
@@ -34,11 +34,17 @@ function Collage({ samples }) {
 
 export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
   const breakpoint = useBreakpoint();
-  const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
+  const compactHeader = isNarrowBreakpoint(breakpoint);
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('folders');
   const [viewMode, setViewMode] = useState('grid');
-  const [sortKey, setSortKey] = useState('addedAt');
+  const [sortKey, setSortKey] = useState(() => window.localStorage.getItem('pav.favsort.field') || 'addedAt');
+  const [sortDir, setSortDir] = useState(() => window.localStorage.getItem('pav.favsort.dir') || 'desc');
+
+  useEffect(() => {
+    window.localStorage.setItem('pav.favsort.field', sortKey);
+    window.localStorage.setItem('pav.favsort.dir', sortDir);
+  }, [sortKey, sortDir]);
   const [error, setError] = useState('');
   const [viewerIndex, setViewerIndex] = useState(null);
 
@@ -52,25 +58,38 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
     load();
   }, []);
 
+  const compare = (left, right) => {
+    const sign = sortDir === 'asc' ? 1 : -1;
+    if (sortKey === 'name') {
+      return sign * String(left.name ?? '').localeCompare(String(right.name ?? ''), 'zh-Hans-CN', { numeric: true });
+    }
+    if (sortKey === 'imageCount') {
+      return sign * ((Number(left.imageCount) || 0) - (Number(right.imageCount) || 0));
+    }
+    return sign * ((Number(left.addedAt) || 0) - (Number(right.addedAt) || 0));
+  };
+
   const folders = useMemo(() => {
-    const items = [
-      ...(data?.folders || []).map((item) => ({ ...item, favKind: 'folder' })),
-      ...(data?.albums || []).map((item) => ({ ...item, favKind: 'album' }))
-    ];
-    return items.sort((left, right) => sortKey === 'name'
-      ? String(left.name).localeCompare(String(right.name), 'zh-Hans-CN', { numeric: true })
-      : (right.addedAt || 0) - (left.addedAt || 0));
-  }, [data, sortKey]);
+    // loadFavorites 已按路径合并 folders/albums，这里不再分类，kind 只用于展示
+    const items = [...(data?.folders || []), ...(data?.albums || [])];
+    return items.sort(compare);
+  }, [data, sortKey, sortDir]);
 
-  const images = useMemo(() => (data?.images || []).slice().sort((left, right) => (
-    sortKey === 'name'
-      ? String(left.name).localeCompare(String(right.name), 'zh-Hans-CN', { numeric: true })
-      : (right.addedAt || 0) - (left.addedAt || 0)
-  )), [data, sortKey]);
+  const images = useMemo(
+    () => (data?.images || []).slice().sort(compare),
+    [data, sortKey, sortDir]
+  );
 
-  const removeItem = async (item, collection) => {
+  // 收藏记录可能落在 folders 或 albums（kind 只影响分组），取消时按 id/路径在三组里都删。
+  const removeItem = async (item) => {
     if (!data) return;
-    const next = { ...data, [collection]: (data[collection] || []).filter((entry) => entry.id !== item.id) };
+    const matches = (entry) => entry.id === item.id || entry.path === item.path;
+    const next = {
+      ...data,
+      folders: (data.folders || []).filter((entry) => !matches(entry)),
+      albums: (data.albums || []).filter((entry) => !matches(entry)),
+      images: (data.images || []).filter((entry) => !matches(entry))
+    };
     const saved = await saveFavorites(next, data.version).catch(() => false);
     if (saved) load();
   };
@@ -92,10 +111,21 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
         count={countText}
         controls={(
           <>
-            <select className="ctrl-select" value={sortKey} onChange={(event) => setSortKey(event.target.value)}>
+            <select className="ctrl-select" aria-label="排序" value={sortKey}
+              onChange={(event) => setSortKey(event.target.value)}>
               <option value="addedAt">收藏时间</option>
               <option value="name">名称</option>
+              <option value="imageCount">张数</option>
             </select>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label={sortDir === 'asc' ? '升序，点击改为降序' : '降序，点击改为升序'}
+              aria-pressed={sortDir === 'desc'}
+              onClick={() => setSortDir((value) => (value === 'asc' ? 'desc' : 'asc'))}
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
+            </button>
             <div className="view-toggle">
               <button type="button" aria-label="网格视图" className={viewMode === 'grid' ? 'on' : ''}
                 onClick={() => setViewMode('grid')}><GridIcon /></button>
@@ -121,7 +151,7 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
           folders.length === 0 ? (
             <div className="folder-state">
               <div>还没有收藏文件夹。</div>
-              <div className="fav-hint">在文件夹或相簿页点头心形按钮，就会出现在这里。</div>
+              <div className="fav-hint">在文件夹页点头心形按钮，或在卡片上点心形，就会出现在这里。</div>
             </div>
           ) : viewMode === 'grid' ? (
             <div className="fav-scroll">
@@ -132,15 +162,19 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                     <div className="fav-card" key={item.id}>
                       <button className={`fav-cover${broken ? ' broken' : ''}`} type="button"
                         onClick={() => openFolder(item)}>
-                        <Collage samples={coverSamples(item)} />
+                        <Collage
+                          samples={item.kind === 'photoSet' || item.kind === 'album'
+                            ? coverSamples(item).slice(0, 1)
+                            : coverSamples(item)}
+                        />
                         {broken ? <span className="fav-broken">位置不可用</span> : null}
                       </button>
                       <div className="fav-name">{item.name}</div>
                       <div className="fav-meta">
-                        {item.favKind === 'album' ? '相簿' : '文件夹'}
+                        文件夹
                         {Number.isFinite(item.imageCount) ? ` · ${item.imageCount} 张` : ''}
                         <button className="fav-heart" type="button" aria-label="取消收藏"
-                          onClick={() => removeItem(item, item.favKind === 'album' ? 'albums' : 'folders')}>
+                          onClick={() => removeItem(item)}>
                           <HeartIcon />
                         </button>
                       </div>
@@ -161,11 +195,11 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                       <FolderIcon />
                       <span>{item.name}</span>
                     </div>
-                    <div>{item.favKind === 'album' ? '相簿' : '文件夹'}</div>
+                    <div>文件夹</div>
                     <div>{Number.isFinite(item.imageCount) ? item.imageCount : '—'}</div>
                     <div>{item.addedAt ? new Date(item.addedAt).toLocaleDateString('zh-CN') : '—'}</div>
                     <button className="fav-heart" type="button" aria-label="取消收藏"
-                      onClick={() => removeItem(item, item.favKind === 'album' ? 'albums' : 'folders')}>
+                      onClick={() => removeItem(item)}>
                       <HeartIcon />
                     </button>
                   </div>
@@ -177,9 +211,9 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
           images.length === 0 ? (
             <div className="folder-state">
               <div>还没有收藏图片。</div>
-              <div className="fav-hint">在查看器里点心形按钮，就会出现在这里。</div>
+              <div className="fav-hint">在图片卡片或查看器里点心形按钮，就会出现在这里。</div>
             </div>
-          ) : (
+          ) : viewMode === 'grid' ? (
             <div className="fav-scroll">
               <div className="fav-grid photos">
                 {images.map((image, index) => (
@@ -191,10 +225,34 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                     <div className="fav-meta">
                       {image.albumName || '图片'}
                       <button className="fav-heart" type="button" aria-label="取消收藏"
-                        onClick={() => removeItem(image, 'images')}>
+                        onClick={() => removeItem(image)}>
                         <HeartIcon />
                       </button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="fav-scroll">
+              <div className="fav-list">
+                <div className="fav-list-head">
+                  <div>名称</div><div>类型</div><div>大小</div><div>收藏时间</div><div />
+                </div>
+                {images.map((image, index) => (
+                  <div className="fav-row" key={image.id || image.path}
+                    onDoubleClick={() => setViewerIndex(index)}>
+                    <div className="fav-row-name">
+                      {image.path ? <Thumb absolutePath={image.path} className="fav-row-thumb" /> : <FolderIcon />}
+                      <span>{image.name}</span>
+                    </div>
+                    <div>{image.albumName || '图片'}</div>
+                    <div>{Number.isFinite(image.size) && image.size > 0 ? `${Math.round(image.size / 1024)} KB` : '—'}</div>
+                    <div>{image.addedAt ? new Date(image.addedAt).toLocaleDateString('zh-CN') : '—'}</div>
+                    <button className="fav-heart" type="button" aria-label="取消收藏"
+                      onClick={() => removeItem(image)}>
+                      <HeartIcon />
+                    </button>
                   </div>
                 ))}
               </div>
