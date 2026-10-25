@@ -855,4 +855,17 @@ document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',(
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.getElementById(b.dataset.s).classList.add('on');
 }));
-</script></body></html>
+</script>
+<script>
+(function(){
+  var id=(location.hash||'').replace('#','');
+  if(id){var b=document.querySelector('.nav button[data-s="'+id+'"]'); if(b) b.click();}
+  if(location.search.indexOf('embed')>=0){
+    var n=document.querySelector('.nav'); if(n) n.style.display='none';
+    var p=document.querySelector('.page'); if(p){p.style.padding='0';p.style.gap='0';}
+    document.documentElement.style.overflow='hidden';
+    document.body.style.background='#111113';
+  }
+})();
+</script>
+</body></html>

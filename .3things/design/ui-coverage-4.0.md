@@ -2,7 +2,7 @@
 
 状态：准备阶段产物（2026-10-25），待用户审阅。不改代码。
 
-对照材料：`design/shell-spec-final.md`（19 条确认项）、`design/screens/`（31 张样张）、`design/shell-spec-status.md`（未画清单）、当前 3.13.1 代码。
+对照材料：`design/shell-spec-final.md`（19 条确认项）、`design/design-book.html`（37 屏实时设计稿）、`design/shell-spec-status.md`（未画清单）、当前 3.13.1 代码。
 
 ## 判定口径
 
