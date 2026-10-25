@@ -113,6 +113,30 @@ describe('P2 列表键盘导航与单键', () => {
     await waitFor(() => expect(calls).toContain('trash-image'));
   });
 
+  test('左右方向键也能移动选中；网格里同样可用', async () => {
+    install();
+    const { container } = renderList();
+    await screen.findByText('a-文件夹');
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(selectedName(container)).toBe('a-文件夹'));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(selectedName(container)).toBe('b.jpg'));
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    await waitFor(() => expect(selectedName(container)).toBe('a-文件夹'));
+  });
+
+  test('R 随机打开当前文件夹的一张图', async () => {
+    install();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    renderList();
+    await screen.findByText('a-文件夹');
+
+    fireEvent.keyDown(window, { key: 'r' });
+    await waitFor(() => expect(screen.getByRole('dialog', { name: '大图查看器' })).toBeInTheDocument());
+    Math.random.mockRestore();
+  });
+
   test('输入框内方向键/单键不触发列表导航', async () => {
     install();
     const { container } = renderList();
