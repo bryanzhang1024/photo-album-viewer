@@ -209,3 +209,17 @@ export const SortDescIcon = () => (
     <path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 3v10M9 10.6l2.4 2.4 2.4-2.4" />
   </svg>
 );
+
+export const CopyIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <rect x="5.2" y="5.2" width="8.6" height="8.6" rx="1.6" />
+    <path d="M3.6 10.4V3.9c0-.7.5-1.3 1.2-1.3h6.5" />
+  </svg>
+);
+
+export const RevealIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M2.2 4.4h4l1.4 1.6h5.2v7.2H2.2z" />
+    <path d="M8.6 8.4v3.2M7 10l1.6 1.6L10.2 10" />
+  </svg>
+);

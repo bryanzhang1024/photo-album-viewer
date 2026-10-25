@@ -64,4 +64,36 @@ describe('查看器 · Esc 分层与输入', () => {
     fireEvent.contextMenu(screen.getByRole('dialog', { name: '大图查看器' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  test('⌘C 复制文件、⌘⇧C 复制像素、在 Finder 中显示都调用对应通道', async () => {
+    const calls = [];
+    window.electronAPI = {
+      platform: 'darwin',
+      invoke: jest.fn(async (...args) => {
+        calls.push(args);
+        if (args[0] === 'load-favorites') return { folders: [], albums: [], images: [] };
+        return { success: true };
+      })
+    };
+    render(
+      <ImageViewer images={IMAGES} initialIndex={0} title="套图" albumPath="/A/a" albumName="套图" onClose={jest.fn()} />
+    );
+
+    await userEvent.keyboard('{Meta>}c{/Meta}');
+    expect(calls.some(([channel, , mode]) => channel === 'copy-image-to-clipboard' && mode === 'file')).toBe(true);
+
+    await userEvent.keyboard('{Meta>}{Shift>}c{/Shift}{/Meta}');
+    expect(calls.some(([channel, , mode]) => channel === 'copy-image-to-clipboard' && mode === 'image')).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: '在 Finder 中显示' }));
+    expect(calls.some(([channel]) => channel === 'show-in-folder')).toBe(true);
+  });
+
+  test('V 切换双页，标题显示跨页序号', async () => {
+    renderViewer();
+    await userEvent.keyboard('v');
+
+    const title = screen.getByText(/1–2 \/ 3/);
+    expect(title).toBeInTheDocument();
+  });
 });

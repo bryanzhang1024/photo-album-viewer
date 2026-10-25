@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronLeftIcon, ChevronRightIcon, InfoIcon, RotateIcon, FullscreenIcon,
-  DualPageIcon, TrashIcon, HeartIcon
+  DualPageIcon, TrashIcon, HeartIcon, CopyIcon, RevealIcon
 } from '../icons';
 import { localImageUrl } from '../data/album';
 import { loadFavorites, isImageFavorited, toggleImageFavorite } from '../data/favorites';
@@ -64,31 +64,6 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     }
   }, []);
 
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        if (infoOpen) {
-          setInfoOpen(false);
-          return;
-        }
-        close();
-      } else if (event.key === 'ArrowRight') {
-        go(1);
-      } else if (event.key === 'ArrowLeft') {
-        go(-1);
-      } else if (event.key === 'i' || event.key === 'I') {
-        setInfoOpen((value) => !value);
-      } else if (event.key === '+' || event.key === '=') {
-        setZoom((value) => Math.min(8, value * 1.2));
-      } else if (event.key === '-') {
-        setZoom((value) => Math.max(0.2, value / 1.2));
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [close, go, infoOpen]);
-
   // 旧版双模：普通滚轮翻页，⌘/Ctrl+滚轮缩放。
   const onWheel = (event) => {
     event.preventDefault();
@@ -115,6 +90,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     dragRef.current = null;
   };
 
+
   const favorited = current ? isImageFavorited(favorites, current.path) : false;
   const toggleFavorite = async () => {
     if (!current) return;
@@ -126,6 +102,62 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       console.warn('收藏失败:', error.message);
     }
   };
+
+  const copyCurrent = useCallback(async (mode) => {
+    if (!current) return;
+    try {
+      const result = await invoke(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, current.path, mode);
+      if (!result?.success) throw new Error(result?.error || '复制失败');
+    } catch (error) {
+      window.alert(error?.message || '复制失败');
+    }
+  }, [current]);
+
+  const revealCurrent = useCallback(async () => {
+    if (!current) return;
+    try {
+      const result = await invoke(CHANNELS.SHOW_IN_FOLDER, current.path);
+      if (!result?.success) throw new Error(result?.error || '无法在 Finder 中显示');
+    } catch (error) {
+      window.alert(error?.message || '无法在 Finder 中显示');
+    }
+  }, [current]);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (infoOpen) {
+          setInfoOpen(false);
+          return;
+        }
+        close();
+      } else if (event.key === 'ArrowRight') {
+        go(1);
+      } else if (event.key === 'ArrowLeft') {
+        go(-1);
+      } else if (event.key === 'i' || event.key === 'I') {
+        setInfoOpen((value) => !value);
+      } else if (event.key === '+' || event.key === '=') {
+        setZoom((value) => Math.min(8, value * 1.2));
+      } else if (event.key === '-') {
+        setZoom((value) => Math.max(0.2, value / 1.2));
+      } else if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'c') {
+        event.preventDefault();
+        copyCurrent(event.shiftKey ? 'image' : 'file');
+      } else if (String(event.key).toLowerCase() === 'v') {
+        setDual((value) => !value);
+      } else if (String(event.key).toLowerCase() === 'f') {
+        toggleFullscreen();
+      } else if (String(event.key).toLowerCase() === 'e') {
+        setRotation((value) => value + 90);
+      } else if (String(event.key).toLowerCase() === 'r') {
+        setRotation((value) => value - 90);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [close, go, infoOpen, copyCurrent, toggleFullscreen]);
 
   const deleteCurrent = async () => {
     if (!current) return;
@@ -217,6 +249,10 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         <button className={`icon-button${dual ? ' active' : ''}`} type="button" aria-label="双页" aria-pressed={dual}
           onClick={() => setDual((value) => !value)}><DualPageIcon /></button>
         <button className="icon-button" type="button" aria-label="全屏" onClick={toggleFullscreen}><FullscreenIcon /></button>
+        <span className="viewer-sep" />
+        <button className="icon-button" type="button" aria-label="复制文件" onClick={() => copyCurrent('file')}><CopyIcon /></button>
+        <button className="icon-button" type="button" aria-label="复制像素" onClick={() => copyCurrent('image')}><CopyIcon /></button>
+        <button className="icon-button" type="button" aria-label="在 Finder 中显示" onClick={revealCurrent}><RevealIcon /></button>
         <span className="viewer-spacer" />
         <button className="icon-button danger" type="button" aria-label="移到废纸篓" onClick={deleteCurrent}><TrashIcon /></button>
       </div>

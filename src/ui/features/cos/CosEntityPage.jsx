@@ -9,7 +9,7 @@ import useCosPagedList from './useCosPagedList';
 import CosLoadMore from './CosLoadMore';
 import './cos.css';
 
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索　⌘, 设置　⌘W 关闭标签';
+const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标签';
 
 const FETCHERS = {
   characters: listCharacters,

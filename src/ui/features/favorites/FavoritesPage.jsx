@@ -8,7 +8,7 @@ import { HeartIcon, GridIcon, ListIcon, FolderIcon } from '../../icons';
 import { loadFavorites, saveFavorites } from '../../data/favorites';
 import './favorites.css';
 
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索　⌘, 设置　⌘W 关闭标签';
+const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标签';
 
 function coverSamples(item) {
   if (Array.isArray(item.previewSamples) && item.previewSamples.length > 0) return item.previewSamples;
