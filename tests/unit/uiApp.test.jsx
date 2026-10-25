@@ -145,4 +145,40 @@ describe('App · 标签页与照片来源', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(1);
     input.remove();
   });
+
+  test('搜索只有工具栏一个入口：进入文件夹后页头不再有搜索框', async () => {
+    const invoke = jest.fn(async (channel) => {
+      if (channel === 'load-source-roots-v1') {
+        return { ok: true, data: { sources: [{ sourceId: 'src_a', label: 'A-库', rootPath: '/A' }] } };
+      }
+      if (channel === 'get-directory-level-v1') {
+        return {
+          ok: true,
+          data: {
+            locator: { sourceId: 'src_a', relativePath: '', absolutePath: '/A' },
+            facts: { childDirectoryCount: 0, directMediaCount: 0 },
+            children: [],
+            directMedia: [],
+            approximate: { coverSamples: [] }
+          }
+        };
+      }
+      if (channel === 'list-directory-files-v1') return { ok: true, data: { files: [] } };
+      if (channel === 'load-favorites') return { folders: [], albums: [], images: [] };
+      return { ok: true, data: {} };
+    });
+    window.electronAPI = { invoke, platform: 'darwin' };
+    if (!window.ResizeObserver) {
+      window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+    }
+
+    render(<App />);
+    await sidebar().findByText('A-库');
+    await userEvent.click(sidebar().getByText('A-库').closest('button'));
+
+    const searchBoxes = await screen.findAllByRole('searchbox');
+    expect(searchBoxes).toHaveLength(1);
+    expect(searchBoxes[0]).toHaveAccessibleName('搜索这个文件夹');
+    expect(screen.getByLabelText('窗口工具栏')).toContainElement(searchBoxes[0]);
+  });
 });

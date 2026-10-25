@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Toolbar from './shell/Toolbar';
-import { GridIcon, ListIcon } from './icons';
+import { GridIcon, ListIcon, SearchIcon } from './icons';
 import TabBar from './shell/TabBar';
 import Sidebar from './shell/Sidebar';
 import Menu from './components/Menu';
@@ -57,6 +57,8 @@ export default function App() {
   const [tabs, setTabs] = useState(() => [createTab({ kind: 'roots' })]);
   const [activeTabId, setActiveTabId] = useState(() => tabs[0].id);
   const [menu, setMenu] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef(null);
   const breakpoint = useBreakpoint();
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
@@ -105,6 +107,10 @@ export default function App() {
       setViewMode(getFolderView(source.sourceId, location.relativePath || ''));
     }
   }, [location, source]);
+
+  useEffect(() => {
+    setSearchQuery('');
+  }, [location]);
 
   const changeViewMode = (mode) => {
     setViewMode(mode);
@@ -304,7 +310,11 @@ export default function App() {
       }
       if (key.toLowerCase() === 'f') {
         event.preventDefault();
-        window.dispatchEvent(new CustomEvent('pav:focus-search'));
+        const input = searchInputRef.current?.querySelector?.('input') || searchInputRef.current;
+        if (input) {
+          input.focus();
+          if (typeof input.select === 'function') input.select();
+        }
         return;
       }
       if (key === ',') {
@@ -389,12 +399,27 @@ export default function App() {
         onBack={goBack}
         onForward={goForward}
         right={location.kind === 'folder' ? (
-          <div className="segmented">
-            <button className="icon-button" type="button" aria-label="图标视图"
-              aria-pressed={viewMode === 'grid'} onClick={() => changeViewMode('grid')}><GridIcon /></button>
-            <button className="icon-button" type="button" aria-label="列表视图"
-              aria-pressed={viewMode === 'list'} onClick={() => changeViewMode('list')}><ListIcon /></button>
-          </div>
+          <>
+            <div className="segmented">
+              <button className="icon-button" type="button" aria-label="图标视图"
+                aria-pressed={viewMode === 'grid'} onClick={() => changeViewMode('grid')}><GridIcon /></button>
+              <button className="icon-button" type="button" aria-label="列表视图"
+                aria-pressed={viewMode === 'list'} onClick={() => changeViewMode('list')}><ListIcon /></button>
+            </div>
+            <label className="cos-search toolbar-search" ref={searchInputRef}>
+              <SearchIcon />
+              <input
+                type="search"
+                value={searchQuery}
+                aria-label="搜索这个文件夹"
+                placeholder="搜索这个文件夹"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setSearchQuery('');
+                }}
+              />
+            </label>
+          </>
         ) : null}
       />
       <TabBar tabs={tabItems} onSelect={selectTab} onClose={closeTab} onNew={openNewTab} />
@@ -474,6 +499,17 @@ export default function App() {
               onViewModeChange={changeViewMode}
               siblings={location.siblings || null}
               onOpenRoots={() => navigate({ kind: 'roots' })}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onOpenInNewTab={(target) => navigate({
+                kind: 'folder',
+                sourceId: target.sourceId,
+                relativePath: target.relativePath
+              }, { newTab: true })}
+              onOpenInNewWindow={(target) => {
+                openInNewWindow({ sourceId: target.sourceId, relativePath: target.relativePath })
+                  .catch((error) => setSourceError(error?.message || '创建新窗口失败'));
+              }}
               onOpenFolder={(relativePath, context) => navigate({
                 kind: 'folder',
                 sourceId: source.sourceId,

@@ -4,7 +4,7 @@ import React, { useEffect, useRef } from 'react';
  * 通用浮层菜单。anchor 是触发元素，用来定位；点击外部或 Esc 关闭。
  * items: [{ key, label, onSelect, danger, disabled }]
  */
-export default function Menu({ open, anchor, items = [], onClose, label = '菜单' }) {
+export default function Menu({ open, anchor, point = null, items = [], onClose, label = '菜单' }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -31,12 +31,10 @@ export default function Menu({ open, anchor, items = [], onClose, label = '菜�
   const rect = anchor?.getBoundingClientRect?.();
   const width = 220;
   const estimatedHeight = Math.max(48, items.length * 34 + 12);
-  const left = rect
-    ? Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8))
-    : 16;
-  const top = rect
-    ? Math.min(rect.bottom + 6, Math.max(8, window.innerHeight - estimatedHeight - 8))
-    : 16;
+  const rawLeft = point ? point.x : (rect ? rect.left : 16);
+  const rawTop = point ? point.y : (rect ? rect.bottom + 6 : 16);
+  const left = Math.min(Math.max(8, rawLeft), Math.max(8, window.innerWidth - width - 8));
+  const top = Math.min(Math.max(8, rawTop), Math.max(8, window.innerHeight - estimatedHeight - 8));
 
   return (
     <div

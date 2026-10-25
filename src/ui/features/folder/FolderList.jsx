@@ -19,7 +19,18 @@ const FILE_ICONS = {
 };
 
 /** 窗口化列表：文件夹 / 图片行 + 其他文件段。 */
-export default function FolderList({ items, otherFiles = [], rootPath, selectedKey, onSelect, onOpen, onOpenFile }) {
+export default function FolderList({
+  items,
+  otherFiles = [],
+  rootPath,
+  selectedKey,
+  onSelect,
+  onOpen,
+  onOpenFile,
+  isPhotoLayer = false,
+  sort = { field: 'name', direction: 'asc' },
+  onSort
+}) {
   const ref = useRef(null);
   const [size, setSize] = useState({ h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
@@ -90,11 +101,32 @@ export default function FolderList({ items, otherFiles = [], rootPath, selectedK
       className="folder-scroll"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
     >
-      <div className="list-head folder-list-head">
-        <div>名称</div>
-        <div>图片 / 类型</div>
-        <div>子文件夹 / 大小</div>
-        <div>修改日期</div>
+      <div className="list-head folder-list-head" role="row">
+        {[
+          { label: '名称', field: 'name' },
+          { label: isPhotoLayer ? '大小 / 类型' : '图片 / 类型', field: isPhotoLayer ? 'size' : 'imageCount' },
+          { label: isPhotoLayer ? '—' : '子文件夹 / 大小', field: isPhotoLayer ? null : 'childCount' },
+          { label: '修改日期', field: 'mtimeMs' }
+        ].map((column) => {
+          const active = sort?.field === column.field;
+          const ariaSort = active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
+          if (!column.field || !onSort) {
+            return <div key={column.label} role="columnheader">{column.label}</div>;
+          }
+          return (
+            <button
+              key={column.label}
+              className={`list-head-cell${active ? ' active' : ''}`}
+              type="button"
+              role="columnheader"
+              aria-sort={ariaSort}
+              onClick={() => onSort(column.field)}
+            >
+              {column.label}
+              {active ? <span className="list-head-arrow">{sort.direction === 'asc' ? '↑' : '↓'}</span> : null}
+            </button>
+          );
+        })}
       </div>
       <div className="folder-scroll-inner" style={{ height: total }}>
         {otherFiles.length > 0 ? (

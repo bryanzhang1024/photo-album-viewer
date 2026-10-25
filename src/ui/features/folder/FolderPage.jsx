@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
 import StatusBar from '../../shell/StatusBar';
-import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon, SearchIcon } from '../../icons';
+import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon, SortAscIcon, SortDescIcon } from '../../icons';
 import useFolderSnapshot from './useFolderSnapshot';
 import useOtherFiles from './useOtherFiles';
 import useBreakpoint from '../../hooks/useBreakpoint';
@@ -9,19 +9,27 @@ import VirtualGrid from './VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
 import ImageViewer from '../../components/ImageViewer';
+import Menu from '../../components/Menu';
 import { albumImageAbsolutePath } from '../../data/album';
 import {
-  loadFavorites, isAlbumFavorited, toggleAlbumFavorite
+  loadFavorites, isFolderFavorited, toggleFolderFavorite,
+  isImageFavorited, toggleImageFavorite
 } from '../../data/favorites';
 import { invoke, CHANNELS } from '../../data/ipc';
 import { openExternal } from '../../data/files';
-import { getFolderSort, setFolderSort } from '../../data/prefs';
+import { getFolderSort, setFolderSort, defaultSortDirection } from '../../data/prefs';
 import './folder.css';
 
 const SORT_FIELDS = [
   { key: 'name', label: '名称' },
   { key: 'imageCount', label: '图片' },
   { key: 'childCount', label: '子文件夹' },
+  { key: 'mtimeMs', label: '修改日期' }
+];
+
+const SORT_FIELDS_PHOTO = [
+  { key: 'name', label: '名称' },
+  { key: 'size', label: '大小' },
   { key: 'mtimeMs', label: '修改日期' }
 ];
 
@@ -37,12 +45,24 @@ function fitStorageKey(sourceId, relativePath) {
   return `pav.fit.v1:${sourceId}:${relativePath}`;
 }
 
-export default function FolderPage({ source, relativePath, viewMode, onViewModeChange, onOpenFolder, onOpenRoots, siblings = null }) {
+export default function FolderPage({
+  source,
+  relativePath,
+  viewMode,
+  onViewModeChange,
+  onOpenFolder,
+  onOpenRoots,
+  siblings = null,
+  searchQuery = '',
+  onSearchChange,
+  onOpenInNewTab,
+  onOpenInNewWindow
+}) {
   const { status, snapshot, items, error, reload } = useFolderSnapshot(source, relativePath);
   const breakpoint = useBreakpoint();
   const compactHeader = viewMode === 'list' || breakpoint === 'medium' || breakpoint === 'small';
   const { files: otherFiles } = useOtherFiles(source, relativePath);
-  const [sortKey, setSortKey] = useState(() => getFolderSort(source.sourceId, relativePath));
+  const [sortState, setSortState] = useState(() => getFolderSort(source.sourceId, relativePath));
   const [density, setDensity] = useState(1);
   const [selectedKey, setSelectedKey] = useState('');
   const [viewerIndex, setViewerIndex] = useState(null);
@@ -51,21 +71,33 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     window.localStorage.getItem(fitStorageKey(source.sourceId, relativePath)) === '1'
   ));
   const [favorites, setFavorites] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchRef = useRef(null);
+  const [menu, setMenu] = useState(null);
 
+  // 排序：文件夹层与照片层各用自己可用的字段；文件夹始终置顶；缺失值排最后。
   const sorted = useMemo(() => {
-    const compare = (left, right) => {
-      const a = sortKey === 'name' ? left.name : (left[sortKey] ?? 0);
-      const b = sortKey === 'name' ? right.name : (right[sortKey] ?? 0);
-      if (typeof a === 'string') return a.localeCompare(b, 'zh-Hans-CN', { numeric: true });
-      return a - b;
+    const { field, direction } = sortState;
+    const sign = direction === 'desc' ? -1 : 1;
+    const folderField = ['name', 'imageCount', 'childCount', 'mtimeMs'].includes(field) ? field : 'name';
+    const imageField = ['name', 'size', 'mtimeMs'].includes(field) ? field : 'name';
+
+    const compareWith = (key) => (left, right) => {
+      const a = left[key];
+      const b = right[key];
+      if (key === 'name') {
+        return sign * String(a ?? '').localeCompare(String(b ?? ''), 'zh-Hans-CN', { numeric: true });
+      }
+      const missingA = a === undefined || a === null || Number.isNaN(a);
+      const missingB = b === undefined || b === null || Number.isNaN(b);
+      if (missingA && missingB) return 0;
+      if (missingA) return 1;
+      if (missingB) return -1;
+      return sign * (a - b);
     };
-    const folders = items.filter((item) => item.kind === 'folder').sort(compare);
-    const images = items.filter((item) => item.kind === 'image').sort(compare);
+
+    const folders = items.filter((item) => item.kind === 'folder').sort(compareWith(folderField));
+    const images = items.filter((item) => item.kind === 'image').sort(compareWith(imageField));
     return [...folders, ...images];
-  }, [items, sortKey]);
+  }, [items, sortState]);
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -83,10 +115,6 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
       })),
     [sorted, deletedKeys, source.rootPath]
   );
-
-  useEffect(() => {
-    setSearchQuery('');
-  }, [source.sourceId, relativePath]);
 
   const segments = relativePath.split('/').filter(Boolean);
   const title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
@@ -121,7 +149,7 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
   const folders = ready ? snapshot.facts.childDirectoryCount : 0;
   const totalImages = ready ? snapshot.facts.directMediaCount : 0;
   const otherCount = otherFiles.length;
-  const searching = searchQuery.trim().length > 0;
+  const searching = String(searchQuery || '').trim().length > 0;
   const countText = ready
     ? (searching
       ? `${formatCount(filtered.length)} 个结果 · 搜索范围：当前文件夹`
@@ -174,7 +202,6 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
   const canNext = siblingIndex >= 0 && siblingIndex < siblings.length - 1;
 
   useEffect(() => {
-    if (!isAlbum) return undefined;
     let alive = true;
     loadFavorites()
       .then((data) => {
@@ -184,53 +211,62 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     return () => {
       alive = false;
     };
-  }, [isAlbum, albumPath]);
+  }, []);
 
-  const favorited = isAlbumFavorited(favorites, albumPath);
+  const itemAbsolutePath = (item) => albumImageAbsolutePath(source.rootPath, item.relativePath);
+  const folderEntry = {
+    path: albumPath,
+    name: title,
+    kind: isAlbum ? 'photoSet' : 'folder',
+    imageCount: images.length,
+    previewImages: images.slice(0, 4).map((image) => ({ path: image.path, name: image.name })),
+    previewImagePath: images[0]?.path || ''
+  };
+  const favorited = isFolderFavorited(favorites, albumPath);
+  const isItemFavorited = (item) => (
+    item.kind === 'image'
+      ? isImageFavorited(favorites, itemAbsolutePath(item))
+      : isFolderFavorited(favorites, itemAbsolutePath(item))
+  );
   const toggleFavorite = async () => {
     try {
-      await toggleAlbumFavorite({
-        path: albumPath,
-        name: title,
-        imageCount: images.length,
-        previewImages: images.slice(0, 4).map((image) => ({ path: image.path, name: image.name })),
-        previewImagePath: images[0]?.path || ''
-      });
+      await toggleFolderFavorite(folderEntry);
       setFavorites(await loadFavorites());
     } catch (error) {
-      console.warn('相簿收藏失败:', error.message);
+      console.warn('收藏失败:', error.message);
+    }
+  };
+  const toggleItemFavorite = async (item) => {
+    try {
+      if (item.kind === 'image') {
+        await toggleImageFavorite(
+          { path: itemAbsolutePath(item), name: item.name, size: item.size, lastModified: item.mtimeMs },
+          albumPath,
+          title
+        );
+      } else {
+        await toggleFolderFavorite({
+          path: itemAbsolutePath(item),
+          name: item.name,
+          kind: item.childCount > 0 ? 'folder' : 'photoSet',
+          imageCount: item.imageCount || 0,
+          previewImages: (item.coverSamples || []).map((sample) => ({ path: sample, name: sample })),
+          previewImagePath: item.coverSamples?.[0] || ''
+        });
+      }
+      setFavorites(await loadFavorites());
+    } catch (error) {
+      console.warn('收藏失败:', error.message);
     }
   };
 
-  const focusSearch = () => {
-    if (compactHeader) setSearchOpen(true);
-    requestAnimationFrame(() => {
-      const input = document.querySelector('.search-bar input, .cos-search input');
-      if (input) {
-        input.focus();
-        if (typeof input.select === 'function') input.select();
-      }
-    });
-  };
-
-  useEffect(() => {
-    const onFocusSearch = () => focusSearch();
-    window.addEventListener('pav:focus-search', onFocusSearch);
-    return () => window.removeEventListener('pav:focus-search', onFocusSearch);
-  }, [compactHeader]);
-
   useEffect(() => {
     const onKey = (event) => {
-      if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'f') {
-        event.preventDefault();
-        focusSearch();
-        return;
-      }
       if (event.key === 'Escape') {
         // 查看器自己处理 Esc（含先关信息面板），这里跳过。
         if (viewerIndex !== null) return;
         if (searchQuery) {
-          setSearchQuery('');
+          onSearchChange?.('');
           return;
         }
         const parent = segments.slice(0, -1).join('/');
@@ -244,7 +280,7 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedKey, viewerIndex, sorted, searchQuery, segments, onOpenFolder, onOpenRoots]);
+  }, [selectedKey, viewerIndex, sorted, searchQuery, segments, onOpenFolder, onOpenRoots, onSearchChange]);
 
   const controls = (
     <>
@@ -257,32 +293,11 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
             onClick={() => canNext && openFolder(siblings[siblingIndex + 1])}><ChevronRightIcon /></button>
         </div>
       ) : null}
-      {isAlbum ? (
-        <button className={`icon-button${favorited ? ' favorited' : ''}`} type="button" aria-label="收藏这个相簿"
-          aria-pressed={favorited} onClick={toggleFavorite}><HeartIcon /></button>
-      ) : null}
+      <button className={`icon-button${favorited ? ' favorited' : ''}`} type="button"
+        aria-label={isAlbum ? '收藏这个相簿' : '收藏这个文件夹'}
+        aria-pressed={favorited} onClick={toggleFavorite}><HeartIcon /></button>
       <button className="icon-button" type="button" aria-label="设置"
         onClick={() => invoke(CHANNELS.OPEN_SETTINGS_WINDOW)}><SettingsIcon /></button>
-      {compactHeader ? (
-        <button
-          className={`icon-button${searchOpen || searching ? ' active' : ''}`}
-          type="button"
-          aria-label="搜索"
-          onClick={() => setSearchOpen((open) => !open)}
-        >
-          <SearchIcon />
-        </button>
-      ) : (
-        <label className="cos-search" ref={searchRef}>
-          <SearchIcon />
-          <input
-            type="search"
-            value={searchQuery}
-            placeholder="搜索这个文件夹"
-            onChange={(event) => setSearchQuery(event.target.value)}
-          />
-        </label>
-      )}
       {totalImages > 0 ? (
         <button
           className={`icon-button${fitMode ? ' active' : ''}`}
@@ -297,16 +312,31 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
       <select
         className="ctrl-select"
         aria-label="排序"
-        value={sortKey}
+        value={sortState.field}
         onChange={(event) => {
-          setSortKey(event.target.value);
-          setFolderSort(source.sourceId, relativePath, event.target.value);
+          const field = event.target.value;
+          const next = { field, direction: defaultSortDirection(field) };
+          setSortState(next);
+          setFolderSort(source.sourceId, relativePath, next);
         }}
       >
-        {SORT_FIELDS.map((field) => (
+        {(isAlbum ? SORT_FIELDS_PHOTO : SORT_FIELDS).map((field) => (
           <option key={field.key} value={field.key}>{field.label}</option>
         ))}
       </select>
+      <button
+        className="icon-button"
+        type="button"
+        aria-label={sortState.direction === 'asc' ? '升序，点击改为降序' : '降序，点击改为升序'}
+        aria-pressed={sortState.direction === 'desc'}
+        onClick={() => {
+          const next = { ...sortState, direction: sortState.direction === 'asc' ? 'desc' : 'asc' };
+          setSortState(next);
+          setFolderSort(source.sourceId, relativePath, next);
+        }}
+      >
+        {sortState.direction === 'asc' ? <SortAscIcon /> : <SortDescIcon />}
+      </button>
       <input
         className="ctrl-range"
         type="range"
@@ -320,6 +350,52 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     </>
   );
 
+  const buildMenuItems = (item) => {
+    if (!item) return [];
+    const absolutePath = itemAbsolutePath(item);
+    const favoritedNow = isItemFavorited(item);
+    const items = [
+      { key: 'open', label: '打开', onSelect: () => handleOpen(item) }
+    ];
+    if (item.kind === 'folder') {
+      items.push(
+        {
+          key: 'new-tab',
+          label: '在新标签页打开',
+          onSelect: () => onOpenInNewTab?.({
+            kind: 'folder',
+            sourceId: source.sourceId,
+            relativePath: item.relativePath
+          })
+        },
+        {
+          key: 'new-window',
+          label: '在新窗口中打开',
+          onSelect: () => onOpenInNewWindow?.({
+            kind: 'folder',
+            sourceId: source.sourceId,
+            relativePath: item.relativePath
+          })
+        }
+      );
+    }
+    items.push(
+      {
+        key: 'favorite',
+        label: favoritedNow ? '取消收藏' : '添加到收藏',
+        onSelect: () => toggleItemFavorite(item)
+      },
+      {
+        key: 'reveal',
+        label: '在 Finder 中显示',
+        onSelect: () => {
+          invoke(CHANNELS.SHOW_IN_FOLDER, absolutePath).catch(() => {});
+        }
+      }
+    );
+    return items;
+  };
+
   return (
     <>
       <PageHeader
@@ -331,26 +407,6 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
         onCrumbClick={handleCrumbClick}
       />
       <div className="folder-body">
-        {compactHeader && searchOpen ? (
-          <div className="search-bar" ref={searchRef}>
-            <SearchIcon />
-            <input
-              autoFocus
-              type="search"
-              value={searchQuery}
-              placeholder="搜索这个文件夹"
-              onChange={(event) => setSearchQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  setSearchQuery('');
-                  setSearchOpen(false);
-                }
-              }}
-            />
-            <button type="button" aria-label="关闭搜索"
-              onClick={() => { setSearchQuery(''); setSearchOpen(false); }}>×</button>
-          </div>
-        ) : null}
         {status === 'loading' ? <div className="folder-state">正在读取目录…</div> : null}
         {status === 'error' ? (
           <div className="folder-state error">
@@ -362,8 +418,8 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
         {ready && filtered.length === 0 && !searching && otherCount === 0 ? <div className="folder-state">这个文件夹是空的</div> : null}
         {ready && filtered.length === 0 && searching ? (
           <div className="folder-state">
-            <div>没有找到「{searchQuery.trim()}」。</div>
-            <button className="btn-primary" type="button" onClick={() => setSearchQuery('')}>清除搜索</button>
+            <div>没有找到「{String(searchQuery || '').trim()}」。</div>
+            <button className="btn-primary" type="button" onClick={() => onSearchChange?.('')}>清除搜索</button>
           </div>
         ) : null}
         {ready && filtered.length === 0 && !searching && otherCount > 0 && viewMode === 'grid' ? (
@@ -385,7 +441,13 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
                 coverHeight={coverHeight}
                 selected={selectedKey === item.key}
                 contain={fitMode}
+                favorited={isItemFavorited(item)}
                 onClick={handleGridClick}
+                onToggleFavorite={toggleItemFavorite}
+                onContextMenu={(event, target) => setMenu({
+                  point: { x: event.clientX, y: event.clientY },
+                  item: target
+                })}
               />
             )}
           />
@@ -396,6 +458,16 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
             otherFiles={otherFiles}
             rootPath={source.rootPath}
             selectedKey={selectedKey}
+            isPhotoLayer={isAlbum}
+            sort={sortState}
+            onSort={(field) => {
+              const direction = sortState.field === field
+                ? (sortState.direction === 'asc' ? 'desc' : 'asc')
+                : defaultSortDirection(field);
+              const next = { field, direction };
+              setSortState(next);
+              setFolderSort(source.sourceId, relativePath, next);
+            }}
             onSelect={(item) => setSelectedKey(item.key)}
             onOpen={handleOpen}
             onOpenFile={(file) => {
@@ -406,6 +478,13 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
         ) : null}
       </div>
       <StatusBar left={countText} right={STATUS_HINTS} />
+      <Menu
+        open={Boolean(menu)}
+        point={menu?.point}
+        label="卡片菜单"
+        onClose={() => setMenu(null)}
+        items={menu ? buildMenuItems(menu.item) : []}
+      />
       {viewerIndex !== null && images[viewerIndex] ? (
         <ImageViewer
           images={images}

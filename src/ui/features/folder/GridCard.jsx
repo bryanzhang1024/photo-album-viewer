@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderIcon } from '../../icons';
+import { FolderIcon, HeartIcon } from '../../icons';
 import Thumb from '../../components/Thumb';
 
 export function formatDate(mtimeMs) {
@@ -29,8 +29,22 @@ function Cover({ item, rootPath }) {
   );
 }
 
-/** 网格卡片：文件夹与图片共用同一套文字层级。 */
-export default function GridCard({ item, rootPath, width, coverHeight, selected, contain = false, onClick }) {
+/**
+ * 网格卡片：文件夹与图片共用同一套文字层级。
+ * 封面右上角有心形，点它只切收藏、不打开；右键菜单由外层接管。
+ */
+export default function GridCard({
+  item,
+  rootPath,
+  width,
+  coverHeight,
+  selected,
+  contain = false,
+  favorited = false,
+  onClick,
+  onToggleFavorite,
+  onContextMenu
+}) {
   const isFolder = item.kind === 'folder';
   const folderMeta = item.childCount > 0
     ? `${item.childCount} 个子文件夹 · ${item.imageCount} 张`
@@ -41,12 +55,29 @@ export default function GridCard({ item, rootPath, width, coverHeight, selected,
       className={`grid-card${selected ? ' selected' : ''}`}
       style={{ width }}
       onClick={() => onClick?.(item)}
+      onContextMenu={(event) => {
+        if (!onContextMenu) return;
+        event.preventDefault();
+        onContextMenu(event, item);
+      }}
     >
       <div className={`grid-card-cover${contain ? ' contain' : ''}`} style={{ height: coverHeight }}>
         {isFolder ? <Cover item={item} rootPath={rootPath} /> : null}
         {!isFolder ? (
           <Thumb rootPath={rootPath} relativePath={item.relativePath} />
         ) : null}
+        <button
+          className={`card-heart${favorited ? ' favorited' : ''}`}
+          type="button"
+          aria-label={favorited ? '取消收藏' : '收藏'}
+          aria-pressed={favorited}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFavorite?.(item);
+          }}
+        >
+          <HeartIcon />
+        </button>
       </div>
       <div className="grid-card-name">{item.name}</div>
       <div className="grid-card-meta">{meta}</div>

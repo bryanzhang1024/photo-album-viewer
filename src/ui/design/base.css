@@ -626,3 +626,64 @@ button.page-header-crumb:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 卡片心形：默认半透明，悬停或已收藏时清晰；不触发打开 */
+.card-heart {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.grid-card:hover .card-heart,
+.card-heart:focus-visible,
+.card-heart.favorited {
+  opacity: 1;
+}
+
+.card-heart.favorited {
+  color: #ff5d73;
+}
+
+.card-heart.favorited svg {
+  fill: currentColor;
+}
+
+/* 列表列头：可点排序，箭头指示方向 */
+button.list-head-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.list-head-cell:hover {
+  color: var(--text);
+}
+
+button.list-head-cell.active {
+  color: var(--text);
+}
+
+.list-head-arrow {
+  font-size: 10px;
+  opacity: 0.8;
+}

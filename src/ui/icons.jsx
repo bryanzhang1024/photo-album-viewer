@@ -197,3 +197,15 @@ export const FileIcon = () => (
     <path d="M9.2 2.6v3.2h3.2" />
   </svg>
 );
+
+export const SortAscIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M4.6 13V3M2.2 5.4 4.6 3l2.4 2.4M11.4 13V3M9 5.4 11.4 3l2.4 2.4" />
+  </svg>
+);
+
+export const SortDescIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 3v10M9 10.6l2.4 2.4 2.4-2.4" />
+  </svg>
+);
