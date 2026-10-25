@@ -1,0 +1,70 @@
+{
+  "at": "2026-10-25T06:39:15.857Z",
+  "passed": 6,
+  "total": 6,
+  "failed": false,
+  "results": [
+    {
+      "step": "进入第一个照片来源：面包屑与工具栏搜索都在",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "crumbs": "文件夹›Collection",
+        "searchLabel": "搜索这个文件夹"
+      }
+    },
+    {
+      "step": "搜索：输入关键词后计数变化，Esc 清空恢复",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "count": "0 个结果 · 搜索范围：当前文件夹",
+        "after": "6 个文件夹"
+      }
+    },
+    {
+      "step": "标签页：新建后变两个、关闭后回一个",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "afterAdd": 2,
+        "afterClose": 1
+      }
+    },
+    {
+      "step": "列表视图：列头可点并出现排序方向",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "headers": [
+          "名称↓",
+          "图片 / 类型",
+          "子文件夹 / 大小",
+          "修改日期"
+        ],
+        "ariaSort": "descending"
+      }
+    },
+    {
+      "step": "右键菜单：卡片弹出五项，Esc 关闭",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "items": [
+          "打开",
+          "在新标签页打开",
+          "在新窗口中打开",
+          "添加到收藏",
+          "在 Finder 中显示"
+        ]
+      }
+    },
+    {
+      "step": "查看器：点开图片后 Esc 关闭",
+      "ok": true,
+      "detail": {
+        "ok": true
+      }
+    }
+  ]
+}
