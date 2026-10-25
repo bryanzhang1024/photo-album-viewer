@@ -15,15 +15,16 @@ export default function PageHeader({
   controls = null,
   onCrumbClick
 }) {
-  const normalized = crumbs.map((crumb, index) => (
-    typeof crumb === 'string'
+  const normalized = crumbs.map((crumb, index) => ({
+    ...(typeof crumb === 'string'
       ? { label: crumb, clickable: index !== crumbs.length - 1 }
-      : { label: crumb.label, clickable: crumb.clickable !== undefined ? crumb.clickable : index !== crumbs.length - 1 }
-  ));
+      : { label: crumb.label, clickable: crumb.clickable !== undefined ? crumb.clickable : index !== crumbs.length - 1 }),
+    originalIndex: index
+  }));
 
   // 超过 4 段时截断中间，保留首段、末段与当前层。
   const visible = normalized.length > 4
-    ? [normalized[0], { label: '…', clickable: false, ellipsis: true }, ...normalized.slice(-2)]
+    ? [normalized[0], { label: '…', clickable: false, ellipsis: true, originalIndex: -1 }, ...normalized.slice(-2)]
     : normalized;
 
   const crumbNodes = visible.map((crumb, index) => (
@@ -35,7 +36,7 @@ export default function PageHeader({
         <button
           className="page-header-crumb"
           type="button"
-          onClick={() => onCrumbClick?.(index)}
+          onClick={() => onCrumbClick?.(crumb.originalIndex)}
         >
           {crumb.label}
         </button>

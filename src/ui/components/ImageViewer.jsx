@@ -240,8 +240,11 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         {broken ? (
           <div className="viewer-broken" role="status">
             <div>这张图片无法解码。</div>
-            <button className="btn-primary" type="button" onClick={() => go(1)}
-              disabled={index >= images.length - 1}>看下一张</button>
+            {index < images.length - 1 ? (
+              <button className="btn-primary" type="button" onClick={() => go(1)}>看下一张</button>
+            ) : (
+              <button className="btn-primary" type="button" onClick={close}>关闭查看器</button>
+            )}
           </div>
         ) : dual ? (
           <div className="viewer-pair">

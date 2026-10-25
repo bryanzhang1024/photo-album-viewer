@@ -41,6 +41,9 @@ function prepareFixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-e2e-'));
   fs.writeFileSync(path.join(dir, 'a.jpg'), TINY_JPEG);
   fs.writeFileSync(path.join(dir, 'b.jpg'), TINY_JPEG);
+  const sub = path.join(dir, '子文件夹');
+  fs.mkdirSync(sub);
+  fs.writeFileSync(path.join(sub, 'c.jpg'), TINY_JPEG);
   return dir;
 }
 
@@ -218,8 +221,10 @@ const STEPS = [
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         document.querySelector('[aria-label="图标视图"]')?.click();
         await sleep(800);
-        const card = document.querySelector('.grid-card');
+        const cards = [...document.querySelectorAll('.grid-card')];
+        const card = cards.find((el) => /个子文件夹/.test(el.querySelector('.grid-card-meta')?.textContent || '')) || cards[0];
         if (!card) return { ok: false, reason: '没有卡片可点' };
+        const isFolderCard = /个子文件夹/.test(card.querySelector('.grid-card-meta')?.textContent || '');
         const rect = card.getBoundingClientRect();
         card.dispatchEvent(new MouseEvent('contextmenu', {
           bubbles: true, clientX: rect.left + 20, clientY: rect.top + 20
@@ -229,9 +234,17 @@ const STEPS = [
         const items = menu ? [...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent) : [];
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await sleep(300);
-        const required = ['打开', '添加到收藏', '在 Finder 中显示'];
-        const hasRequired = required.every((text) => items.some((item) => item.includes(text)));
-        return { ok: hasRequired && !document.querySelector('[role="menu"]'), items };
+        // 文件夹卡片应有五项；图片卡片至少三项
+        const folderMenu = ['打开', '在新标签页打开', '在新窗口中打开', '添加到收藏', '在 Finder 中显示'];
+        const imageMenu = ['打开', '添加到收藏', '在 Finder 中显示'];
+        const required = isFolderCard ? folderMenu : imageMenu;
+        const hasAll = required.every((text) => items.some((item) => item.includes(text)));
+        const exact = !isFolderCard || items.length === folderMenu.length;
+        return {
+          ok: hasAll && exact && !document.querySelector('[role="menu"]'),
+          items,
+          isFolderCard
+        };
       })()`);
       assert(detail.ok, '卡片右键菜单没弹出或少项', detail);
       return detail;
@@ -269,23 +282,35 @@ const STEPS = [
     }
   },
   {
-    name: '移除临时来源：IPC 返回 ok、registry 里也没有',
+    name: '通过侧栏移除临时来源：菜单确认后侧栏少一条、registry 也没有',
     run: async (page) => {
       const detail = await page.evaluate(`(async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const label = window.sessionStorage.getItem('pavE2ELabel');
         const sourceId = window.sessionStorage.getItem('pavE2ESourceId');
-        const res = await window.electronAPI.invoke('remove-source-root-v1', { contractVersion: 1, sourceId });
-        await sleep(500);
+        const row = [...document.querySelectorAll('.sidebar-item-row')]
+          .find((el) => el.textContent.trim().startsWith(label));
+        if (!row) return { ok: false, reason: '侧栏找不到临时来源行' };
+        row.querySelector('.sidebar-item-remove').click();
+        await sleep(300);
+        const menu = document.querySelector('[role="menu"]');
+        if (!menu) return { ok: false, reason: '移除菜单没有弹出' };
+        const confirm = [...menu.querySelectorAll('[role="menuitem"]')]
+          .find((el) => el.textContent.includes(label));
+        if (!confirm) return { ok: false, reason: '菜单里没有确认项', menu: menu.textContent };
+        confirm.click();
+        await sleep(800);
+        const stillVisible = [...document.querySelectorAll('.sidebar-item-row')]
+          .some((el) => el.textContent.trim().startsWith(label));
         const reloaded = await window.electronAPI.invoke('load-source-roots-v1', { contractVersion: 1 });
         const ids = (reloaded?.data?.sources || []).map((item) => item.sourceId);
         return {
-          ok: Boolean(res?.ok) && ids.indexOf(sourceId) === -1,
-          ipcOk: Boolean(res?.ok),
-          error: res?.error?.message || null,
+          ok: !stillVisible && ids.indexOf(sourceId) === -1,
+          stillVisible,
           stillInRegistry: ids.indexOf(sourceId) !== -1
         };
       })()`);
-      assert(detail.ok, '移除来源的 IPC 契约或 registry 更新失败', detail);
+      assert(detail.ok, '侧栏移除来源失败或 registry 未更新', detail);
       return detail;
     }
   }
@@ -309,20 +334,38 @@ async function main() {
 
   const results = [];
   let failed = false;
+  let cdpRef = null;
+  let fixtureSourceId = null;
   try {
     const target = await waitForTarget();
     const cdp = new Cdp(target.webSocketDebuggerUrl);
+    cdpRef = cdp;
     await cdp.ready();
     await sleep(1200);
 
     const setup = await cdp.evaluate(`(async () => {
+      // 清掉上次异常退出留下的临时来源，避免污染真实 registry
+      let cleaned = 0;
+      const list = await window.electronAPI.invoke('load-source-roots-v1', { contractVersion: 1 });
+      for (const source of (list?.data?.sources || [])) {
+        if (String(source.label || '').startsWith('pav-e2e-')) {
+          await window.electronAPI.invoke('remove-source-root-v1', { contractVersion: 1, sourceId: source.sourceId });
+          cleaned += 1;
+        }
+      }
       const res = await window.electronAPI.invoke('save-source-root-v1', {
         contractVersion: 1, sourceId: null, rootPath: ${JSON.stringify(fixtureDir)}, label: null
       });
       window.sessionStorage.setItem('pavE2ELabel', ${JSON.stringify(label)});
       window.sessionStorage.setItem('pavE2ESourceId', res?.data?.source?.sourceId || '');
-      return { ok: Boolean(res?.ok), sourceId: res?.data?.source?.sourceId || null, error: res?.error?.message || null };
+      return {
+        ok: Boolean(res?.ok),
+        sourceId: res?.data?.source?.sourceId || null,
+        cleaned,
+        error: res?.error?.message || null
+      };
     })()`);
+    fixtureSourceId = setup.sourceId;
     if (!setup.ok || !setup.sourceId) {
       throw new Error(`注册临时来源失败：${setup.error || '未知原因'}`);
     }
@@ -350,6 +393,19 @@ async function main() {
     console.error(`启动或连接失败：${error.message}`);
     if (appLog) console.error(appLog.slice(-800));
   } finally {
+    // 兜底：步骤中断时也要把临时来源从真实 registry 里移除
+    if (cdpRef && fixtureSourceId) {
+      try {
+        await cdpRef.evaluate(`(async () => {
+          await window.electronAPI.invoke('remove-source-root-v1', {
+            contractVersion: 1, sourceId: ${JSON.stringify(fixtureSourceId)}
+          });
+          return true;
+        })()`);
+      } catch (_error) {
+        // 应用可能已退出，只能靠下次运行开头的残留清理
+      }
+    }
     child.kill('SIGTERM');
     await sleep(600);
     try {

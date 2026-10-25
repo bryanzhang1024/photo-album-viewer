@@ -474,7 +474,7 @@ export default function FolderPage({
             )}
           />
         ) : null}
-        {ready && filtered.length > 0 && viewMode === 'list' ? (
+        {ready && (filtered.length > 0 || filteredOtherFiles.length > 0) && viewMode === 'list' ? (
           <FolderList
             items={filtered}
             otherFiles={filteredOtherFiles}
