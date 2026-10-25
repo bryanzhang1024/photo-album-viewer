@@ -1,6 +1,6 @@
 {
-  "at": "2026-10-25T07:45:17.110Z",
-  "fixture": "pav-e2e-2xuPRm",
+  "at": "2026-10-25T07:55:17.573Z",
+  "attempt": 1,
   "passed": 7,
   "total": 7,
   "failed": false,
@@ -10,7 +10,7 @@
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›pav-e2e-2xuPRm",
+        "crumbs": "文件夹›pav-e2e-hzZzt7",
         "searchLabel": "搜索这个文件夹"
       }
     },
@@ -53,6 +53,8 @@
         "ok": true,
         "items": [
           "打开",
+          "在新标签页打开",
+          "在新窗口中打开",
           "添加到收藏",
           "在 Finder 中显示"
         ],

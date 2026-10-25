@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-25T07:23:13.083Z",
+  "at": "2026-10-25T07:54:14.041Z",
   "failed": false,
   "results": [
     {
@@ -69,7 +69,7 @@
       "innerWidth": 720,
       "innerHeight": 480,
       "overflowX": 0,
-      "columns": 4,
+      "columns": 3,
       "tabbarScrollable": false,
       "densityVisible": false,
       "searchInput": false,

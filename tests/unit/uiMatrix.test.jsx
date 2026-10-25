@@ -147,6 +147,9 @@ describe('能力矩阵收尾', () => {
       { name: /修改日期/, sequence: ['descending', 'ascending', 'descending'] }
     ];
 
+    const rowNames = () => [...container.querySelectorAll('.folder-row .c-name span')]
+      .map((el) => el.textContent);
+
     for (const expectation of expectations) {
       const header = screen.getByRole('columnheader', { name: expectation.name });
       for (const expected of expectation.sequence) {
@@ -156,6 +159,17 @@ describe('能力矩阵收尾', () => {
         });
       }
     }
+
+    // 方向与字段一起写进本文件夹的记忆
+    const stored = JSON.parse(window.localStorage.getItem('pav.sort.v1:src_a:'));
+    expect(stored).toEqual({ field: 'mtimeMs', direction: 'descending'.replace('descending', 'desc') });
+
+    // 真按行序验证一次：按图片数降序时 10 张的 b 在前
+    await userEvent.click(screen.getByRole('columnheader', { name: /图片 \/ 类型/ }));
+    await waitFor(() => expect(rowNames()[0]).toBe('b'));
+    await userEvent.click(screen.getByRole('columnheader', { name: /图片 \/ 类型/ }));
+    await waitFor(() => expect(rowNames()[0]).toBe('a'));
+
     expect(container.querySelectorAll('[role="columnheader"]')).toHaveLength(4);
   });
 

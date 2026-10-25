@@ -6,6 +6,7 @@ import useFolderSnapshot from './useFolderSnapshot';
 import useOtherFiles from './useOtherFiles';
 import useBreakpoint, { isNarrowBreakpoint } from '../../hooks/useBreakpoint';
 import useSettings from '../../hooks/useSettings';
+import useWindowWidth from '../../hooks/useWindowWidth';
 import VirtualGrid from './VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
@@ -63,6 +64,7 @@ export default function FolderPage({
 }) {
   const { status, snapshot, items, error, reload } = useFolderSnapshot(source, relativePath);
   const breakpoint = useBreakpoint();
+  const windowWidth = useWindowWidth();
   const settings = useSettings();
   const compactHeader = viewMode === 'list' || isNarrowBreakpoint(breakpoint);
   const { files: otherFiles } = useOtherFiles(source, relativePath);
@@ -451,7 +453,7 @@ export default function FolderPage({
         {ready && filtered.length > 0 && viewMode === 'grid' ? (
           <VirtualGrid
             items={filtered}
-            minItemWidth={(breakpoint === 'small' || (typeof window !== 'undefined' && window.innerWidth < 760))
+            minItemWidth={windowWidth < 760
               ? Math.max(200, DENSITIES[density].minWidth)
               : DENSITIES[density].minWidth}
             renderItem={(item, width, coverHeight) => (

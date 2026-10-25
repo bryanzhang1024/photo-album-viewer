@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 
 import GridCard from '../../src/ui/features/folder/GridCard';
 import ImageViewer from '../../src/ui/components/ImageViewer';
+import { loadSettings } from '../../src/ui/data/settings';
 
 function setSettings(next) {
   window.localStorage.setItem('photoViewerSettings', JSON.stringify(next));
@@ -72,5 +73,22 @@ describe('设置真的生效', () => {
       <GridCard item={item} rootPath="/A" width={160} coverHeight={200} coverMode="collage" />
     );
     expect(container.querySelector('.collage')).toBeTruthy();
+  });
+
+  test('老设置没有版本号时，mixed 会迁移成新的默认分组并写回', () => {
+    window.localStorage.setItem('photoViewerSettings', JSON.stringify({ homeSortGrouping: 'mixed', theme: 'dark' }));
+    const settings = loadSettings();
+    expect(settings.homeSortGrouping).toBe('grouped');
+    expect(settings.theme).toBe('dark');
+    const stored = JSON.parse(window.localStorage.getItem('photoViewerSettings'));
+    expect(stored.homeSortGrouping).toBe('grouped');
+    expect(stored.settingsVersion).toBe(2);
+  });
+
+  test('已经有版本号的设置不再被改写', () => {
+    window.localStorage.setItem('photoViewerSettings', JSON.stringify({
+      homeSortGrouping: 'mixed', settingsVersion: 2
+    }));
+    expect(loadSettings().homeSortGrouping).toBe('mixed');
   });
 });

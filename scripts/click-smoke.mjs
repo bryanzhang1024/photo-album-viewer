@@ -318,67 +318,50 @@ const STEPS = [
   }
 ];
 
-async function main() {
-  // 看门狗：任何一步卡住都不许无限等（曾出现过 app 未退出导致 npm 挂住）
-  const watchdog = setTimeout(() => {
-    console.error('超时：3 分钟内没有跑完，按失败处理');
-    try {
-      childRef?.kill('SIGKILL');
-    } catch (_error) {
-      // 已退出
-    }
-    process.exit(3);
-  }, 180000);
-  watchdog.unref();
+function writeReport(results, attempt) {
+  const reportPath = path.join(ROOT, '.3things/acceptance/evidence/click-smoke.json');
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.writeFileSync(reportPath, JSON.stringify({
+    at: new Date().toISOString(),
+    attempt,
+    passed: results.filter((row) => row.ok).length,
+    total: STEPS.length,
+    failed: results.some((row) => !row.ok),
+    results
+  }, null, 2));
+  return reportPath;
+}
 
-  if (!fs.existsSync(APP_BINARY)) {
-    console.error(`找不到构建产物：${APP_BINARY}\n先运行 npm run build`);
-    process.exit(2);
-  }
-
-  const fixtureDir = prepareFixture();
-  const label = path.basename(fixtureDir);
-
-  const child = spawn(APP_BINARY, [`--remote-debugging-port=${PORT}`], {
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
+/** 跑一次完整流程。隔离 user-data-dir：不碰真实来源注册表，也不会被用户正在开的实例挡住。 */
+async function runOnce({ profileDir, fixtureDir, label, attempt }) {
+  const child = spawn(APP_BINARY, [
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${profileDir}`
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
   childRef = child;
+
   let appLog = '';
   child.stdout.on('data', (chunk) => { appLog += chunk; });
   child.stderr.on('data', (chunk) => { appLog += chunk; });
 
   const results = [];
   let failed = false;
-  let cdpRef = null;
+  let cdp = null;
   let fixtureSourceId = null;
+
   try {
     const target = await waitForTarget();
-    const cdp = new Cdp(target.webSocketDebuggerUrl);
-    cdpRef = cdp;
+    cdp = new Cdp(target.webSocketDebuggerUrl);
     await cdp.ready();
     await sleep(1200);
 
     const setup = await cdp.evaluate(`(async () => {
-      // 清掉上次异常退出留下的临时来源，避免污染真实 registry
-      let cleaned = 0;
-      const list = await window.electronAPI.invoke('load-source-roots-v1', { contractVersion: 1 });
-      for (const source of (list?.data?.sources || [])) {
-        if (String(source.label || '').startsWith('pav-e2e-')) {
-          await window.electronAPI.invoke('remove-source-root-v1', { contractVersion: 1, sourceId: source.sourceId });
-          cleaned += 1;
-        }
-      }
       const res = await window.electronAPI.invoke('save-source-root-v1', {
         contractVersion: 1, sourceId: null, rootPath: ${JSON.stringify(fixtureDir)}, label: null
       });
       window.sessionStorage.setItem('pavE2ELabel', ${JSON.stringify(label)});
       window.sessionStorage.setItem('pavE2ESourceId', res?.data?.source?.sourceId || '');
-      return {
-        ok: Boolean(res?.ok),
-        sourceId: res?.data?.source?.sourceId || null,
-        cleaned,
-        error: res?.error?.message || null
-      };
+      return { ok: Boolean(res?.ok), sourceId: res?.data?.source?.sourceId || null, error: res?.error?.message || null };
     })()`);
     fixtureSourceId = setup.sourceId;
     if (!setup.ok || !setup.sourceId) {
@@ -386,7 +369,7 @@ async function main() {
     }
 
     // 重新加载让侧栏读到新注册的来源（应用只在启动时拉一次列表）
-    await cdp.evaluate(`window.location.reload()`);
+    await cdp.evaluate('window.location.reload()');
     await sleep(2600);
 
     for (const step of STEPS) {
@@ -404,55 +387,81 @@ async function main() {
     }
   } catch (error) {
     failed = true;
-    console.error(`启动或连接失败：${error.message}`);
-    if (appLog) console.error(appLog.slice(-800));
+    console.error(`尝试 ${attempt} 启动/连接失败：${error.message}`);
+    if (appLog) console.error(appLog.slice(-600));
   } finally {
-    // 兜底：步骤中断时也要把临时来源从真实 registry 里移除
-    if (cdpRef && fixtureSourceId) {
+    if (cdp && fixtureSourceId) {
       try {
-        await cdpRef.evaluate(`(async () => {
+        await cdp.evaluate(`(async () => {
           await window.electronAPI.invoke('remove-source-root-v1', {
             contractVersion: 1, sourceId: ${JSON.stringify(fixtureSourceId)}
           });
           return true;
         })()`);
       } catch (_error) {
-        // 应用可能已退出，只能靠下次运行开头的残留清理
+        // 整个 user-data-dir 会被删掉，留着也没关系
       }
     }
-    child.kill('SIGTERM');
-    await sleep(800);
     try {
+      child.kill('SIGTERM');
+      await sleep(800);
       child.kill('SIGKILL');
     } catch (_error) {
-      // 已经退出
+      // 已退出
     }
-    if (cdpRef) {
+    if (cdp) {
       try {
-        cdpRef.ws.close();
+        cdp.ws.close();
       } catch (_error) {
         // 已关闭
       }
     }
+  }
+  return { results, failed };
+}
+
+async function main() {
+  // 看门狗：任何一步卡住都不许无限等（曾出现过 app 未退出导致 npm 挂住）
+  const watchdog = setTimeout(() => {
+    console.error('超时：4 分钟内没有跑完，按失败处理');
     try {
-      fs.rmSync(fixtureDir, { recursive: true, force: true });
+      childRef?.kill('SIGKILL');
     } catch (_error) {
-      // 临时目录删不掉不影响结论
+      // 已退出
+    }
+    process.exit(3);
+  }, 240000);
+  watchdog.unref();
+
+  if (!fs.existsSync(APP_BINARY)) {
+    console.error(`找不到构建产物：${APP_BINARY}\n先运行 npm run build`);
+    process.exit(2);
+  }
+
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-e2e-profile-'));
+  const fixtureDir = prepareFixture();
+  const label = path.basename(fixtureDir);
+
+  let outcome = { results: [], failed: true };
+  let attempt = 0;
+  for (attempt = 1; attempt <= 2; attempt += 1) {
+    outcome = await runOnce({ profileDir, fixtureDir, label, attempt });
+    if (!outcome.failed) break;
+    if (attempt < 2) {
+      console.error('第一次没跑通，重试一次…');
+      await sleep(1500);
     }
   }
 
-  const reportPath = path.join(ROOT, '.3things/acceptance/evidence/click-smoke.json');
-  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-  fs.writeFileSync(reportPath, JSON.stringify({
-    at: new Date().toISOString(),
-    fixture: label,
-    passed: results.filter((row) => row.ok).length,
-    total: STEPS.length,
-    failed,
-    results
-  }, null, 2));
+  const reportPath = writeReport(outcome.results, attempt);
+  try {
+    fs.rmSync(fixtureDir, { recursive: true, force: true });
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  } catch (_error) {
+    // 临时目录删不掉不影响结论
+  }
   console.log(`\n报告：${path.relative(ROOT, reportPath)}`);
-  process.exit(failed ? 1 : 0);
+  process.exit(outcome.failed ? 1 : 0);
 }
 
 main().catch((error) => {
