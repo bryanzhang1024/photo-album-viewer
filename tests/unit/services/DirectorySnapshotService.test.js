@@ -506,6 +506,45 @@ describe('DirectorySnapshotService', () => {
     expect(parallelIo.getPeak()).toBeLessThanOrEqual(2);
   });
 
+  test('目录 mtime 不变时复用快照，mtime 变化后重新扫描', async () => {
+    let rootMtime = 1000;
+    const directories = new Map([
+      ['/photos', ['album']],
+      ['/photos/album', []]
+    ]);
+    const stats = new Map([
+      ['/photos/album', createStats('directory')]
+    ]);
+    const calls = [];
+    const service = loadService({
+      fsApi: {
+        async readdir(target) {
+          calls.push(['readdir', target]);
+          const value = directories.get(target);
+          if (!value) throw createIoError('ENOENT');
+          return [...value];
+        },
+        async stat(target) {
+          if (target === '/photos') return createStats('directory', { mtimeMs: rootMtime });
+          const value = stats.get(target);
+          if (!value) throw createIoError('ENOENT');
+          return value;
+        }
+      }
+    });
+
+    const first = await service.scanDirectorySnapshot(resolveRoot(service));
+    const firstReads = calls.filter(([kind]) => kind === 'readdir').length;
+    const second = await service.scanDirectorySnapshot(resolveRoot(service));
+    expect(second).toBe(first);
+    expect(calls.filter(([kind]) => kind === 'readdir').length).toBe(firstReads);
+
+    rootMtime = 2000;
+    const third = await service.scanDirectorySnapshot(resolveRoot(service));
+    expect(third).not.toBe(first);
+    expect(calls.filter(([kind]) => kind === 'readdir').length).toBeGreaterThan(firstReads);
+  });
+
   test('readdir 带类型时，子目录里的文件不再逐个 stat', async () => {
     const dirent = (name, isDir) => ({
       name,
@@ -573,7 +612,7 @@ describe('DirectorySnapshotService', () => {
       }
     });
 
-    const scan = service.scanDirectorySnapshot(resolveRoot(service), { concurrencyLimit: 1 });
+    const scan = service.scanDirectorySnapshot(resolveRoot(service), { concurrencyLimit: 1, useCache: false });
     await waitForCondition(() => firstStatStarted, 'first root stat did not start');
     const readsBeforeRelease = [...indexReads];
     releaseFirstStat();
@@ -615,7 +654,7 @@ describe('DirectorySnapshotService', () => {
       }
     });
 
-    const scan = service.scanDirectorySnapshot(resolveRoot(service), { concurrencyLimit: 1 });
+    const scan = service.scanDirectorySnapshot(resolveRoot(service), { concurrencyLimit: 1, useCache: false });
     await waitForCondition(() => firstChildStatStarted, 'first child stat did not start');
     const readsBeforeRelease = [...indexReads];
     releaseFirstChildStat();

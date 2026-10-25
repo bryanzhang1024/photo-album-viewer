@@ -126,8 +126,11 @@ function createDirectorySnapshotService({
   fsApi = fs.promises,
   now = () => Date.now(),
   makeRevision = () => `snap_${crypto.randomUUID()}`,
-  supportedFormats = SUPPORTED_FORMATS
+  supportedFormats = SUPPORTED_FORMATS,
+  snapshotCacheLimit = 24
 } = {}) {
+  // 目录快照缓存：目录 mtime 不变就直接返回上次结果（目录 mtime 会在增删改名时变化）
+  const snapshotCache = new Map();
   const mediaExtensions = new Set(
     Array.from(supportedFormats, (extension) => String(extension).toLowerCase())
   );
@@ -164,6 +167,26 @@ function createDirectorySnapshotService({
   }
 
   async function scanDirectorySnapshot(locator, options = {}) {
+    const cacheKey = `${locator.ref.sourceId}:${locator.ref.relativePath}`;
+    let directoryMtimeMs = null;
+    if (options.useCache !== false) {
+      try {
+        const stats = await fsApi.stat(locator.absolutePath);
+        if (Number.isFinite(stats?.mtimeMs)) directoryMtimeMs = stats.mtimeMs;
+      } catch (_error) {
+        directoryMtimeMs = null;
+      }
+      if (directoryMtimeMs !== null) {
+        const cached = snapshotCache.get(cacheKey);
+        if (cached && cached.mtimeMs === directoryMtimeMs) {
+          // 命中后挪到末尾，保持 LRU
+          snapshotCache.delete(cacheKey);
+          snapshotCache.set(cacheKey, cached);
+          return cached.snapshot;
+        }
+      }
+    }
+
     const pathApi = locator.pathFlavor === 'win32' ? path.win32 : path.posix;
     const concurrencyLimit = normalizeConcurrencyLimit(options.concurrencyLimit);
     const schedule = createScheduler(concurrencyLimit);
@@ -373,6 +396,13 @@ function createDirectorySnapshotService({
 
     if (!validateDirectorySnapshotV1(snapshot).valid) {
       throw createCodedError('INVALID_RESPONSE', 'Invalid directory snapshot');
+    }
+    if (directoryMtimeMs !== null && options.useCache !== false) {
+      snapshotCache.set(cacheKey, { mtimeMs: directoryMtimeMs, snapshot });
+      if (snapshotCache.size > snapshotCacheLimit) {
+        const oldestKey = snapshotCache.keys().next().value;
+        snapshotCache.delete(oldestKey);
+      }
     }
     return snapshot;
   }
