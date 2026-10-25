@@ -4,7 +4,7 @@ import StatusBar from '../../shell/StatusBar';
 import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon, SortAscIcon, SortDescIcon } from '../../icons';
 import useFolderSnapshot from './useFolderSnapshot';
 import useOtherFiles from './useOtherFiles';
-import useBreakpoint from '../../hooks/useBreakpoint';
+import useBreakpoint, { isNarrowBreakpoint } from '../../hooks/useBreakpoint';
 import useSettings from '../../hooks/useSettings';
 import VirtualGrid from './VirtualGrid';
 import FolderList from './FolderList';
@@ -64,7 +64,7 @@ export default function FolderPage({
   const { status, snapshot, items, error, reload } = useFolderSnapshot(source, relativePath);
   const breakpoint = useBreakpoint();
   const settings = useSettings();
-  const compactHeader = viewMode === 'list' || breakpoint === 'medium' || breakpoint === 'small';
+  const compactHeader = viewMode === 'list' || isNarrowBreakpoint(breakpoint);
   const { files: otherFiles } = useOtherFiles(source, relativePath);
   const [sortState, setSortState] = useState(() => getFolderSort(source.sourceId, relativePath));
   const [density, setDensity] = useState(() => getFolderDensity(source.sourceId, relativePath));
@@ -451,7 +451,9 @@ export default function FolderPage({
         {ready && filtered.length > 0 && viewMode === 'grid' ? (
           <VirtualGrid
             items={filtered}
-            minItemWidth={DENSITIES[density].minWidth}
+            minItemWidth={(breakpoint === 'small' || (typeof window !== 'undefined' && window.innerWidth < 760))
+              ? Math.max(200, DENSITIES[density].minWidth)
+              : DENSITIES[density].minWidth}
             renderItem={(item, width, coverHeight) => (
               <GridCard
                 key={item.key}

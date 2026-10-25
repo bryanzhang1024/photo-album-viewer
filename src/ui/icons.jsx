@@ -49,12 +49,6 @@ export const ListIcon = () => (
   </svg>
 );
 
-export const SortIcon = () => (
-  <svg {...base} width={15} height={15}>
-    <path d="M4.6 3v10M2.2 10.6 4.6 13l2.4-2.4M11.4 13V3M9 5.4 11.4 3 13.8 5.4" />
-  </svg>
-);
-
 export const ShuffleIcon = () => (
   <svg {...base} width={15} height={15}>
     <path d="M2.2 4.4h2.6l6 7.2h2.6M11.2 3.4l2.2 1-2.2 1M2.2 11.6h2.6l2-2.4M11.2 10.6l2.2 1-2.2 1" />

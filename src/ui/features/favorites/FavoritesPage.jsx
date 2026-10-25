@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
-import useBreakpoint from '../../hooks/useBreakpoint';
+import useBreakpoint, { isNarrowBreakpoint } from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import Thumb from '../../components/Thumb';
 import ImageViewer from '../../components/ImageViewer';
@@ -34,7 +34,7 @@ function Collage({ samples }) {
 
 export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
   const breakpoint = useBreakpoint();
-  const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
+  const compactHeader = isNarrowBreakpoint(breakpoint);
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('folders');
   const [viewMode, setViewMode] = useState('grid');

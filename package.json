@@ -19,7 +19,9 @@
     "bench:thumb": "electron scripts/bench-thumbnails-3.js",
     "bench:cache": "jest --config jest.perf.config.js",
     "probe:thumb": "cross-env PROBE_TIMEOUT=20000 electron scripts/probe-native-thumb.js",
-    "test:e2e": "node scripts/click-smoke.mjs"
+    "test:e2e": "node scripts/click-smoke.mjs",
+    "check:unwired": "node scripts/check-unwired.mjs",
+    "evidence:responsive": "node scripts/responsive-shots.mjs"
   },
   "build": {
     "appId": "com.photoalbum.viewer",

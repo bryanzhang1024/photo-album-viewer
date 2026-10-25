@@ -687,3 +687,30 @@ button.list-head-cell.active {
   font-size: 10px;
   opacity: 0.8;
 }
+
+/* 响应式细节（设计稿七） */
+@media (max-width: 1099px) {
+  /* 900–1099：隐藏密度滑块 */
+  .ctrl-range {
+    display: none;
+  }
+}
+
+@media (max-width: 899px) {
+  /* 700–899：列表隐藏「子文件夹」列，只留名称 / 图片 / 修改日期（照片层本来就是三列） */
+  .folder-scroll:not(.photo-layer) .folder-list-head > *:nth-child(3),
+  .folder-scroll:not(.photo-layer) .folder-row > *:nth-child(3) {
+    display: none;
+  }
+  .folder-scroll:not(.photo-layer) .list-head.folder-list-head,
+  .folder-scroll:not(.photo-layer) .folder-row {
+    grid-template-columns: 1fr 90px 150px;
+  }
+}
+
+@media (max-height: 560px) {
+  /* 720×480 最小窗口：状态栏不再挤快捷键 */
+  .statusbar > span:last-child {
+    display: none;
+  }
+}

@@ -4,7 +4,7 @@ import { GridIcon, ListIcon, SearchIcon } from './icons';
 import TabBar from './shell/TabBar';
 import Sidebar from './shell/Sidebar';
 import Menu from './components/Menu';
-import useBreakpoint from './hooks/useBreakpoint';
+import useBreakpoint, { isNarrowBreakpoint } from './hooks/useBreakpoint';
 import useSettings from './hooks/useSettings';
 import {
   listSourceRoots, selectDirectory, saveSourceRoot, removeSourceRoot, openInNewWindow,
@@ -89,6 +89,7 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState(() => bootSession?.activeTabId ?? tabs[0].id);
   const [menu, setMenu] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef(null);
   const breakpoint = useBreakpoint();
   const settings = useSettings();
@@ -100,7 +101,7 @@ export default function App() {
     : null;
 
   useEffect(() => {
-    if (breakpoint === 'medium' || breakpoint === 'small') {
+    if (isNarrowBreakpoint(breakpoint)) {
       setSidebarCollapsed(true);
       setSidebarManuallyToggled(false);
       return;
@@ -141,6 +142,7 @@ export default function App() {
 
   useEffect(() => {
     setSearchQuery('');
+    setSearchExpanded(false);
   }, [location]);
 
   // 标签页自动落盘：数量、顺序、当前标签与各自历史位置。
@@ -585,19 +587,38 @@ export default function App() {
               <button className="icon-button" type="button" aria-label="列表视图"
                 aria-pressed={viewMode === 'list'} onClick={() => changeViewMode('list')}><ListIcon /></button>
             </div>
-            <label className="cos-search toolbar-search" ref={searchInputRef}>
-              <SearchIcon />
-              <input
-                type="search"
-                value={searchQuery}
-                aria-label="搜索这个文件夹"
-                placeholder="搜索这个文件夹"
-                onChange={(event) => setSearchQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') setSearchQuery('');
+            {(breakpoint === 'compact' || breakpoint === 'small') && !searchExpanded && !searchQuery ? (
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="搜索"
+                onClick={() => {
+                  setSearchExpanded(true);
+                  requestAnimationFrame(() => {
+                    searchInputRef.current?.querySelector('input')?.focus();
+                  });
                 }}
-              />
-            </label>
+              >
+                <SearchIcon />
+              </button>
+            ) : (
+              <label className="cos-search toolbar-search" ref={searchInputRef}>
+                <SearchIcon />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  aria-label="搜索这个文件夹"
+                  placeholder="搜索这个文件夹"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      setSearchQuery('');
+                      setSearchExpanded(false);
+                    }
+                  }}
+                />
+              </label>
+            )}
           </>
         ) : null}
       />

@@ -1,6 +1,6 @@
 {
-  "at": "2026-10-25T06:58:20.943Z",
-  "fixture": "pav-e2e-TiCNeP",
+  "at": "2026-10-25T07:37:48.128Z",
+  "fixture": "pav-e2e-7wwe5C",
   "passed": 7,
   "total": 7,
   "failed": false,
@@ -10,7 +10,7 @@
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›pav-e2e-TiCNeP",
+        "crumbs": "文件夹›pav-e2e-7wwe5C",
         "searchLabel": "搜索这个文件夹"
       }
     },
@@ -20,7 +20,7 @@
       "detail": {
         "ok": true,
         "count": "0 个结果 · 搜索范围：当前文件夹",
-        "after": "2 张照片"
+        "after": "1 个文件夹 · 2 张图片"
       }
     },
     {
@@ -39,7 +39,8 @@
         "ok": true,
         "headers": [
           "名称↓",
-          "大小 / 类型",
+          "图片 / 类型",
+          "子文件夹 / 大小",
           "修改日期"
         ],
         "ariaSort": "descending"
@@ -54,7 +55,8 @@
           "打开",
           "添加到收藏",
           "在 Finder 中显示"
-        ]
+        ],
+        "isFolderCard": false
       }
     },
     {
@@ -67,12 +69,11 @@
       }
     },
     {
-      "step": "移除临时来源：IPC 返回 ok、registry 里也没有",
+      "step": "通过侧栏移除临时来源：菜单确认后侧栏少一条、registry 也没有",
       "ok": true,
       "detail": {
         "ok": true,
-        "ipcOk": true,
-        "error": null,
+        "stillVisible": false,
         "stillInRegistry": false
       }
     }

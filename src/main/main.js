@@ -1273,7 +1273,7 @@ ipcMain.handle(CHANNELS.OPEN_SETTINGS_WINDOW, async () => {
     const settingsWindow = createWindow(null, {
       width: 760,
       height: 560,
-      minWidth: 640,
+      minWidth: 720,
       minHeight: 480,
       hashUrl: '#/settings'
     });

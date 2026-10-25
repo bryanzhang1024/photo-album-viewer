@@ -23,6 +23,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+let childRef = null;
 const APP_BINARY = path.join(
   ROOT,
   'dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer'
@@ -109,11 +110,12 @@ class Cdp {
   }
 
   async evaluate(expression) {
-    const result = await this.send('Runtime.evaluate', {
-      expression,
-      awaitPromise: true,
-      returnByValue: true
-    });
+    // 连接被关掉或页面正在重载时，pending 永远不会 resolve；加超时避免整脚本挂死。
+    const result = await Promise.race([
+      this.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }),
+      sleep(20000).then(() => ({ __timeout: true }))
+    ]);
+    if (result?.__timeout) throw new Error('页面执行超时');
     if (result?.exceptionDetails) {
       throw new Error(result.exceptionDetails.text || '页面内执行失败');
     }
@@ -317,6 +319,18 @@ const STEPS = [
 ];
 
 async function main() {
+  // 看门狗：任何一步卡住都不许无限等（曾出现过 app 未退出导致 npm 挂住）
+  const watchdog = setTimeout(() => {
+    console.error('超时：3 分钟内没有跑完，按失败处理');
+    try {
+      childRef?.kill('SIGKILL');
+    } catch (_error) {
+      // 已退出
+    }
+    process.exit(3);
+  }, 180000);
+  watchdog.unref();
+
   if (!fs.existsSync(APP_BINARY)) {
     console.error(`找不到构建产物：${APP_BINARY}\n先运行 npm run build`);
     process.exit(2);
@@ -328,6 +342,7 @@ async function main() {
   const child = spawn(APP_BINARY, [`--remote-debugging-port=${PORT}`], {
     stdio: ['ignore', 'pipe', 'pipe']
   });
+  childRef = child;
   let appLog = '';
   child.stdout.on('data', (chunk) => { appLog += chunk; });
   child.stderr.on('data', (chunk) => { appLog += chunk; });
@@ -387,7 +402,6 @@ async function main() {
         break;
       }
     }
-    cdp.ws.close();
   } catch (error) {
     failed = true;
     console.error(`启动或连接失败：${error.message}`);
@@ -407,7 +421,19 @@ async function main() {
       }
     }
     child.kill('SIGTERM');
-    await sleep(600);
+    await sleep(800);
+    try {
+      child.kill('SIGKILL');
+    } catch (_error) {
+      // 已经退出
+    }
+    if (cdpRef) {
+      try {
+        cdpRef.ws.close();
+      } catch (_error) {
+        // 已关闭
+      }
+    }
     try {
       fs.rmSync(fixtureDir, { recursive: true, force: true });
     } catch (_error) {
