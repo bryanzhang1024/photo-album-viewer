@@ -12,6 +12,8 @@ import CosHomePage from './features/cos/CosHomePage';
 import CosEntityPage from './features/cos/CosEntityPage';
 import CosSetListPage from './features/cos/CosSetListPage';
 import CosSetAlbumPage from './features/cos/CosSetAlbumPage';
+import FavoritesPage from './features/favorites/FavoritesPage';
+import { loadSettings, applyTheme } from './data/settings';
 
 /**
  * 4.0 外壳与导航。位置模型：{ kind: 'roots' } 或 { kind: 'folder', sourceId, relativePath }。
@@ -36,6 +38,18 @@ export default function App() {
       setSidebarCollapsed(true);
     }
   }, [breakpoint]);
+
+  useEffect(() => {
+    const settings = loadSettings();
+    applyTheme(settings.theme);
+    if (settings.theme === 'auto' && window.matchMedia) {
+      const media = window.matchMedia('(prefers-color-scheme: light)');
+      const handler = () => applyTheme('auto');
+      media.addEventListener?.('change', handler);
+      return () => media.removeEventListener?.('change', handler);
+    }
+    return undefined;
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -74,6 +88,10 @@ export default function App() {
       navigate({ kind: 'roots' });
       return;
     }
+    if (key === 'favorites') {
+      navigate({ kind: 'favorites' });
+      return;
+    }
     if (key === 'cos') {
       navigate({ kind: 'cos-home' });
       return;
@@ -101,6 +119,8 @@ export default function App() {
   let title = '文件夹';
   if (location.kind === 'folder') {
     title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
+  } else if (location.kind === 'favorites') {
+    title = '我的收藏';
   } else if (location.kind === 'cos-home') {
     title = 'Cos 图库';
   } else if (location.kind === 'cos-characters') {
@@ -115,6 +135,7 @@ export default function App() {
 
   const activeKey = useMemo(() => {
     if (location.kind === 'roots') return 'folder';
+    if (location.kind === 'favorites') return 'favorites';
     if (location.kind === 'folder') return location.sourceId;
     if (location.kind === 'cos-home') return 'cos';
     if (location.kind === 'cos-characters') return 'cos-characters';
@@ -156,7 +177,15 @@ export default function App() {
           onNavigate={onSidebarNavigate}
         />
         <main className="main">
-          {location.kind === 'cos-home' ? (
+          {location.kind === 'favorites' ? (
+            <FavoritesPage
+              onOpenFolder={(item) => navigate({
+                kind: 'folder',
+                sourceId: item.sourceId,
+                relativePath: item.relativePath
+              })}
+            />
+          ) : location.kind === 'cos-home' ? (
             <CosHomePage onNavigate={navigate} />
           ) : location.kind === 'cos-characters' ? (
             <CosEntityPage

@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
 import StatusBar from '../../shell/StatusBar';
-import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon } from '../../icons';
+import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon, SearchIcon } from '../../icons';
 import useFolderSnapshot from './useFolderSnapshot';
 import useOtherFiles from './useOtherFiles';
 import VirtualGrid from './VirtualGrid';
@@ -48,6 +48,8 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     window.localStorage.getItem(fitStorageKey(source.sourceId, relativePath)) === '1'
   ));
   const [favorites, setFavorites] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef(null);
 
   const sorted = useMemo(() => {
     const compare = (left, right) => {
@@ -61,6 +63,12 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     return [...folders, ...images];
   }, [items, sortKey]);
 
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sorted;
+    return sorted.filter((item) => String(item.name).toLowerCase().includes(query));
+  }, [sorted, searchQuery]);
+
   const images = useMemo(
     () => sorted
       .filter((item) => item.kind === 'image' && !deletedKeys.has(item.key))
@@ -72,6 +80,10 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
     [sorted, deletedKeys, source.rootPath]
   );
 
+  useEffect(() => {
+    setSearchQuery('');
+  }, [source.sourceId, relativePath]);
+
   const segments = relativePath.split('/').filter(Boolean);
   const title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
   const crumbs = segments.length > 0
@@ -82,10 +94,13 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
   const folders = ready ? snapshot.facts.childDirectoryCount : 0;
   const totalImages = ready ? snapshot.facts.directMediaCount : 0;
   const otherCount = otherFiles.length;
+  const searching = searchQuery.trim().length > 0;
   const countText = ready
-    ? (folders > 0
-      ? `${formatCount(folders)} 个文件夹${totalImages > 0 ? ` · ${formatCount(totalImages)} 张图片` : ''}${otherCount > 0 ? ` · ${otherCount} 个其他文件` : ''}`
-      : `${formatCount(totalImages)} 张照片${otherCount > 0 ? ` · ${otherCount} 个其他文件` : ''}`)
+    ? (searching
+      ? `${formatCount(filtered.length)} 个结果 · 搜索范围：当前文件夹`
+      : (folders > 0
+        ? `${formatCount(folders)} 个文件夹${totalImages > 0 ? ` · ${formatCount(totalImages)} 张图片` : ''}${otherCount > 0 ? ` · ${otherCount} 个其他文件` : ''}`
+        : `${formatCount(totalImages)} 张照片${otherCount > 0 ? ` · ${otherCount} 个其他文件` : ''}`))
     : status === 'error' ? '读取失败' : '读取中…';
 
   const toggleFit = () => {
@@ -163,13 +178,22 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
   useEffect(() => {
     if (viewMode !== 'list') return undefined;
     const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'f') {
+        event.preventDefault();
+        searchRef.current?.querySelector('input')?.focus();
+        return;
+      }
+      if (event.key === 'Escape' && searchQuery) {
+        setSearchQuery('');
+        return;
+      }
       if (event.key !== 'Enter' || !selectedKey || viewerIndex !== null) return;
       const item = sorted.find((entry) => entry.key === selectedKey);
       if (item) handleOpen(item);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [viewMode, selectedKey, viewerIndex, sorted]);
+  }, [viewMode, selectedKey, viewerIndex, sorted, searchQuery]);
 
   const controls = (
     <>
@@ -188,6 +212,15 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
       ) : null}
       <button className="icon-button" type="button" aria-label="设置"
         onClick={() => invoke(CHANNELS.OPEN_SETTINGS_WINDOW)}><SettingsIcon /></button>
+      <label className="cos-search" ref={searchRef}>
+        <SearchIcon />
+        <input
+          type="search"
+          value={searchQuery}
+          placeholder="搜索这个文件夹"
+          onChange={(event) => setSearchQuery(event.target.value)}
+        />
+      </label>
       {totalImages > 0 ? (
         <button
           className={`icon-button${fitMode ? ' active' : ''}`}
@@ -237,16 +270,22 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
       <div className="folder-body">
         {status === 'loading' ? <div className="folder-state">正在读取目录…</div> : null}
         {status === 'error' ? <div className="folder-state error">{error}</div> : null}
-        {ready && sorted.length === 0 && otherCount === 0 ? <div className="folder-state">这个文件夹是空的</div> : null}
-        {ready && sorted.length === 0 && otherCount > 0 && viewMode === 'grid' ? (
+        {ready && filtered.length === 0 && !searching && otherCount === 0 ? <div className="folder-state">这个文件夹是空的</div> : null}
+        {ready && filtered.length === 0 && searching ? (
+          <div className="folder-state">
+            <div>没有找到「{searchQuery.trim()}」。</div>
+            <button className="btn-primary" type="button" onClick={() => setSearchQuery('')}>清除搜索</button>
+          </div>
+        ) : null}
+        {ready && filtered.length === 0 && !searching && otherCount > 0 && viewMode === 'grid' ? (
           <div className="folder-state">
             <div>这个文件夹里没有图片，有 {otherCount} 个其他文件。</div>
             <button className="btn-primary" type="button" onClick={() => onViewModeChange('list')}>用列表查看</button>
           </div>
         ) : null}
-        {ready && sorted.length > 0 && viewMode === 'grid' ? (
+        {ready && filtered.length > 0 && viewMode === 'grid' ? (
           <VirtualGrid
-            items={sorted}
+            items={filtered}
             minItemWidth={DENSITIES[density].minWidth}
             renderItem={(item, width, coverHeight) => (
               <GridCard
@@ -262,9 +301,9 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
             )}
           />
         ) : null}
-        {ready && sorted.length > 0 && viewMode === 'list' ? (
+        {ready && filtered.length > 0 && viewMode === 'list' ? (
           <FolderList
-            items={sorted}
+            items={filtered}
             otherFiles={otherFiles}
             rootPath={source.rootPath}
             selectedKey={selectedKey}
