@@ -385,11 +385,9 @@ app.whenReady().then(async () => {
   for (const { fileName, error } of cleanup.failed) {
     console.warn(`[Navigation v3] 清理旧导航文件失败: ${fileName}`, error?.message || error);
   }
-  try {
-    await getComputerRootSource();
-  } catch (error) {
-    console.warn('[SourceRoot] 初始化电脑根目录失败:', error?.message || error);
-  }
+  // 说明：以前启动时自动创建「电脑」来源（根目录 /），这等于默认授权整盘。
+  // 现在改为只在用户主动打开（--folder）或自己添加来源时才建立，
+  // 已有来源的机器不受影响。
   await loadApprovedRoots();
   // 把来源注册表里的根补登记到访问白名单，老用户升级后不用重新选目录
   try {
@@ -977,6 +975,10 @@ ipcMain.handle(CHANNELS.GET_FOLDER_COVER_V1, async (event, request) => {
     const normalizedRoot = normalizeAbsolutePath(rootPath);
     if (!normalizedRoot) {
       return { success: false, error: '来源根目录不可用', samples: [] };
+    }
+    // 根目录 / 不当作照片来源：否则任何路径都算「在其之下」
+    if (normalizedRoot === path.parse(normalizedRoot).root) {
+      return { success: false, error: '根目录不能作为封面来源', samples: [] };
     }
 
     // 只接受「注册过的照片来源根」，而不是任意位于白名单内的目录：

@@ -284,6 +284,28 @@ const STEPS = [
     }
   },
   {
+    name: '安全边界：未注册的根、根目录 /、未授权文件列表都被拒绝',
+    run: async (page) => {
+      const detail = await page.evaluate(`(async () => {
+        const coverTmp = await window.electronAPI.invoke('get-folder-cover-v1', {
+          rootPath: '/tmp', relativePath: ''
+        });
+        const coverRoot = await window.electronAPI.invoke('get-folder-cover-v1', {
+          rootPath: '/', relativePath: 'tmp'
+        });
+        const listTmp = await window.electronAPI.invoke('list-directory-files-v1', '/tmp');
+        return {
+          ok: coverTmp?.success === false
+            && coverRoot?.success === false
+            && listTmp?.success === false,
+          coverTmp, coverRoot, listTmp
+        };
+      })()`);
+      assert(detail.ok, '未授权路径没有被拒绝', detail);
+      return detail;
+    }
+  },
+  {
     name: '通过侧栏移除临时来源：菜单确认后侧栏少一条、registry 也没有',
     run: async (page) => {
       const detail = await page.evaluate(`(async () => {

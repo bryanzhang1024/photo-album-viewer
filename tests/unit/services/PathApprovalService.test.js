@@ -50,6 +50,19 @@ describe('PathApprovalService', () => {
     expect(await service.assert(path.join(root, '..', 'secret.jpg'))).toBe(false);
   });
 
+  test('前缀相似但实际不同的目录不会被误放行', async () => {
+    const { dir, service } = makeService();
+    const root = fs.mkdtempSync(path.join(dir, 'tmp-'));
+    const lookalike = `${root}-other`;
+    fs.mkdirSync(lookalike);
+    fs.writeFileSync(path.join(lookalike, 'x.jpg'), 'x');
+    await service.register(root);
+
+    expect(await service.isWithin(path.join(lookalike, 'x.jpg'))).toBe(false);
+    // 带尾斜杠的根写法也应该正常工作
+    expect(await service.isWithin(`${root}/`)).toBe(true);
+  });
+
   test('符号链接指向根外时被拒绝（按 realpath 判断）', async () => {
     const { dir, service } = makeService();
     const root = fs.mkdtempSync(path.join(dir, 'photos-'));

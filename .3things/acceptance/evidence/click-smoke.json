@@ -1,8 +1,8 @@
 {
-  "at": "2026-10-25T09:13:32.858Z",
+  "at": "2026-10-25T09:21:01.797Z",
   "attempt": 1,
-  "passed": 7,
-  "total": 7,
+  "passed": 8,
+  "total": 8,
   "failed": false,
   "results": [
     {
@@ -10,7 +10,7 @@
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›pav-e2e-PmXPY9",
+        "crumbs": "文件夹›pav-e2e-9GXYYG",
         "searchLabel": "搜索这个文件夹"
       }
     },
@@ -68,6 +68,28 @@
         "ok": true,
         "hasSize": true,
         "panelClosed": true
+      }
+    },
+    {
+      "step": "安全边界：未注册的根、根目录 /、未授权文件列表都被拒绝",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "coverTmp": {
+          "success": false,
+          "error": "不是已注册的照片来源",
+          "samples": []
+        },
+        "coverRoot": {
+          "success": false,
+          "error": "根目录不能作为封面来源",
+          "samples": []
+        },
+        "listTmp": {
+          "success": false,
+          "files": [],
+          "error": "访问路径不在已授权照片目录范围内"
+        }
       }
     },
     {
