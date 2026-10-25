@@ -33,10 +33,9 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   const [dual, setDual] = useState(Boolean(settings.defaultDualPageViewer));
   const [naturalSize, setNaturalSize] = useState(null);
   const [broken, setBroken] = useState(false);
-  const [barVisible, setBarVisible] = useState(true);
+  const [barVisible, setBarVisible] = useState(false);
   const [wrapNotice, setWrapNotice] = useState('');
   const wheelRef = useRef({ delta: 0, lastFlip: 0 });
-  const barTimerRef = useRef(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [favorites, setFavorites] = useState(null);
   const dragRef = useRef(null);
@@ -79,19 +78,12 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     return () => clearTimeout(timer);
   }, [wrapNotice]);
 
-  // 底部工具栏：鼠标不动 2.2 秒自动隐藏，移动即出现
-  const wakeBar = useCallback(() => {
-    setBarVisible(true);
-    if (barTimerRef.current) clearTimeout(barTimerRef.current);
-    barTimerRef.current = setTimeout(() => setBarVisible(false), 2200);
-  }, []);
-
-  useEffect(() => {
-    wakeBar();
-    return () => {
-      if (barTimerRef.current) clearTimeout(barTimerRef.current);
-    };
-  }, [wakeBar]);
+  // 底部工具栏默认隐藏：只有鼠标进入窗口底部区域（或悬停在工具栏本身）才出现。
+  const syncBarFromPointer = (event) => {
+    // 查看器是 fixed 全屏，窗口底边就是查看器底边
+    const viewportHeight = window.innerHeight || 0;
+    setBarVisible(viewportHeight - event.clientY <= 90);
+  };
 
   const close = useCallback(() => onClose?.(), [onClose]);
 
@@ -255,7 +247,8 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       className="viewer"
       role="dialog"
       aria-label="大图查看器"
-      onMouseMove={wakeBar}
+      onMouseMove={syncBarFromPointer}
+      onMouseLeave={() => setBarVisible(false)}
       onContextMenu={(event) => {
         event.preventDefault();
         close();

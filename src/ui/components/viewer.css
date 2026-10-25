@@ -69,6 +69,8 @@ body.viewer-open {
 }
 
 .viewer-pair {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -215,14 +217,21 @@ body.viewer-open {
 }
 
 /* 默认贴合窗口：小图放大、大图缩小，100% 即「适应窗口」 */
+/* 用绝对定位铺满舞台：grid/flex 里百分比高度会退化成 auto，导致大图溢出被裁 */
 .viewer-image {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  max-width: none;
+  max-height: none;
 }
 
 .viewer-pair img {
   width: 48.5%;
   height: 100%;
+  max-width: 48.5%;
+  max-height: 100%;
 }
 
 .viewer-bar {
@@ -238,8 +247,8 @@ body.viewer-open {
 .viewer-toast {
   position: absolute;
   left: 50%;
-  bottom: 74px;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   padding: 8px 14px;
   border-radius: 8px;
   background: rgba(30, 30, 32, 0.92);

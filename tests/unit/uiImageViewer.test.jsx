@@ -133,20 +133,22 @@ describe('查看器 · Esc 分层与输入', () => {
     expect(screen.getByRole('status')).toHaveTextContent('已到末尾，已回到第一张');
   });
 
-  test('底部工具栏鼠标不动会隐藏，移动后重新出现', async () => {
-    jest.useFakeTimers();
+  test('底部工具栏默认隐藏，鼠标到底部附近才出现', async () => {
     renderViewer();
     const viewer = screen.getByRole('dialog', { name: '大图查看器' });
-    expect(viewer.querySelector('.viewer-bar').className).not.toContain('hidden');
-
-    act(() => {
-      jest.advanceTimersByTime(2500);
-    });
     expect(viewer.querySelector('.viewer-bar').className).toContain('hidden');
 
-    fireEvent.mouseMove(viewer);
+    // 鼠标还在画面上半部分：保持隐藏
+    fireEvent.mouseMove(viewer, { clientY: 100 });
+    expect(viewer.querySelector('.viewer-bar').className).toContain('hidden');
+
+    // 移到窗口底部附近：出现
+    fireEvent.mouseMove(viewer, { clientY: window.innerHeight - 10 });
     expect(viewer.querySelector('.viewer-bar').className).not.toContain('hidden');
-    jest.useRealTimers();
+
+    // 移出窗口：再次隐藏
+    fireEvent.mouseLeave(viewer);
+    expect(viewer.querySelector('.viewer-bar').className).toContain('hidden');
   });
 
   test('收藏后按钮与卡片使用同一套实心红样式', async () => {
