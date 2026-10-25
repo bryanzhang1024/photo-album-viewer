@@ -167,8 +167,17 @@ function createDirectorySnapshotService({
     const pathApi = locator.pathFlavor === 'win32' ? path.win32 : path.posix;
     const concurrencyLimit = normalizeConcurrencyLimit(options.concurrencyLimit);
     const schedule = createScheduler(concurrencyLimit);
-    const readDirectory = (target) => schedule(() => fsApi.readdir(target));
+    const readDirectory = (target) => schedule(() => fsApi.readdir(target, { withFileTypes: true }));
     const readStats = (target) => schedule(() => fsApi.stat(target));
+
+    // readdir 若能直接给出类型（生产环境），子目录里的每个文件就不必再 stat；
+    // 测试或降级实现返回字符串时退回逐个 stat，行为保持不变。
+    const hasDirentTypes = (entries) => (
+      Array.isArray(entries)
+      && entries.length > 0
+      && entries[0]
+      && typeof entries[0].isDirectory === 'function'
+    );
     const observedAt = now();
     const revision = makeRevision();
 
@@ -176,7 +185,7 @@ function createDirectorySnapshotService({
       return mediaExtensions.has(pathApi.extname(name).toLowerCase());
     }
 
-    async function inspectEntry(parentAbsolutePath, parentRelativePath, name) {
+    async function inspectEntry(parentAbsolutePath, parentRelativePath, name, dirent = null) {
       let relativePath;
       try {
         relativePath = joinPortableRelativePath(parentRelativePath, name);
@@ -186,6 +195,13 @@ function createDirectorySnapshotService({
       }
 
       const absolutePath = pathApi.join(parentAbsolutePath, name);
+      const knownType = dirent
+        ? (dirent.isDirectory() ? 'directory' : (dirent.isFile() ? 'file' : 'other'))
+        : null;
+      // 已知类型时不再为「其他文件」白做一次 stat；目录/图片仍要 stat 拿 mtime/size
+      if (knownType === 'other') return { kind: 'other' };
+      if (knownType === 'file' && !isSupportedMedia(name)) return { kind: 'other' };
+
       let stats;
       try {
         stats = await readStats(absolutePath);
@@ -210,11 +226,47 @@ function createDirectorySnapshotService({
       return media ? { kind: 'media', media } : { kind: 'unknown' };
     }
 
+    async function scanChildFast(candidate, entries) {
+      const mediaRelativePaths = [];
+      let childDirectoryCount = 0;
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          childDirectoryCount += 1;
+          continue;
+        }
+        if (!entry.isFile() || !isSupportedMedia(entry.name)) continue;
+        mediaRelativePaths.push(joinPortableRelativePath(candidate.relativePath, entry.name));
+      }
+      mediaRelativePaths.sort(naturalCompare);
+      const facts = {
+        directMediaCount: mediaRelativePaths.length,
+        childDirectoryCount
+      };
+      return {
+        ref: { sourceId: locator.ref.sourceId, relativePath: candidate.relativePath },
+        name: candidate.name,
+        status: 'ready',
+        completeness: { directMedia: 'complete', children: 'complete' },
+        facts,
+        ...(Number.isFinite(candidate.mtimeMs) ? { mtimeMs: candidate.mtimeMs } : {}),
+        approximate: createApproximate(
+          'ready',
+          { directMedia: 'complete', children: 'complete' },
+          facts,
+          mediaRelativePaths.slice(0, 4),
+          observedAt
+        )
+      };
+    }
+
     async function scanChild(candidate) {
       const unavailableCompleteness = { directMedia: 'partial', children: 'partial' };
       let entryNames;
       try {
         entryNames = await readDirectory(candidate.absolutePath);
+        if (hasDirentTypes(entryNames)) {
+          return scanChildFast(candidate, entryNames);
+        }
       } catch (error) {
         const status = mapDirectoryStatus(error);
         const facts = { directMediaCount: 0, childDirectoryCount: 0 };
@@ -274,12 +326,15 @@ function createDirectorySnapshotService({
     } catch (error) {
       throw createUnavailableRootError(error);
     }
+    const rootHasTypes = hasDirentTypes(entryNames);
 
     const completeness = { entries: 'complete', directMedia: 'complete', children: 'complete' };
     const directMedia = [];
     const childCandidates = [];
-    await forEachWithConcurrency(entryNames, concurrencyLimit, async (name) => {
-      const entry = await inspectEntry(locator.absolutePath, locator.ref.relativePath, name);
+    await forEachWithConcurrency(entryNames, concurrencyLimit, async (entryOrName) => {
+      const name = rootHasTypes ? entryOrName.name : entryOrName;
+      const dirent = rootHasTypes ? entryOrName : null;
+      const entry = await inspectEntry(locator.absolutePath, locator.ref.relativePath, name, dirent);
       if (entry.kind === 'media') directMedia.push(entry.media);
       if (entry.kind === 'directory') childCandidates.push(entry);
       if (entry.kind === 'skipped' || entry.kind === 'unknown') {

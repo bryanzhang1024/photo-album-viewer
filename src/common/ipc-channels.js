@@ -6,6 +6,8 @@ module.exports = {
     SAVE_SOURCE_ROOT_V1: 'save-source-root-v1',
     REMOVE_SOURCE_ROOT_V1: 'remove-source-root-v1',
     REORDER_SOURCE_ROOTS_V1: 'reorder-source-roots-v1',
+    WATCH_DIRECTORY_V1: 'watch-directory-v1',
+    DIRECTORY_CHANGED_V1: 'directory-changed-v1',
     VALIDATE_NAVIGATION_TARGET_V1: 'validate-navigation-target-v1',
     RESOLVE_DROPPED_FOLDERS: 'resolve-dropped-folders',
     GET_IMAGE_THUMBNAIL: 'get-image-thumbnail',

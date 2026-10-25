@@ -506,6 +506,43 @@ describe('DirectorySnapshotService', () => {
     expect(parallelIo.getPeak()).toBeLessThanOrEqual(2);
   });
 
+  test('readdir 带类型时，子目录里的文件不再逐个 stat', async () => {
+    const dirent = (name, isDir) => ({
+      name,
+      isDirectory: () => isDir,
+      isFile: () => !isDir
+    });
+    const directories = new Map([
+      ['/photos', [dirent('album', true)]],
+      ['/photos/album', [dirent('1.jpg', false), dirent('2.jpg', false), dirent('nested', true)]]
+    ]);
+    const stats = new Map([['/photos/album', createStats('directory')]]);
+    const calls = [];
+    const service = loadService({
+      fsApi: {
+        async readdir(target) {
+          calls.push(['readdir', target]);
+          const value = directories.get(target);
+          if (!value) throw createIoError('ENOENT');
+          return value;
+        },
+        async stat(target) {
+          calls.push(['stat', target]);
+          if (!stats.has(target)) throw createIoError('ENOENT');
+          return stats.get(target);
+        }
+      }
+    });
+
+    const snapshot = await service.scanDirectorySnapshot(resolveRoot(service));
+
+    expect(snapshot.children[0].facts).toEqual({ directMediaCount: 2, childDirectoryCount: 1 });
+    expect(snapshot.children[0].approximate.coverSamples).toEqual(['album/1.jpg', 'album/2.jpg']);
+    expect(calls).not.toContainEqual(['stat', '/photos/album/1.jpg']);
+    expect(calls).not.toContainEqual(['stat', '/photos/album/2.jpg']);
+    expect(calls).not.toContainEqual(['stat', '/photos/album/nested']);
+  });
+
   test('pulls root entry names only as stat capacity becomes available', async () => {
     const indexReads = [];
     const rootEntries = trackArrayIndexReads(['album', '2.jpg', '3.jpg'], indexReads);
@@ -542,7 +579,9 @@ describe('DirectorySnapshotService', () => {
     releaseFirstStat();
     await scan;
 
-    expect(readsBeforeRelease).toEqual([0]);
+    // 判断 readdir 是否带类型会先读一次索引 0；释放容量前只应触碰第一条
+    expect(readsBeforeRelease.length).toBeGreaterThan(0);
+    expect(readsBeforeRelease.every((index) => index === 0)).toBe(true);
   });
 
   test('pulls child entry names only as stat capacity becomes available', async () => {
@@ -582,7 +621,8 @@ describe('DirectorySnapshotService', () => {
     releaseFirstChildStat();
     await scan;
 
-    expect(readsBeforeRelease).toEqual([0]);
+    expect(readsBeforeRelease.length).toBeGreaterThan(0);
+    expect(readsBeforeRelease.every((index) => index === 0)).toBe(true);
   });
 
   test('normalizes fractional concurrency limits to an integer worker count', async () => {
