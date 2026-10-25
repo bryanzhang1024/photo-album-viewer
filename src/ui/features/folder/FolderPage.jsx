@@ -346,6 +346,16 @@ export default function FolderPage({
       }
       if (!plain) return;
 
+      // 套图界面：←/→ 切上一套/下一套（与顶部的上一套/下一套按钮一致）
+      if (isAlbum && Array.isArray(siblings) && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        const step = event.key === 'ArrowRight' ? 1 : -1;
+        const target = siblings[siblingIndex + step];
+        if (target) {
+          event.preventDefault();
+          openFolder(target);
+        }
+        return;
+      }
       if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
         event.preventDefault();
         moveSelection(1);
@@ -414,6 +424,7 @@ export default function FolderPage({
     return () => window.removeEventListener('keydown', onKey);
   }, [
     selectedKey, viewerIndex, sorted, filtered, filteredOtherFiles, viewMode, images,
+    isAlbum, siblings, siblingIndex,
     searchQuery, segments, onOpenFolder, onOpenRoots, onSearchChange,
     source.rootPath, toggleItemFavorite
   ]);

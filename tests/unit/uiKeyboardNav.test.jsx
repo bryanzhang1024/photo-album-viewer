@@ -152,6 +152,48 @@ describe('P2 列表键盘导航与单键', () => {
   });
 });
 
+const ALBUM_SNAPSHOT = {
+  locator: { sourceId: 'src_a', relativePath: '当前套', absolutePath: '/A/当前套' },
+  facts: { childDirectoryCount: 0, directMediaCount: 2 },
+  children: [],
+  directMedia: [
+    { name: 'b.jpg', relativePath: 'b.jpg', size: 1024, mtimeMs: 2 },
+    { name: 'c.jpg', relativePath: 'c.jpg', size: 2048, mtimeMs: 3 }
+  ],
+  approximate: { coverSamples: [] }
+};
+
+describe('P2 套图界面左右键切上一套/下一套', () => {
+  test('←/→ 切相邻套图，不移动选中', async () => {
+    install();
+    window.electronAPI.invoke.mockImplementation(async (channel) => {
+      if (channel === 'get-directory-level-v1') return { ok: true, data: ALBUM_SNAPSHOT };
+      if (channel === 'list-directory-files-v1') return { success: true, files: [] };
+      if (channel === 'load-favorites') return { folders: [], albums: [], images: [] };
+      return { ok: true, success: true, data: {} };
+    });
+    const onOpenFolder = jest.fn();
+    const siblings = ['上一套', '当前套', '下一套'];
+    render(
+      <FolderPage
+        source={SOURCE}
+        relativePath="当前套"
+        viewMode="grid"
+        siblings={siblings}
+        onOpenFolder={onOpenFolder}
+        onOpenRoots={jest.fn()}
+      />
+    );
+    await screen.findByText('b.jpg');
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(onOpenFolder).toHaveBeenCalledWith('下一套', expect.anything()));
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    await waitFor(() => expect(onOpenFolder).toHaveBeenCalledWith('上一套', expect.anything()));
+  });
+});
+
 describe('P2 网格键盘导航', () => {
   beforeEach(() => window.localStorage.clear());
 
