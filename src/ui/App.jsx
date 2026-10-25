@@ -488,6 +488,82 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeTabId, tabs, location, activeTab.historyIndex]);
 
+  // 菜单命令：菜单项统一发到这里，按上下文执行（避免系统默认菜单抢快捷键）
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (typeof api?.on !== 'function') return undefined;
+    const focusSearch = () => {
+      const input = searchInputRef.current?.querySelector?.('input')
+        || searchInputRef.current
+        || document.querySelector('.cos-search input')
+        || document.querySelector('input[type="search"]');
+      if (input) {
+        input.focus();
+        if (typeof input.select === 'function') input.select();
+      }
+    };
+    const onCommand = (payload) => {
+      const command = payload?.command;
+      switch (command) {
+        case 'new-tab':
+          openNewTab();
+          break;
+        case 'new-window':
+          if (location.kind === 'folder') {
+            openInNewWindow({ sourceId: location.sourceId, relativePath: location.relativePath || '' })
+              .catch((error) => setSourceError(error?.message || '创建新窗口失败'));
+          } else {
+            invoke(CHANNELS.CREATE_NEW_WINDOW).catch(() => {});
+          }
+          break;
+        case 'close-tab':
+          if (tabs.length <= 1) window.close();
+          else closeTab(activeTabId);
+          break;
+        case 'close-window':
+          window.close();
+          break;
+        case 'open-settings':
+          invoke(CHANNELS.OPEN_SETTINGS_WINDOW).catch(() => {});
+          break;
+        case 'open-folder':
+          requestOpenFolder(null);
+          break;
+        case 'refresh':
+          window.dispatchEvent(new CustomEvent('pav:refresh'));
+          break;
+        case 'view-grid':
+          changeViewMode('grid');
+          break;
+        case 'view-list':
+          changeViewMode('list');
+          break;
+        case 'focus-search':
+          focusSearch();
+          break;
+        case 'zoom-in':
+        case 'zoom-out':
+        case 'zoom-reset':
+          window.dispatchEvent(new CustomEvent('pav:viewer-zoom', { detail: { command } }));
+          break;
+        case 'copy':
+          if (document.querySelector('[role="dialog"]')) {
+            window.dispatchEvent(new CustomEvent('pav:copy-image'));
+          } else if (typeof document.execCommand === 'function') {
+            document.execCommand('copy');
+          }
+          break;
+        default:
+          break;
+      }
+    };
+    const off = api.on(CHANNELS.MENU_COMMAND, onCommand);
+    return () => {
+      if (typeof off === 'function') off();
+      else api.removeListener?.(CHANNELS.MENU_COMMAND, onCommand);
+    };
+  });
+
   const title = titleFor(location, sources);
 
   const menuItems = useMemo(() => {

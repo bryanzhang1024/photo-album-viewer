@@ -58,6 +58,20 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    const api = window.electronAPI;
+    if (typeof api?.on !== 'function') return undefined;
+    const onCommand = (payload) => {
+      const command = payload?.command;
+      if (command === 'close-window' || command === 'close-tab') window.close();
+    };
+    const off = api.on('menu-command', onCommand);
+    return () => {
+      if (typeof off === 'function') off();
+      else api.removeListener?.('menu-command', onCommand);
+    };
+  }, []);
+
+  useEffect(() => {
     applyTheme(settings.theme);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

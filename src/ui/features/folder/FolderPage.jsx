@@ -279,6 +279,12 @@ export default function FolderPage({
   };
 
   useEffect(() => {
+    const onRefresh = () => reload();
+    window.addEventListener('pav:refresh', onRefresh);
+    return () => window.removeEventListener('pav:refresh', onRefresh);
+  }, [reload]);
+
+  useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape') {
         // 查看器自己处理 Esc（含先关信息面板），这里跳过。

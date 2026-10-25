@@ -71,6 +71,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     setRotation(0);
   }, [dual, images.length]);
 
+
   useEffect(() => {
     if (!wrapNotice) return undefined;
     const timer = setTimeout(() => setWrapNotice(''), 3000);
@@ -152,7 +153,6 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     dragRef.current = null;
   };
 
-
   const favorited = current ? isImageFavorited(favorites, current.path) : false;
   const toggleFavorite = async () => {
     if (!current) return;
@@ -220,6 +220,27 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [close, go, infoOpen, copyCurrent, toggleFullscreen, rotateBy, settings.zoomStep]);
+
+  useEffect(() => {
+    const onZoomCommand = (event) => {
+      const command = event.detail?.command;
+      if (command === 'zoom-in') {
+        setZoom((value) => Math.min(8, value * (1 + settings.zoomStep)));
+      } else if (command === 'zoom-out') {
+        setZoom((value) => Math.max(0.2, value / (1 + settings.zoomStep)));
+      } else if (command === 'zoom-reset') {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      }
+    };
+    const onCopyCommand = () => copyCurrent('file');
+    window.addEventListener('pav:viewer-zoom', onZoomCommand);
+    window.addEventListener('pav:copy-image', onCopyCommand);
+    return () => {
+      window.removeEventListener('pav:viewer-zoom', onZoomCommand);
+      window.removeEventListener('pav:copy-image', onCopyCommand);
+    };
+  }, [copyCurrent, settings.zoomStep]);
 
   const deleteCurrent = async () => {
     if (!current) return;
