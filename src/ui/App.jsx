@@ -34,6 +34,34 @@ function createTab(location) {
   return { id: `tab-${tabSequence}`, history: [location], historyIndex: 0 };
 }
 
+const TAB_SESSION_KEY = 'pav.tabs.v1';
+
+/** 重启后恢复上次的标签：数量、顺序、当前标签、各自的历史位置。 */
+function loadTabSession() {
+  try {
+    const raw = window.localStorage.getItem(TAB_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.tabs) || parsed.tabs.length === 0) return null;
+    const tabs = parsed.tabs
+      .filter((entry) => Array.isArray(entry?.history) && entry.history.length > 0
+        && entry.history.every((item) => item && typeof item.kind === 'string'))
+      .map((entry) => {
+        tabSequence += 1;
+        const historyIndex = Math.min(
+          Math.max(0, Number(entry.historyIndex) || 0),
+          entry.history.length - 1
+        );
+        return { id: `tab-${tabSequence}`, history: entry.history, historyIndex };
+      });
+    if (tabs.length === 0) return null;
+    const activeIndex = Math.min(Math.max(0, Number(parsed.activeIndex) || 0), tabs.length - 1);
+    return { tabs, activeTabId: tabs[activeIndex].id };
+  } catch (_error) {
+    return null;
+  }
+}
+
 function titleFor(location, sources) {
   if (location.kind === 'folder') {
     const source = sources.find((item) => item.sourceId === location.sourceId);
@@ -56,8 +84,9 @@ export default function App() {
   const [sources, setSources] = useState([]);
   const [sourceError, setSourceError] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  const [tabs, setTabs] = useState(() => [createTab({ kind: 'roots' })]);
-  const [activeTabId, setActiveTabId] = useState(() => tabs[0].id);
+  const [bootSession] = useState(loadTabSession);
+  const [tabs, setTabs] = useState(() => bootSession?.tabs ?? [createTab({ kind: 'roots' })]);
+  const [activeTabId, setActiveTabId] = useState(() => bootSession?.activeTabId ?? tabs[0].id);
   const [menu, setMenu] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
@@ -114,6 +143,19 @@ export default function App() {
     setSearchQuery('');
   }, [location]);
 
+  // 标签页自动落盘：数量、顺序、当前标签与各自历史位置。
+  useEffect(() => {
+    try {
+      const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === activeTabId));
+      window.localStorage.setItem(TAB_SESSION_KEY, JSON.stringify({
+        tabs: tabs.map((tab) => ({ history: tab.history, historyIndex: tab.historyIndex })),
+        activeIndex
+      }));
+    } catch (_error) {
+      // 存储不可用时只在本次运行内保留
+    }
+  }, [tabs, activeTabId]);
+
   const changeViewMode = (mode) => {
     setViewMode(mode);
     if (location.kind === 'folder' && source) {
@@ -133,6 +175,18 @@ export default function App() {
       const history = [...tab.history.slice(0, tab.historyIndex + 1), next];
       return { ...tab, history, historyIndex: history.length - 1 };
     }));
+  };
+
+  const jumpToHistoryIndex = (targetIndex) => {
+    setTabs((prev) => prev.map((tab) => (
+      tab.id === activeTabId
+        ? { ...tab, historyIndex: Math.min(tab.historyIndex, targetIndex) }
+        : tab
+    )));
+  };
+
+  const openHistoryMenu = (anchor) => {
+    setMenu({ kind: 'history', anchor });
   };
 
   const goBack = () => {
@@ -406,8 +460,12 @@ export default function App() {
         return;
       }
       if (key.toLowerCase() === 'f') {
+        if (viewerOpen()) return;
         event.preventDefault();
-        const input = searchInputRef.current?.querySelector?.('input') || searchInputRef.current;
+        const input = searchInputRef.current?.querySelector?.('input')
+          || searchInputRef.current
+          || document.querySelector('.cos-search input')
+          || document.querySelector('input[type="search"]');
         if (input) {
           input.focus();
           if (typeof input.select === 'function') input.select();
@@ -456,6 +514,21 @@ export default function App() {
         { key: 'restore-group', label: '恢复已保存标签组', onSelect: restoreTabGroup }
       ];
     }
+    if (menu.kind === 'history') {
+      const recent = [];
+      for (let i = activeTab.historyIndex - 1; i >= 0 && recent.length < 10; i -= 1) {
+        const entry = activeTab.history[i];
+        recent.push({
+          key: `h-${i}`,
+          label: `${recent.length + 1}. ${titleFor(entry, sources)}`,
+          onSelect: () => jumpToHistoryIndex(i)
+        });
+      }
+      if (recent.length === 0) {
+        recent.push({ key: 'empty', label: '还没有历史记录', disabled: true, onSelect: () => {} });
+      }
+      return recent;
+    }
     if (menu.kind === 'remove-source') {
       return [
         {
@@ -503,6 +576,7 @@ export default function App() {
         canGoForward={activeTab.historyIndex < activeTab.history.length - 1}
         onBack={goBack}
         onForward={goForward}
+        onBackLongPress={openHistoryMenu}
         right={location.kind === 'folder' ? (
           <>
             <div className="segmented">
@@ -642,7 +716,8 @@ export default function App() {
         items={menuItems}
         onClose={() => setMenu(null)}
         label={menu?.kind === 'remove-source' ? '移除照片来源'
-          : (menu?.kind === 'tab' ? '标签页菜单' : '选择打开方式')}
+          : (menu?.kind === 'tab' ? '标签页菜单'
+            : (menu?.kind === 'history' ? '后退历史' : '选择打开方式'))}
       />
     </div>
   );

@@ -21,10 +21,17 @@ export default function PageHeader({
       : { label: crumb.label, clickable: crumb.clickable !== undefined ? crumb.clickable : index !== crumbs.length - 1 }
   ));
 
-  const crumbNodes = normalized.map((crumb, index) => (
+  // 超过 4 段时截断中间，保留首段、末段与当前层。
+  const visible = normalized.length > 4
+    ? [normalized[0], { label: '…', clickable: false, ellipsis: true }, ...normalized.slice(-2)]
+    : normalized;
+
+  const crumbNodes = visible.map((crumb, index) => (
     <React.Fragment key={`${crumb.label}-${index}`}>
       {index > 0 ? <span className="page-header-sep">›</span> : null}
-      {crumb.clickable ? (
+      {crumb.ellipsis ? (
+        <span className="page-header-crumb-ellipsis">{crumb.label}</span>
+      ) : crumb.clickable ? (
         <button
           className="page-header-crumb"
           type="button"

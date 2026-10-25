@@ -67,8 +67,16 @@ export default function FolderList({
             {isFolder ? <FolderIcon /> : <Thumb rootPath={rootPath} relativePath={item.relativePath} className="row-thumb" />}
             <span>{item.name}</span>
           </div>
-          <div className="c-num">{isFolder && item.imageCount > 0 ? item.imageCount.toLocaleString('zh-CN') : '—'}</div>
-          <div className="c-num">{isFolder && item.childCount > 0 ? item.childCount.toLocaleString('zh-CN') : '—'}</div>
+          {isPhotoLayer ? (
+            <div className="c-num">
+              {isFolder ? '—' : formatFileSize(item.size)}
+            </div>
+          ) : (
+            <>
+              <div className="c-num">{isFolder && item.imageCount > 0 ? item.imageCount.toLocaleString('zh-CN') : '—'}</div>
+              <div className="c-num">{isFolder && item.childCount > 0 ? item.childCount.toLocaleString('zh-CN') : '—'}</div>
+            </>
+          )}
           <div className="c-date">{formatDate(item.mtimeMs)}</div>
         </div>
       );
@@ -88,8 +96,14 @@ export default function FolderList({
         onDoubleClick={() => onOpenFile?.(file)}
       >
         <div className="c-name"><Icon /><span>{file.name}</span></div>
-        <div className="c-kind-cell">{fileKindLabel(file)}</div>
-        <div className="c-num">{formatFileSize(file.size)}</div>
+        {isPhotoLayer ? (
+          <div className="c-num">{fileKindLabel(file)} · {formatFileSize(file.size)}</div>
+        ) : (
+          <>
+            <div className="c-kind-cell">{fileKindLabel(file)}</div>
+            <div className="c-num">{formatFileSize(file.size)}</div>
+          </>
+        )}
         <div className="c-date">{formatDate(file.mtimeMs)}</div>
       </div>
     );
@@ -98,16 +112,20 @@ export default function FolderList({
   return (
     <div
       ref={ref}
-      className="folder-scroll"
+      className={`folder-scroll${isPhotoLayer ? ' photo-layer' : ''}`}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
     >
       <div className="list-head folder-list-head" role="row">
-        {[
+        {(isPhotoLayer ? [
           { label: '名称', field: 'name' },
-          { label: isPhotoLayer ? '大小 / 类型' : '图片 / 类型', field: isPhotoLayer ? 'size' : 'imageCount' },
-          { label: isPhotoLayer ? '—' : '子文件夹 / 大小', field: isPhotoLayer ? null : 'childCount' },
+          { label: '大小 / 类型', field: 'size' },
           { label: '修改日期', field: 'mtimeMs' }
-        ].map((column) => {
+        ] : [
+          { label: '名称', field: 'name' },
+          { label: '图片 / 类型', field: 'imageCount' },
+          { label: '子文件夹 / 大小', field: 'childCount' },
+          { label: '修改日期', field: 'mtimeMs' }
+        ]).map((column) => {
           const active = sort?.field === column.field;
           const ariaSort = active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
           if (!column.field || !onSort) {

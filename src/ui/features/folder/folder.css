@@ -222,3 +222,9 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+/* 照片层只有名称 / 大小 / 修改日期三列，不摆「子文件夹」空列 */
+.photo-layer .list-head.folder-list-head,
+.photo-layer .folder-row {
+  grid-template-columns: 1fr 110px 150px;
+}

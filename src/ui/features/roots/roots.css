@@ -47,3 +47,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.root-offline {
+  color: #ff8a8a;
+}

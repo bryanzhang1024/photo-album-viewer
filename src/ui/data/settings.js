@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS = {
   showFilename: true,
   defaultDualPageViewer: false,
   theme: 'auto',
-  homeSortGrouping: 'mixed',
+  homeSortGrouping: 'grouped',
   folderCoverMode: 'auto',
   defaultViewMode: 'grid'
 };

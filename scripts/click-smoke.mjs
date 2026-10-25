@@ -5,16 +5,21 @@
  * 为什么要有它：截图只能证明「长得像」，证明不了「点得动」。这个脚本把
  * 「每个入口点下去会发生什么」变成可执行断言，反方也能直接跑它取证。
  *
- * 用法：npm run test:e2e
- * 前置：先 npm run build（脚本会用 dist/mac-arm64 里的产物）。
- * 安全：所有步骤都是只读操作（搜索、切换视图、排序、开标签、右键菜单、开查看器），
- *       不改收藏、不删文件、不改设置。
+ * 用法：npm run test:e2e（前置：npm run build）
+ *
+ * 组成：
+ *   1. 在临时目录造两张图，通过真实 IPC 注册成照片来源（确定性，不依赖用户图库）；
+ *   2. 真点六条路径：进入来源、搜索、标签页、列头排序、右键菜单、查看器；
+ *   3. 通过真实 IPC 移除这个临时来源，并断言侧栏少一条、registry 里也没有了；
+ *   4. 删除临时目录。
+ * 除了这个临时来源，不改用户任何数据（不收藏、不删图、不改设置）。
  */
 
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,7 +29,20 @@ const APP_BINARY = path.join(
 );
 const PORT = 9333 + Math.floor(Math.random() * 200);
 
+// 1×1 的合法 JPEG，用来造确定性测试图
+const TINY_JPEG = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==',
+  'base64'
+);
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function prepareFixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pav-e2e-'));
+  fs.writeFileSync(path.join(dir, 'a.jpg'), TINY_JPEG);
+  fs.writeFileSync(path.join(dir, 'b.jpg'), TINY_JPEG);
+  return dir;
+}
 
 function httpJson(url) {
   return new Promise((resolve, reject) => {
@@ -110,14 +128,14 @@ function assert(condition, message, detail) {
 
 const STEPS = [
   {
-    name: '进入第一个照片来源：面包屑与工具栏搜索都在',
+    name: '注册临时来源并进入：面包屑与工具栏搜索都在',
     run: async (page) => {
       const detail = await page.evaluate(`(async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-        const items = [...document.querySelectorAll('.sidebar-item')];
-        const sources = items.filter((el) => el.querySelector('svg') && el.textContent.trim().includes('Collection'));
-        const target = sources[0] || items[items.length - 2];
-        if (!target) return { ok: false, reason: '侧栏没有可点的照片来源' };
+        const label = window.sessionStorage.getItem('pavE2ELabel');
+        const target = [...document.querySelectorAll('.sidebar-item')]
+          .find((el) => el.textContent.trim() === label);
+        if (!target) return { ok: false, reason: '侧栏没有刚注册的临时来源', label };
         target.click();
         await sleep(1800);
         const crumbs = document.querySelector('[aria-label="面包屑"]');
@@ -160,12 +178,10 @@ const STEPS = [
       const detail = await page.evaluate(`(async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const count = () => document.querySelectorAll('[role="tab"]').length;
-        const add = document.querySelector('[aria-label="新建标签页"]');
-        add.click();
+        document.querySelector('[aria-label="新建标签页"]').click();
         await sleep(300);
         const afterAdd = count();
-        const close = document.querySelector('.tab-close');
-        close.click();
+        document.querySelector('.tab-close').click();
         await sleep(300);
         return { ok: afterAdd === 2 && count() === 1, afterAdd, afterClose: count() };
       })()`);
@@ -178,9 +194,7 @@ const STEPS = [
     run: async (page) => {
       const detail = await page.evaluate(`(async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-        const listButton = document.querySelector('[aria-label="列表视图"]');
-        if (!listButton) return { ok: false, reason: '找不到列表视图按钮' };
-        listButton.click();
+        document.querySelector('[aria-label="列表视图"]').click();
         await sleep(700);
         const headers = [...document.querySelectorAll('[role="columnheader"]')];
         const sortable = headers.find((el) => el.tagName === 'BUTTON');
@@ -202,8 +216,8 @@ const STEPS = [
     run: async (page) => {
       const detail = await page.evaluate(`(async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-        const gridButton = document.querySelector('[aria-label="图标视图"]');
-        if (gridButton) { gridButton.click(); await sleep(800); }
+        document.querySelector('[aria-label="图标视图"]')?.click();
+        await sleep(800);
         const card = document.querySelector('.grid-card');
         if (!card) return { ok: false, reason: '没有卡片可点' };
         const rect = card.getBoundingClientRect();
@@ -215,39 +229,63 @@ const STEPS = [
         const items = menu ? [...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent) : [];
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await sleep(300);
-        return { ok: items.length >= 4 && !document.querySelector('[role="menu"]'), items };
+        const required = ['打开', '添加到收藏', '在 Finder 中显示'];
+        const hasRequired = required.every((text) => items.some((item) => item.includes(text)));
+        return { ok: hasRequired && !document.querySelector('[role="menu"]'), items };
       })()`);
       assert(detail.ok, '卡片右键菜单没弹出或少项', detail);
       return detail;
     }
   },
   {
-    name: '查看器：点开图片后 Esc 关闭',
+    name: '查看器：点开图片、信息面板有尺寸、Esc 关闭',
     run: async (page) => {
       const detail = await page.evaluate(`(async () => {
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-        const imageCard = () => [...document.querySelectorAll('.grid-card')]
+        const card = [...document.querySelectorAll('.grid-card')]
           .find((el) => /KB/.test(el.querySelector('.grid-card-meta')?.textContent || ''));
-        let card = imageCard();
-        let depth = 0;
-        while (!card && depth < 3) {
-          const folder = document.querySelector('.grid-card');
-          if (!folder) break;
-          folder.click();
-          await sleep(1200);
-          card = imageCard();
-          depth += 1;
-        }
-        if (!card) return { ok: false, reason: '向下一层找三次仍没有图片卡片', depth };
+        if (!card) return { ok: false, reason: '临时来源里没有图片卡片' };
         card.click();
         await sleep(900);
         const viewer = document.querySelector('[role="dialog"]');
         if (!viewer) return { ok: false, reason: '点开图片没有出现查看器' };
+        viewer.querySelector('[aria-label="图片信息"]')?.click();
+        await sleep(300);
+        const info = viewer.querySelector('.viewer-info')?.textContent || '';
+        const hasSize = info.includes('尺寸');
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(300);
+        const panelClosed = !viewer.querySelector('.viewer-info');
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await sleep(400);
-        return { ok: !document.querySelector('[role="dialog"]') };
+        return {
+          ok: hasSize && panelClosed && !document.querySelector('[role="dialog"]'),
+          hasSize,
+          panelClosed
+        };
       })()`);
-      assert(detail.ok, '查看器打开或 Esc 关闭失败', detail);
+      assert(detail.ok, '查看器打开、信息面板或 Esc 分层失败', detail);
+      return detail;
+    }
+  },
+  {
+    name: '移除临时来源：IPC 返回 ok、registry 里也没有',
+    run: async (page) => {
+      const detail = await page.evaluate(`(async () => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const sourceId = window.sessionStorage.getItem('pavE2ESourceId');
+        const res = await window.electronAPI.invoke('remove-source-root-v1', { contractVersion: 1, sourceId });
+        await sleep(500);
+        const reloaded = await window.electronAPI.invoke('load-source-roots-v1', { contractVersion: 1 });
+        const ids = (reloaded?.data?.sources || []).map((item) => item.sourceId);
+        return {
+          ok: Boolean(res?.ok) && ids.indexOf(sourceId) === -1,
+          ipcOk: Boolean(res?.ok),
+          error: res?.error?.message || null,
+          stillInRegistry: ids.indexOf(sourceId) !== -1
+        };
+      })()`);
+      assert(detail.ok, '移除来源的 IPC 契约或 registry 更新失败', detail);
       return detail;
     }
   }
@@ -258,6 +296,9 @@ async function main() {
     console.error(`找不到构建产物：${APP_BINARY}\n先运行 npm run build`);
     process.exit(2);
   }
+
+  const fixtureDir = prepareFixture();
+  const label = path.basename(fixtureDir);
 
   const child = spawn(APP_BINARY, [`--remote-debugging-port=${PORT}`], {
     stdio: ['ignore', 'pipe', 'pipe']
@@ -273,6 +314,22 @@ async function main() {
     const cdp = new Cdp(target.webSocketDebuggerUrl);
     await cdp.ready();
     await sleep(1200);
+
+    const setup = await cdp.evaluate(`(async () => {
+      const res = await window.electronAPI.invoke('save-source-root-v1', {
+        contractVersion: 1, sourceId: null, rootPath: ${JSON.stringify(fixtureDir)}, label: null
+      });
+      window.sessionStorage.setItem('pavE2ELabel', ${JSON.stringify(label)});
+      window.sessionStorage.setItem('pavE2ESourceId', res?.data?.source?.sourceId || '');
+      return { ok: Boolean(res?.ok), sourceId: res?.data?.source?.sourceId || null, error: res?.error?.message || null };
+    })()`);
+    if (!setup.ok || !setup.sourceId) {
+      throw new Error(`注册临时来源失败：${setup.error || '未知原因'}`);
+    }
+
+    // 重新加载让侧栏读到新注册的来源（应用只在启动时拉一次列表）
+    await cdp.evaluate(`window.location.reload()`);
+    await sleep(2600);
 
     for (const step of STEPS) {
       try {
@@ -295,13 +352,18 @@ async function main() {
   } finally {
     child.kill('SIGTERM');
     await sleep(600);
-    if (!child.killed) child.kill('SIGKILL');
+    try {
+      fs.rmSync(fixtureDir, { recursive: true, force: true });
+    } catch (_error) {
+      // 临时目录删不掉不影响结论
+    }
   }
 
   const reportPath = path.join(ROOT, '.3things/acceptance/evidence/click-smoke.json');
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, JSON.stringify({
     at: new Date().toISOString(),
+    fixture: label,
     passed: results.filter((row) => row.ok).length,
     total: STEPS.length,
     failed,

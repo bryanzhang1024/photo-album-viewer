@@ -1,10 +1,17 @@
 import { invoke, CHANNELS } from './ipc';
 
+/** IPC 错误既可能是字符串，也可能是 { code, message }；统一成可读文案。 */
+function messageOf(error, fallback) {
+  if (typeof error === 'string' && error) return error;
+  if (error && typeof error.message === 'string' && error.message) return error.message;
+  return fallback;
+}
+
 /** 照片来源：根目录注册表。返回 [{ sourceId, label, rootPath, ... }] */
 export async function listSourceRoots() {
   const response = await invoke(CHANNELS.LOAD_SOURCE_ROOTS_V1, { contractVersion: 1 });
   if (!response?.ok) {
-    throw new Error(response?.error || '加载照片来源失败');
+    throw new Error(messageOf(response?.error, '加载照片来源失败'));
   }
   return Array.isArray(response.data?.sources) ? response.data.sources : [];
 }
@@ -27,7 +34,7 @@ export async function saveSourceRoot(rootPath) {
     label: null
   });
   if (!response?.ok) {
-    throw new Error(response?.error || '注册照片来源失败');
+    throw new Error(messageOf(response?.error, '注册照片来源失败'));
   }
   const source = response.data?.source;
   if (!source?.sourceId) {
@@ -40,7 +47,7 @@ export async function saveSourceRoot(rootPath) {
 export async function removeSourceRoot(sourceId) {
   const response = await invoke(CHANNELS.REMOVE_SOURCE_ROOT_V1, { contractVersion: 1, sourceId });
   if (!response?.ok) {
-    throw new Error(response?.error || '移除照片来源失败');
+    throw new Error(messageOf(response?.error, '移除照片来源失败'));
   }
   return response.data?.source || null;
 }

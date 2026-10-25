@@ -11,6 +11,22 @@ const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标�
 /** 照片来源页（2.1）：每个根的封面、文件夹数与位置。 */
 export default function RootsPage({ sources, onOpen, onOpenFolder }) {
   const [snapshots, setSnapshots] = useState({});
+  const [errors, setErrors] = useState({});
+  const [tick, setTick] = useState(0);
+
+  const loadSource = (source) => {
+    setErrors((prev) => ({ ...prev, [source.sourceId]: '' }));
+    return getDirectoryLevel(source, '')
+      .then((snapshot) => {
+        setSnapshots((prev) => ({ ...prev, [source.sourceId]: snapshot }));
+      })
+      .catch((error) => {
+        setErrors((prev) => ({
+          ...prev,
+          [source.sourceId]: error?.message || '这个位置暂时读不到'
+        }));
+      });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -19,12 +35,19 @@ export default function RootsPage({ sources, onOpen, onOpenFolder }) {
         .then((snapshot) => {
           if (alive) setSnapshots((prev) => ({ ...prev, [source.sourceId]: snapshot }));
         })
-        .catch(() => {});
+        .catch((error) => {
+          if (alive) {
+            setErrors((prev) => ({
+              ...prev,
+              [source.sourceId]: error?.message || '这个位置暂时读不到'
+            }));
+          }
+        });
     });
     return () => {
       alive = false;
     };
-  }, [sources]);
+  }, [sources, tick]);
 
   return (
     <>
@@ -65,7 +88,23 @@ export default function RootsPage({ sources, onOpen, onOpenFolder }) {
                 </div>
                 <div className="root-name">{source.label}</div>
                 <div className="root-meta">
-                  {snapshot
+                  {errors[source.sourceId] ? (
+                    <>
+                      <span className="root-offline">{errors[source.sourceId]}</span>
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (snapshot) setSnapshots((prev) => ({ ...prev, [source.sourceId]: undefined }));
+                          setTick((value) => value + 1);
+                          loadSource(source);
+                        }}
+                      >
+                        重试
+                      </button>
+                    </>
+                  ) : snapshot
                     ? `${snapshot.facts.childDirectoryCount.toLocaleString()} 个文件夹 · ${snapshot.locator.absolutePath}`
                     : '读取中…'}
                 </div>

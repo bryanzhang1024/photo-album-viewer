@@ -1,15 +1,16 @@
 {
-  "at": "2026-10-25T06:39:15.857Z",
-  "passed": 6,
-  "total": 6,
+  "at": "2026-10-25T06:58:20.943Z",
+  "fixture": "pav-e2e-TiCNeP",
+  "passed": 7,
+  "total": 7,
   "failed": false,
   "results": [
     {
-      "step": "进入第一个照片来源：面包屑与工具栏搜索都在",
+      "step": "注册临时来源并进入：面包屑与工具栏搜索都在",
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›Collection",
+        "crumbs": "文件夹›pav-e2e-TiCNeP",
         "searchLabel": "搜索这个文件夹"
       }
     },
@@ -19,7 +20,7 @@
       "detail": {
         "ok": true,
         "count": "0 个结果 · 搜索范围：当前文件夹",
-        "after": "6 个文件夹"
+        "after": "2 张照片"
       }
     },
     {
@@ -38,8 +39,7 @@
         "ok": true,
         "headers": [
           "名称↓",
-          "图片 / 类型",
-          "子文件夹 / 大小",
+          "大小 / 类型",
           "修改日期"
         ],
         "ariaSort": "descending"
@@ -52,18 +52,28 @@
         "ok": true,
         "items": [
           "打开",
-          "在新标签页打开",
-          "在新窗口中打开",
           "添加到收藏",
           "在 Finder 中显示"
         ]
       }
     },
     {
-      "step": "查看器：点开图片后 Esc 关闭",
+      "step": "查看器：点开图片、信息面板有尺寸、Esc 关闭",
       "ok": true,
       "detail": {
-        "ok": true
+        "ok": true,
+        "hasSize": true,
+        "panelClosed": true
+      }
+    },
+    {
+      "step": "移除临时来源：IPC 返回 ok、registry 里也没有",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "ipcOk": true,
+        "error": null,
+        "stillInRegistry": false
       }
     }
   ]

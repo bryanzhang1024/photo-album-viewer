@@ -65,3 +65,23 @@ export function setFolderSort(sourceId, relativePath, sort) {
     // 存储不可用时只在本页生效
   }
 }
+
+const densityKey = (sourceId, relativePath) => `pav.density.v1:${sourceId}:${relativePath}`;
+
+export function getFolderDensity(sourceId, relativePath) {
+  try {
+    const raw = window.localStorage.getItem(densityKey(sourceId, relativePath));
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 && value <= 2 ? value : 1;
+  } catch (_error) {
+    return 1;
+  }
+}
+
+export function setFolderDensity(sourceId, relativePath, density) {
+  try {
+    window.localStorage.setItem(densityKey(sourceId, relativePath), String(density));
+  } catch (_error) {
+    // 存储不可用时只在本页生效
+  }
+}

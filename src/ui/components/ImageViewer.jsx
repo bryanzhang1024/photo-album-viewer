@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ChevronLeftIcon, ChevronRightIcon, InfoIcon, RotateIcon, FullscreenIcon,
+  ChevronLeftIcon, ChevronRightIcon, InfoIcon, RotateIcon, FullscreenIcon, FitIcon,
   DualPageIcon, TrashIcon, HeartIcon, CopyIcon, RevealIcon
 } from '../icons';
 import { localImageUrl } from '../data/album';
 import { loadFavorites, isImageFavorited, toggleImageFavorite } from '../data/favorites';
 import { invoke, CHANNELS } from '../data/ipc';
 import useSettings from '../hooks/useSettings';
+import StatusBar from '../shell/StatusBar';
 import './viewer.css';
 
 function formatSize(bytes) {
@@ -30,6 +31,8 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   const [infoOpen, setInfoOpen] = useState(false);
   const settings = useSettings();
   const [dual, setDual] = useState(Boolean(settings.defaultDualPageViewer));
+  const [naturalSize, setNaturalSize] = useState(null);
+  const [broken, setBroken] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [favorites, setFavorites] = useState(null);
   const dragRef = useRef(null);
@@ -46,6 +49,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   }, []);
 
   const go = useCallback((delta) => {
+    setBroken(false);
     setIndex((value) => {
       const step = dual ? 2 : 1;
       const target = value + delta * step;
@@ -66,8 +70,12 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
 
   // 竖图自动旋转：图片加载后如果是竖图且方向未动过，按设置转一次。
   const onImageLoad = (event) => {
-    if (!settings.autoRotateVerticalImages) return;
     const image = event.currentTarget;
+    setBroken(false);
+    if (image.naturalWidth && image.naturalHeight) {
+      setNaturalSize({ width: image.naturalWidth, height: image.naturalHeight });
+    }
+    if (!settings.autoRotateVerticalImages) return;
     if (rotation !== 0) return;
     if (image.naturalHeight > image.naturalWidth) {
       setRotation(settings.rotationDirection === 'left' ? -90 : 90);
@@ -163,13 +171,13 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       } else if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'c') {
         event.preventDefault();
         copyCurrent(event.shiftKey ? 'image' : 'file');
-      } else if (String(event.key).toLowerCase() === 'v') {
+      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'v') {
         setDual((value) => !value);
-      } else if (String(event.key).toLowerCase() === 'f') {
+      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'f') {
         toggleFullscreen();
-      } else if (String(event.key).toLowerCase() === 'e') {
+      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'e') {
         rotateBy(1);
-      } else if (String(event.key).toLowerCase() === 'r') {
+      } else if (!event.metaKey && !event.ctrlKey && String(event.key).toLowerCase() === 'r') {
         rotateBy(-1);
       }
     };
@@ -229,16 +237,22 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         onMouseLeave={endDrag}
         style={{ marginRight: infoOpen ? 300 : 0 }}
       >
-        {dual ? (
+        {broken ? (
+          <div className="viewer-broken" role="status">
+            <div>这张图片无法解码。</div>
+            <button className="btn-primary" type="button" onClick={() => go(1)}
+              disabled={index >= images.length - 1}>看下一张</button>
+          </div>
+        ) : dual ? (
           <div className="viewer-pair">
             <img src={localImageUrl(current.path)} alt={current.name} style={{ transform }}
-              draggable={false} onLoad={onImageLoad} />
+              draggable={false} onLoad={onImageLoad} onError={() => setBroken(true)} />
             {next ? <img src={localImageUrl(next.path)} alt={next.name} style={{ transform }}
-              draggable={false} onLoad={onImageLoad} /> : null}
+              draggable={false} onLoad={onImageLoad} onError={() => setBroken(true)} /> : null}
           </div>
         ) : (
           <img className="viewer-image" src={localImageUrl(current.path)} alt={current.name}
-            style={{ transform }} draggable={false} onLoad={onImageLoad} />
+            style={{ transform }} draggable={false} onLoad={onImageLoad} onError={() => setBroken(true)} />
         )}
         <button className="viewer-nav left" type="button" aria-label="上一张" onClick={() => go(-1)} disabled={index === 0}>
           <ChevronLeftIcon />
@@ -253,6 +267,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
           <dl>
             <dt>文件名</dt><dd>{current.name}</dd>
             <dt>大小</dt><dd>{formatSize(current.size)}</dd>
+            <dt>尺寸</dt><dd>{naturalSize ? `${naturalSize.width} × ${naturalSize.height}` : '—'}</dd>
             <dt>修改时间</dt><dd>{formatDate(current.lastModified || current.mtimeMs)}</dd>
             <dt>序号</dt><dd>{index + 1} / {images.length}</dd>
             <dt>位置</dt><dd className="path">{albumPath}</dd>
@@ -268,6 +283,8 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         <button className="icon-button" type="button" aria-label="旋转" onClick={() => rotateBy(1)}><RotateIcon /></button>
         <button className={`icon-button${dual ? ' active' : ''}`} type="button" aria-label="双页" aria-pressed={dual}
           onClick={() => setDual((value) => !value)}><DualPageIcon /></button>
+        <button className="icon-button" type="button" aria-label="适应窗口"
+          onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}><FitIcon /></button>
         <button className="icon-button" type="button" aria-label="全屏" onClick={toggleFullscreen}><FullscreenIcon /></button>
         <span className="viewer-sep" />
         <button className="icon-button" type="button" aria-label="复制文件" onClick={() => copyCurrent('file')}><CopyIcon /></button>
@@ -276,6 +293,10 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         <span className="viewer-spacer" />
         <button className="icon-button danger" type="button" aria-label="移到废纸篓" onClick={deleteCurrent}><TrashIcon /></button>
       </div>
+      <StatusBar
+        left={`${index + 1} / ${images.length}`}
+        right="Esc 关闭　← → 翻页　⌘C 复制"
+      />
     </div>
   );
 }

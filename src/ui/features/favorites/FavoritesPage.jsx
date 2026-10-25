@@ -38,8 +38,13 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('folders');
   const [viewMode, setViewMode] = useState('grid');
-  const [sortKey, setSortKey] = useState('addedAt');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortKey, setSortKey] = useState(() => window.localStorage.getItem('pav.favsort.field') || 'addedAt');
+  const [sortDir, setSortDir] = useState(() => window.localStorage.getItem('pav.favsort.dir') || 'desc');
+
+  useEffect(() => {
+    window.localStorage.setItem('pav.favsort.field', sortKey);
+    window.localStorage.setItem('pav.favsort.dir', sortDir);
+  }, [sortKey, sortDir]);
   const [error, setError] = useState('');
   const [viewerIndex, setViewerIndex] = useState(null);
 
@@ -75,9 +80,16 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
     [data, sortKey, sortDir]
   );
 
-  const removeItem = async (item, collection) => {
+  // 收藏记录可能落在 folders 或 albums（kind 只影响分组），取消时按 id/路径在三组里都删。
+  const removeItem = async (item) => {
     if (!data) return;
-    const next = { ...data, [collection]: (data[collection] || []).filter((entry) => entry.id !== item.id) };
+    const matches = (entry) => entry.id === item.id || entry.path === item.path;
+    const next = {
+      ...data,
+      folders: (data.folders || []).filter((entry) => !matches(entry)),
+      albums: (data.albums || []).filter((entry) => !matches(entry)),
+      images: (data.images || []).filter((entry) => !matches(entry))
+    };
     const saved = await saveFavorites(next, data.version).catch(() => false);
     if (saved) load();
   };
@@ -150,7 +162,11 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                     <div className="fav-card" key={item.id}>
                       <button className={`fav-cover${broken ? ' broken' : ''}`} type="button"
                         onClick={() => openFolder(item)}>
-                        <Collage samples={coverSamples(item)} />
+                        <Collage
+                          samples={item.kind === 'photoSet' || item.kind === 'album'
+                            ? coverSamples(item).slice(0, 1)
+                            : coverSamples(item)}
+                        />
                         {broken ? <span className="fav-broken">位置不可用</span> : null}
                       </button>
                       <div className="fav-name">{item.name}</div>
@@ -158,7 +174,7 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                         文件夹
                         {Number.isFinite(item.imageCount) ? ` · ${item.imageCount} 张` : ''}
                         <button className="fav-heart" type="button" aria-label="取消收藏"
-                          onClick={() => removeItem(item, item.favKind === 'album' ? 'albums' : 'folders')}>
+                          onClick={() => removeItem(item)}>
                           <HeartIcon />
                         </button>
                       </div>
@@ -183,7 +199,7 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                     <div>{Number.isFinite(item.imageCount) ? item.imageCount : '—'}</div>
                     <div>{item.addedAt ? new Date(item.addedAt).toLocaleDateString('zh-CN') : '—'}</div>
                     <button className="fav-heart" type="button" aria-label="取消收藏"
-                      onClick={() => removeItem(item, item.favKind === 'album' ? 'albums' : 'folders')}>
+                      onClick={() => removeItem(item)}>
                       <HeartIcon />
                     </button>
                   </div>
@@ -209,7 +225,7 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                     <div className="fav-meta">
                       {image.albumName || '图片'}
                       <button className="fav-heart" type="button" aria-label="取消收藏"
-                        onClick={() => removeItem(image, 'images')}>
+                        onClick={() => removeItem(image)}>
                         <HeartIcon />
                       </button>
                     </div>
@@ -234,7 +250,7 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
                     <div>{Number.isFinite(image.size) && image.size > 0 ? `${Math.round(image.size / 1024)} KB` : '—'}</div>
                     <div>{image.addedAt ? new Date(image.addedAt).toLocaleDateString('zh-CN') : '—'}</div>
                     <button className="fav-heart" type="button" aria-label="取消收藏"
-                      onClick={() => removeItem(image, 'images')}>
+                      onClick={() => removeItem(image)}>
                       <HeartIcon />
                     </button>
                   </div>

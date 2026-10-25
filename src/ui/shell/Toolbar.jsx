@@ -1,11 +1,36 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { SidebarIcon, ChevronLeftIcon, ChevronRightIcon } from '../icons';
 
 /**
  * 窗口工具栏：侧栏开关、前进后退、居中标题。
  * macOS 上左侧给红绿灯留出拖拽区；工具栏本身是窗口拖拽区。
  */
-export default function Toolbar({ title, sidebarCollapsed, onToggleSidebar, onBack, onForward, canGoBack = false, canGoForward = false, right = null }) {
+export default function Toolbar({
+  title,
+  sidebarCollapsed,
+  onToggleSidebar,
+  onBack,
+  onForward,
+  onBackLongPress,
+  canGoBack = false,
+  canGoForward = false,
+  right = null
+}) {
+  const holdTimer = useRef(null);
+  const longPressed = useRef(false);
+  const startHold = (event) => {
+    if (!onBackLongPress || !canGoBack) return;
+    const anchor = event.currentTarget;
+    longPressed.current = false;
+    holdTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      onBackLongPress(anchor);
+    }, 500);
+  };
+  const cancelHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
   const isMac = window.electronAPI?.platform === 'darwin';
   return (
     <header
@@ -22,7 +47,22 @@ export default function Toolbar({ title, sidebarCollapsed, onToggleSidebar, onBa
       >
         <SidebarIcon />
       </button>
-      <button className="icon-button" type="button" aria-label="后退" disabled={!canGoBack} onClick={onBack}>
+      <button
+        className="icon-button"
+        type="button"
+        aria-label="后退"
+        disabled={!canGoBack}
+        onPointerDown={startHold}
+        onPointerUp={cancelHold}
+        onPointerLeave={cancelHold}
+        onClick={() => {
+          if (longPressed.current) {
+            longPressed.current = false;
+            return;
+          }
+          onBack();
+        }}
+      >
         <ChevronLeftIcon />
       </button>
       <button className="icon-button" type="button" aria-label="前进" disabled={!canGoForward} onClick={onForward}>

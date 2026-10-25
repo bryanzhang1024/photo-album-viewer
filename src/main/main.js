@@ -726,7 +726,11 @@ ipcMain.handle(CHANNELS.REMOVE_SOURCE_ROOT_V1, async (event, request) => {
 
   try {
     const result = await sourceRootService.removeSourceRoot(sourceId);
-    return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1(result));
+    // 复用 save 的成功数据契约：{ source, created }。删除没有创建，created 固定 false。
+    return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1({
+      source: result.source,
+      created: false
+    }));
   } catch (error) {
     return createSourceRootServiceErrorEnvelope(error);
   }

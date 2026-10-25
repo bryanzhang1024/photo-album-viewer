@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import ImageViewer from '../../src/ui/components/ImageViewer';
@@ -52,10 +52,10 @@ describe('查看器 · Esc 分层与输入', () => {
     const { unmount } = render(
       <ImageViewer images={IMAGES} initialIndex={0} title="套图" albumPath="/A/a" albumName="套图" onClose={jest.fn()} />
     );
-    expect(screen.getByText(/1 \/ 3/)).toBeInTheDocument();
+    expect(screen.getAllByText(/1 \/ 3/).length).toBeGreaterThan(0);
 
     fireEvent.wheel(stage(), { deltaY: 120 });
-    expect(await screen.findByText(/2 \/ 3/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText(/2 \/ 3/).length).toBeGreaterThan(0));
     unmount();
   });
 

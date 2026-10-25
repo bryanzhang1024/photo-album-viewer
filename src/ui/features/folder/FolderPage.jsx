@@ -18,7 +18,9 @@ import {
 } from '../../data/favorites';
 import { invoke, CHANNELS } from '../../data/ipc';
 import { openExternal } from '../../data/files';
-import { getFolderSort, setFolderSort, defaultSortDirection } from '../../data/prefs';
+import {
+  getFolderSort, setFolderSort, defaultSortDirection, getFolderDensity, setFolderDensity
+} from '../../data/prefs';
 import './folder.css';
 
 const SORT_FIELDS = [
@@ -65,7 +67,7 @@ export default function FolderPage({
   const compactHeader = viewMode === 'list' || breakpoint === 'medium' || breakpoint === 'small';
   const { files: otherFiles } = useOtherFiles(source, relativePath);
   const [sortState, setSortState] = useState(() => getFolderSort(source.sourceId, relativePath));
-  const [density, setDensity] = useState(1);
+  const [density, setDensity] = useState(() => getFolderDensity(source.sourceId, relativePath));
   const [selectedKey, setSelectedKey] = useState('');
   const [viewerIndex, setViewerIndex] = useState(null);
   const [deletedKeys, setDeletedKeys] = useState(() => new Set());
@@ -112,6 +114,13 @@ export default function FolderPage({
     return sorted.filter((item) => String(item.name).toLowerCase().includes(query));
   }, [sorted, searchQuery]);
 
+  // 搜索也覆盖非图片文件（列表「其他文件」段），与规格 D06/S09 一致。
+  const filteredOtherFiles = useMemo(() => {
+    const query = String(searchQuery || '').trim().toLowerCase();
+    if (!query) return otherFiles;
+    return otherFiles.filter((file) => String(file.name).toLowerCase().includes(query));
+  }, [otherFiles, searchQuery]);
+
   const images = useMemo(
     () => sorted
       .filter((item) => item.kind === 'image' && !deletedKeys.has(item.key))
@@ -155,7 +164,7 @@ export default function FolderPage({
   const formatCount = (value) => Number(value).toLocaleString('zh-CN');
   const folders = ready ? snapshot.facts.childDirectoryCount : 0;
   const totalImages = ready ? snapshot.facts.directMediaCount : 0;
-  const otherCount = otherFiles.length;
+  const otherCount = filteredOtherFiles.length;
   const searching = String(searchQuery || '').trim().length > 0;
   const countText = ready
     ? (searching
@@ -352,7 +361,11 @@ export default function FolderPage({
         step="1"
         value={density}
         aria-label="缩略图大小"
-        onChange={(event) => setDensity(Number(event.target.value))}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          setDensity(next);
+          setFolderDensity(source.sourceId, relativePath, next);
+        }}
       />
     </>
   );
@@ -423,7 +436,7 @@ export default function FolderPage({
           </div>
         ) : null}
         {ready && filtered.length === 0 && !searching && otherCount === 0 ? <div className="folder-state">这个文件夹是空的</div> : null}
-        {ready && filtered.length === 0 && searching ? (
+        {ready && filtered.length === 0 && filteredOtherFiles.length === 0 && searching ? (
           <div className="folder-state">
             <div>没有找到「{String(searchQuery || '').trim()}」。</div>
             <button className="btn-primary" type="button" onClick={() => onSearchChange?.('')}>清除搜索</button>
@@ -464,7 +477,7 @@ export default function FolderPage({
         {ready && filtered.length > 0 && viewMode === 'list' ? (
           <FolderList
             items={filtered}
-            otherFiles={otherFiles}
+            otherFiles={filteredOtherFiles}
             rootPath={source.rootPath}
             selectedKey={selectedKey}
             isPhotoLayer={isAlbum}
