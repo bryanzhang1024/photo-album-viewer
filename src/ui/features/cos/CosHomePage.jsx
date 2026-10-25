@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
-import { getStatus, listSets, listCharacters, listCosers, refresh, selectRoot } from '../../data/cos';
+import { getStatus, listSets, listCharacters, listCosers, refresh, selectRoot, removeRoot } from '../../data/cos';
 import { CHANNELS } from '../../data/ipc';
+import { RotateIcon } from '../../icons';
 import './cos.css';
 
 const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索　⌘, 设置　⌘W 关闭标签';
@@ -75,6 +76,26 @@ export default function CosHomePage({ onNavigate }) {
     ? `${Number(summary.setCount).toLocaleString('zh-CN')} 套 · ${Number(summary.imageCount).toLocaleString('zh-CN')} 张图片`
     : error ? '读取失败' : '读取中…';
 
+  const runRefresh = async () => {
+    try {
+      await refresh();
+      loadStatus();
+    } catch (reason) {
+      window.alert(reason?.message || '刷新索引失败');
+    }
+  };
+
+  const dropRoot = async (root) => {
+    const confirmed = window.confirm(`从 Cos 图库移除「${root.label}」？只移除索引配置，不修改磁盘文件。`);
+    if (!confirmed) return;
+    try {
+      const next = await removeRoot(root.id);
+      setStatus(next);
+    } catch (reason) {
+      window.alert(reason?.message || '移除根目录失败');
+    }
+  };
+
   const addRoot = async () => {
     try {
       const next = await selectRoot();
@@ -86,7 +107,16 @@ export default function CosHomePage({ onNavigate }) {
 
   return (
     <>
-      <PageHeader title="Cos 图库" count={countText} />
+      <PageHeader
+        title="Cos 图库"
+        count={countText}
+        controls={(
+          <button className="tool-text" type="button" onClick={runRefresh}>
+            <RotateIcon />
+            <span>刷新索引</span>
+          </button>
+        )}
+      />
       <div className="folder-body">
         {error ? <div className="folder-state error">{error}</div> : null}
         {process.env.NODE_ENV !== 'production' || progress ? null : null}
@@ -100,6 +130,12 @@ export default function CosHomePage({ onNavigate }) {
           </div>
         ) : null}
         <div className="cos-scroll">
+          {status && summary && summary.setCount === 0 ? (
+            <div className="folder-state">
+              <div>还没有 Cos 索引。添加图库根目录后会开始建立索引。</div>
+              <button className="btn-primary" type="button" onClick={addRoot}>添加根目录</button>
+            </div>
+          ) : null}
           <div className="cos-big-grid">
             <BigCard
               title="按角色"
@@ -129,6 +165,8 @@ export default function CosHomePage({ onNavigate }) {
             {(status?.roots || []).map((root) => (
               <span className={`cos-chip${root.status === 'online' ? '' : ' offline'}`} key={root.id}>
                 {root.label}
+                <button className="cos-chip-x" type="button" aria-label={`移除 ${root.label}`}
+                  onClick={() => dropRoot(root)}>×</button>
               </span>
             ))}
             <button className="cos-chip add" type="button" onClick={addRoot}>＋ 添加</button>

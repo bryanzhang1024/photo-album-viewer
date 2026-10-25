@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
+import { SearchIcon } from '../../icons';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
 import { listCharacters, listCosers } from '../../data/cos';
@@ -15,8 +16,18 @@ const FETCHERS = {
 };
 
 export default function CosEntityPage({ kind, onOpenEntity }) {
+  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   const fetcher = FETCHERS[kind] || listCharacters;
-  const { items, total, loading, error, loadMore, hasMore } = useCosPagedList(fetcher, { sortBy: 'name' });
+  const options = { sortBy: 'name' };
+  if (search) options.query = search;
+  const { items, total, loading, error, loadMore, hasMore } = useCosPagedList(fetcher, options);
   const title = kind === 'cosers' ? '按署名' : '按角色';
   const countText = loading && items.length === 0
     ? '读取中…'
@@ -24,7 +35,21 @@ export default function CosEntityPage({ kind, onOpenEntity }) {
 
   return (
     <>
-      <PageHeader title={title} count={countText} />
+      <PageHeader
+        title={title}
+        count={countText}
+        controls={(
+          <label className="cos-search">
+            <SearchIcon />
+            <input
+              type="search"
+              value={query}
+              placeholder="搜索名字"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+        )}
+      />
       <div className="folder-body">
         {error ? <div className="folder-state error">{error}</div> : null}
         <div className="cos-scroll">

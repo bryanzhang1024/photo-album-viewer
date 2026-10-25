@@ -196,3 +196,40 @@
   color: var(--text-dimmer);
   font-size: 12px;
 }
+
+.cos-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  background: var(--hover);
+  color: var(--text-dimmer);
+}
+
+.cos-search input {
+  width: 190px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.cos-search input::placeholder {
+  color: var(--text-dimmer);
+}
+
+.cos-chip-x {
+  border: 0;
+  background: transparent;
+  color: var(--text-dimmer);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+}
+
+.cos-chip-x:hover {
+  color: var(--text);
+}

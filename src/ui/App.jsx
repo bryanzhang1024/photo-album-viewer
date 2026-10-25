@@ -180,14 +180,25 @@ export default function App() {
             <CosSetListPage
               viewKind={location.viewKind}
               entity={location.entity}
-              onOpenSet={(set) => navigate({
+              onOpenSet={(set, options) => navigate({
                 kind: 'cos-set',
                 setId: set.id,
-                name: set.displayName
+                name: set.displayName,
+                options
               })}
             />
           ) : location.kind === 'cos-set' ? (
-            <CosSetAlbumPage setId={location.setId} setName={location.name} />
+            <CosSetAlbumPage
+              setId={location.setId}
+              setName={location.name}
+              options={location.options || null}
+              onNavigateSet={(next) => navigate({
+                kind: 'cos-set',
+                setId: next.setId,
+                name: next.name,
+                options: next.options
+              })}
+            />
           ) : location.kind === 'roots' ? (
             <RootsPage
               sources={sources}
