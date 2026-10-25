@@ -19,6 +19,7 @@ const {
 } = require('../common/path-codec');
 const { createSourceRootService } = require('./services/SourceRootService');
 const { createFolderCoverService } = require('./services/FolderCoverService');
+const { createPathApprovalService } = require('./services/PathApprovalService');
 const { CosLibraryService } = require('./services/CosLibraryService');
 const { registerCosLibraryIpcHandlers } = require('./services/CosLibraryIpc');
 const {
@@ -129,9 +130,7 @@ const LOCAL_IMAGE_PROTOCOL_PREFIX = 'local-image-protocol://';
 const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.jfif', '.tif', '.tiff', '.heic', '.heif', '.avif']);
 const DELETE_IMAGE_EXTENSIONS = new Set(FileSystemService.SUPPORTED_FORMATS || ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']);
 const APPROVED_ROOTS_FILE = path.join(app.getPath('userData'), 'approved-roots-v3.json');
-const approvedRoots = new Set();
-let approvedRootsLoaded = false;
-
+// 仅当测试进程显式设置该变量时才注入；生产环境不会有这个变量
 function normalizeAbsolutePath(inputPath) {
   if (!inputPath || typeof inputPath !== 'string') {
     return null;
@@ -148,69 +147,45 @@ function isPathWithinRoot(targetPath, rootPath) {
   if (!normalizedTargetPath || !normalizedRootPath) {
     return false;
   }
+  const prefix = normalizedRootPath.endsWith(path.sep) ? normalizedRootPath : `${normalizedRootPath}${path.sep}`;
   return (
     normalizedTargetPath === normalizedRootPath
-    || normalizedTargetPath.startsWith(`${normalizedRootPath}${path.sep}`)
+    || normalizedTargetPath.startsWith(prefix)
   );
 }
 
-function isPathWithinApprovedRoots(targetPath) {
-  return true;
+const testApprovedRoots = process.env.PAV_TEST_APPROVED_ROOTS
+  ? process.env.PAV_TEST_APPROVED_ROOTS.split(path.delimiter).filter(Boolean)
+  : [];
+const pathApproval = createPathApprovalService({
+  rootsFilePath: APPROVED_ROOTS_FILE,
+  extraRoots: testApprovedRoots
+});
+
+/** 登记一个允许访问的目录（用户主动选择目录、加载已有来源时调用）。 */
+function registerApprovedRoot(candidatePath, options) {
+  return pathApproval.register(candidatePath, options);
 }
 
-async function persistApprovedRoots() {
-  const payload = {
-    roots: Array.from(approvedRoots)
-  };
-  await writeFile(APPROVED_ROOTS_FILE, JSON.stringify(payload, null, 2), 'utf8');
-}
-
-async function registerApprovedRoot(candidatePath, { persist = true } = {}) {
-  const normalizedCandidate = normalizeAbsolutePath(candidatePath);
-  if (!normalizedCandidate) {
-    return false;
-  }
-
-  try {
-    const stats = await fs.promises.stat(normalizedCandidate);
-    const rootPath = stats.isDirectory() ? normalizedCandidate : path.dirname(normalizedCandidate);
-    if (!approvedRoots.has(rootPath)) {
-      approvedRoots.add(rootPath);
-      if (persist) {
-        await persistApprovedRoots();
-      }
-      console.log(`[Security] 注册允许访问目录: ${rootPath}`);
-    }
-    return true;
-  } catch (error) {
-    console.warn(`[Security] 注册目录失败: ${normalizedCandidate}`, error?.message || error);
-    return false;
-  }
+/** 移除一个允许访问的目录（来源被移除且没有其他来源复用同一根时调用）。 */
+function unregisterApprovedRoot(candidatePath) {
+  return pathApproval.unregister(candidatePath);
 }
 
 async function loadApprovedRoots() {
-  if (approvedRootsLoaded) {
-    return;
-  }
-
-  approvedRootsLoaded = true;
-
-  try {
-    const content = await readFile(APPROVED_ROOTS_FILE, 'utf8');
-    const parsed = JSON.parse(content);
-    const roots = Array.isArray(parsed?.roots) ? parsed.roots : [];
-    for (const rootPath of roots) {
-      await registerApprovedRoot(rootPath, { persist: false });
-    }
-  } catch (error) {
-    if (error?.code !== 'ENOENT') {
-      console.warn('[Security] 加载允许目录失败:', error?.message || error);
-    }
-  }
+  await pathApproval.load();
 }
 
-async function assertApprovedPath(targetPath, { bootstrapWhenEmpty = false } = {}) {
-  return true;
+/**
+ * 读取/写入前的授权判断：目标必须落在已登记的根目录内（按 realpath 解析后比较）。
+ * bootstrapWhenEmpty 只允许用户主动选择目录的入口使用。
+ */
+async function assertApprovedPath(targetPath, options) {
+  return pathApproval.assert(targetPath, options);
+}
+
+async function isPathWithinApprovedRoots(targetPath) {
+  return pathApproval.isWithin(targetPath);
 }
 
 function normalizePerformanceSettings(settings = {}, fallback = DEFAULT_PERFORMANCE_SETTINGS) {
@@ -416,6 +391,28 @@ app.whenReady().then(async () => {
     console.warn('[SourceRoot] 初始化电脑根目录失败:', error?.message || error);
   }
   await loadApprovedRoots();
+  // 把来源注册表里的根补登记到访问白名单，老用户升级后不用重新选目录
+  try {
+    const existingSources = await sourceRootService.listSourceRoots();
+    for (const source of (Array.isArray(existingSources) ? existingSources : [])) {
+      if (source?.rootPath) await registerApprovedRoot(source.rootPath, { persist: false });
+    }
+  } catch (error) {
+    console.warn('[Security] 补登记来源目录失败:', error?.message || error);
+  }
+  // Cos 图库根目录同样要进白名单（它可能不在任何照片来源之下）
+  try {
+    const cosRootsFile = path.join(app.getPath('userData'), 'cos-library-roots-v1.json');
+    const raw = await fs.promises.readFile(cosRootsFile, 'utf8');
+    const parsed = JSON.parse(raw);
+    for (const root of Array.isArray(parsed?.roots) ? parsed.roots : []) {
+      if (root?.path) await registerApprovedRoot(root.path, { persist: false });
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.warn('[Security] 补登记 Cos 图库目录失败:', error?.message || error);
+    }
+  }
   await ThumbnailService.ensureCacheDir(); // 使用ThumbnailService
 
   // 注册一个安全的自定义文件协议来提供缩略图
@@ -481,12 +478,12 @@ app.whenReady().then(async () => {
       return;
     }
 
-    if (!isPathWithinApprovedRoots(normalizedPath)) {
-      callback(-10); // ACCESS_DENIED
-      return;
-    }
-
-    fs.promises.stat(normalizedPath)
+    Promise.resolve(isPathWithinApprovedRoots(normalizedPath)).then((allowed) => {
+      if (!allowed) {
+        callback(-10); // ACCESS_DENIED
+        return;
+      }
+      fs.promises.stat(normalizedPath)
       .then(async (stats) => {
         if (!stats.isFile()) {
           callback(-6); // FILE_NOT_FOUND
@@ -498,6 +495,7 @@ app.whenReady().then(async () => {
       .catch(() => {
         callback(-6); // FILE_NOT_FOUND
       });
+    });
   });
   
   // 处理命令行参数，使用指定的文件夹路径
@@ -715,6 +713,7 @@ ipcMain.handle(CHANNELS.SAVE_SOURCE_ROOT_V1, async (event, request) => {
       rootPath: request.rootPath,
       label: request.label
     });
+    await registerApprovedRoot(result.source.rootPath);
     return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1(result));
   } catch (error) {
     return createSourceRootServiceErrorEnvelope(error);
@@ -732,6 +731,14 @@ ipcMain.handle(CHANNELS.REMOVE_SOURCE_ROOT_V1, async (event, request) => {
 
   try {
     const result = await sourceRootService.removeSourceRoot(sourceId);
+    // 没有其他来源复用同一根时，把它从访问白名单里撤掉
+    try {
+      const remaining = await sourceRootService.listSourceRoots();
+      const stillUsed = remaining.some((item) => item.rootPath === result.source.rootPath);
+      if (!stillUsed) await unregisterApprovedRoot(result.source.rootPath);
+    } catch (error) {
+      console.warn('[Security] 撤销来源目录失败:', error?.message || error);
+    }
     // 复用 save 的成功数据契约：{ source, created }。删除没有创建，created 固定 false。
     return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1({
       source: result.source,
@@ -778,7 +785,7 @@ ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
       ref: request.ref
     };
     const locator = DirectorySnapshotService.resolveDirectoryLocatorV1(authoritativeRequest);
-    const isAllowed = await assertApprovedPath(locator.absolutePath, { bootstrapWhenEmpty: true });
+    const isAllowed = await assertApprovedPath(locator.absolutePath);
     if (!isAllowed) {
       return finalizeDirectoryEnvelopeV1(
         createDirectoryErrorEnvelopeV1('PATH_NOT_APPROVED', 'Path not approved', {
@@ -926,7 +933,7 @@ ipcMain.handle(CHANNELS.CANCEL_THUMBNAILS, async (event, imagePaths) => {
 
 
 ipcMain.handle(CHANNELS.GET_ALBUM_IMAGES, async (event, albumPath, options) => {
-    const isAllowed = await assertApprovedPath(albumPath, { bootstrapWhenEmpty: true });
+    const isAllowed = await assertApprovedPath(albumPath);
     if (!isAllowed) {
       if (options && typeof options === 'object') {
         return {
@@ -952,7 +959,7 @@ ipcMain.handle(CHANNELS.GET_ALBUM_IMAGES, async (event, albumPath, options) => {
 });
 
 ipcMain.handle(CHANNELS.GET_ALBUM_IMAGE_COUNT, async (event, albumPath) => {
-    const isAllowed = await assertApprovedPath(albumPath, { bootstrapWhenEmpty: true });
+    const isAllowed = await assertApprovedPath(albumPath);
     if (!isAllowed) {
       return { success: false, count: 0, error: 'Path not approved' };
     }
@@ -971,6 +978,19 @@ ipcMain.handle(CHANNELS.GET_FOLDER_COVER_V1, async (event, request) => {
     if (!normalizedRoot) {
       return { success: false, error: '来源根目录不可用', samples: [] };
     }
+
+    // 只接受「注册过的照片来源根」，而不是任意位于白名单内的目录：
+    // 否则调用方可以拿 /tmp 之类被上层根覆盖的路径来枚举。
+    const sources = await sourceRootService.listSourceRoots();
+    const realRoot = await fs.promises.realpath(normalizedRoot).catch(() => normalizedRoot);
+    const isRegisteredSource = sources.some((source) => {
+      const sourceRoot = normalizeAbsolutePath(source?.rootPath);
+      return sourceRoot === null ? false : sourceRoot === normalizedRoot || source.rootPath === realRoot;
+    });
+    if (!isRegisteredSource) {
+      return { success: false, error: '不是已注册的照片来源', samples: [] };
+    }
+
     const absolute = resolvePortableRelativePath(normalizedRoot, relativePath);
     const isAllowed = await assertApprovedPath(absolute);
     if (!isAllowed) {
@@ -1274,7 +1294,7 @@ async function resolveWindowLaunchPayload(payload, options) {
   }
 
   const resolved = await sourceRootService.resolveNavigationTarget(parsed.launchTarget);
-  const isAllowed = await assertApprovedPath(resolved.absolutePath, { bootstrapWhenEmpty: true });
+  const isAllowed = await assertApprovedPath(resolved.absolutePath);
   if (!isAllowed) {
     throw new Error('访问路径不在已授权照片目录范围内');
   }
@@ -1438,7 +1458,7 @@ ipcMain.handle(CHANNELS.GET_WINDOWS_INFO, async () => {
 // 处理扫描目录树请求 - 委托给 FileSystemService
 ipcMain.handle(CHANNELS.SCAN_DIRECTORY_TREE, async (event, rootPath) => {
   try {
-    const isAllowed = await assertApprovedPath(rootPath, { bootstrapWhenEmpty: true });
+    const isAllowed = await assertApprovedPath(rootPath);
     if (!isAllowed) {
       return [];
     }
