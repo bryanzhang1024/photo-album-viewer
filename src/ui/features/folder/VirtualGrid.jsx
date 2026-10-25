@@ -56,6 +56,8 @@ export default function VirtualGrid({ items, minItemWidth = 168, gapX = 14, gapY
     <div
       ref={ref}
       className="folder-scroll"
+      tabIndex={0}
+      aria-label="文件网格"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
     >
       <div className="folder-scroll-inner" style={{ height: totalHeight, paddingLeft: PAD_X, paddingRight: PAD_X }}>

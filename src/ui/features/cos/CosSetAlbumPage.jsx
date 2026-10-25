@@ -11,7 +11,9 @@ import {
 import './cos.css';
 
 const PAGE_SIZE = 120;
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标签';
+import { statusHint } from '../../data/shortcuts';
+
+const STATUS_HINTS = statusHint('cos');
 
 /** 套内照片：网格 + 查看器；页头可上一套 / 下一套 / 随机。 */
 export default function CosSetAlbumPage({ setId, setName, options = null, onNavigateSet }) {

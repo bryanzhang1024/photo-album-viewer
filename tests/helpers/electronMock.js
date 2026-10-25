@@ -98,6 +98,10 @@ const createElectronMocks = () => {
 
   return {
     app,
+    Menu: {
+      setApplicationMenu: jest.fn(),
+      buildFromTemplate: jest.fn((template) => ({ template }))
+    },
     BrowserWindow,
     ipcMain,
     nativeImage: {

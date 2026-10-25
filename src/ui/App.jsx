@@ -432,6 +432,8 @@ export default function App() {
       setActiveTabId(tabs[next].id);
     };
     const onKey = (event) => {
+      // 查看器打开时，⌘[ ⌘] ⌘W ⌘F 等窗口级组合键不作用在背后的主窗口
+      if (viewerOpen()) return;
       if (isEditable(event.target)) return;
       if (!(event.metaKey || event.ctrlKey)) return;
       const key = event.key;
@@ -487,6 +489,85 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [activeTabId, tabs, location, activeTab.historyIndex]);
+
+  // 菜单命令：菜单项统一发到这里，按上下文执行（避免系统默认菜单抢快捷键）
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (typeof api?.on !== 'function') return undefined;
+    const focusSearch = () => {
+      const input = searchInputRef.current?.querySelector?.('input')
+        || searchInputRef.current
+        || document.querySelector('.cos-search input')
+        || document.querySelector('input[type="search"]');
+      if (input) {
+        input.focus();
+        if (typeof input.select === 'function') input.select();
+      }
+    };
+    const viewerCommands = new Set(['copy', 'zoom-in', 'zoom-out', 'zoom-reset']);
+    const onCommand = (payload) => {
+      const command = payload?.command;
+      // 查看器打开时，导航/标签/视图类菜单命令不应作用到背后窗口
+      if (document.querySelector('[role="dialog"]') && !viewerCommands.has(command)) return;
+      switch (command) {
+        case 'new-tab':
+          openNewTab();
+          break;
+        case 'new-window':
+          if (location.kind === 'folder') {
+            openInNewWindow({ sourceId: location.sourceId, relativePath: location.relativePath || '' })
+              .catch((error) => setSourceError(error?.message || '创建新窗口失败'));
+          } else {
+            invoke(CHANNELS.CREATE_NEW_WINDOW).catch(() => {});
+          }
+          break;
+        case 'close-tab':
+          if (tabs.length <= 1) window.close();
+          else closeTab(activeTabId);
+          break;
+        case 'close-window':
+          window.close();
+          break;
+        case 'open-settings':
+          invoke(CHANNELS.OPEN_SETTINGS_WINDOW).catch(() => {});
+          break;
+        case 'open-folder':
+          requestOpenFolder(null);
+          break;
+        case 'refresh':
+          window.dispatchEvent(new CustomEvent('pav:refresh'));
+          break;
+        case 'view-grid':
+          changeViewMode('grid');
+          break;
+        case 'view-list':
+          changeViewMode('list');
+          break;
+        case 'focus-search':
+          focusSearch();
+          break;
+        case 'zoom-in':
+        case 'zoom-out':
+        case 'zoom-reset':
+          window.dispatchEvent(new CustomEvent('pav:viewer-zoom', { detail: { command } }));
+          break;
+        case 'copy':
+          if (document.querySelector('[role="dialog"]')) {
+            window.dispatchEvent(new CustomEvent('pav:copy-image'));
+          } else if (typeof document.execCommand === 'function') {
+            document.execCommand('copy');
+          }
+          break;
+        default:
+          break;
+      }
+    };
+    const off = api.on(CHANNELS.MENU_COMMAND, onCommand);
+    return () => {
+      if (typeof off === 'function') off();
+      else api.removeListener?.(CHANNELS.MENU_COMMAND, onCommand);
+    };
+  });
 
   const title = titleFor(location, sources);
 

@@ -1,5 +1,5 @@
 const { resolveBrowserImage } = require('./services/ImagePreviewService');
-const { app, ipcMain, dialog, shell, session } = require('electron');
+const { app, ipcMain, dialog, shell, session, Menu, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -20,6 +20,7 @@ const {
 const { createSourceRootService } = require('./services/SourceRootService');
 const { createFolderCoverService } = require('./services/FolderCoverService');
 const { createPathApprovalService, isFilesystemRootPath } = require('./services/PathApprovalService');
+const { buildAppMenu } = require('./services/AppMenu');
 const { CosLibraryService } = require('./services/CosLibraryService');
 const { registerCosLibraryIpcHandlers } = require('./services/CosLibraryIpc');
 const {
@@ -381,6 +382,14 @@ const handleCommandLine = () => {
 };
 
 app.whenReady().then(async () => {
+  // 先换掉 Electron 默认菜单，避免 ⌘W/⌘R/⌘+/⌘C 被系统菜单抢走
+  Menu.setApplicationMenu(buildAppMenu({
+    send: (command) => {
+      const focused = BrowserWindow.getFocusedWindow() || getMainWindow();
+      focused?.webContents?.send(CHANNELS.MENU_COMMAND, { command });
+    }
+  }));
+
   const cleanup = await resetLegacyNavigationFiles(app.getPath('userData'));
   for (const { fileName, error } of cleanup.failed) {
     console.warn(`[Navigation v3] 清理旧导航文件失败: ${fileName}`, error?.message || error);

@@ -3,9 +3,10 @@ import {
   loadSettings, saveSettings, applyTheme, getCacheStats, clearThumbnailCache, formatBytes
 } from '../../data/settings';
 import { getStatus, refresh } from '../../data/cos';
+import { HELP_GROUPS, helpRowsFor } from '../../data/shortcuts';
 import './settings.css';
 
-const TABS = ['通用', '浏览', '缓存', '图库'];
+const TABS = ['通用', '浏览', '缓存', '图库', '快捷键'];
 
 function Row({ label, children, hint }) {
   return (
@@ -56,6 +57,20 @@ export default function SettingsPage() {
     saveSettings(next);
     if (key === 'theme') applyTheme(value);
   };
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (typeof api?.on !== 'function') return undefined;
+    const onCommand = (payload) => {
+      const command = payload?.command;
+      if (command === 'close-window' || command === 'close-tab') window.close();
+    };
+    const off = api.on('menu-command', onCommand);
+    return () => {
+      if (typeof off === 'function') off();
+      else api.removeListener?.('menu-command', onCommand);
+    };
+  }, []);
 
   useEffect(() => {
     applyTheme(settings.theme);
@@ -181,6 +196,26 @@ export default function SettingsPage() {
             <div className="set-row block">
               <span>清理缓存不会影响收藏与 Cos 索引。</span>
             </div>
+          </>
+        ) : null}
+
+        {tab === 4 ? (
+          <>
+            {HELP_GROUPS.map((group) => (
+              <div key={group.title} className="set-group">
+                <div className="set-title">{group.title}</div>
+                <table className="shortcut-table">
+                  <tbody>
+                    {helpRowsFor(group).map((row) => (
+                      <tr key={`${group.title}-${row.keys}-${row.label}`}>
+                        <th scope="row">{row.keys}</th>
+                        <td>{row.label}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </>
         ) : null}
 

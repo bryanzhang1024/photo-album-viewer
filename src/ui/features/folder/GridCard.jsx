@@ -69,6 +69,7 @@ export default function GridCard({
   const meta = isFolder ? folderMeta : `${Math.round(item.size / 1024)} KB · ${formatDate(item.mtimeMs)}`;
   return (
     <article
+      data-key={item.key}
       className={`grid-card${selected ? ' selected' : ''}`}
       style={{ width }}
       onClick={() => onClick?.(item)}

@@ -211,4 +211,88 @@ describe('查看器 · Esc 分层与输入', () => {
     await userEvent.click(next);
     await waitFor(() => expect(screen.getAllByText(/1 \/ 3/).length).toBeGreaterThan(0));
   });
+
+  test('恢复旧版键位：A/D 翻页、Q/E 旋转、C 收藏、O 在 Finder 显示', async () => {
+    const calls = [];
+    window.electronAPI = {
+      platform: 'darwin',
+      invoke: jest.fn(async (channel) => {
+        calls.push(channel);
+        if (channel === 'load-favorites') return { folders: [], albums: [], images: [] };
+        return { success: true };
+      })
+    };
+    const { container } = render(
+      <ImageViewer images={IMAGES} initialIndex={0} title="套图" albumPath="/A/a" albumName="套图" onClose={jest.fn()} />
+    );
+    const image = () => container.querySelector('.viewer-image, .viewer-pair img');
+
+    await userEvent.keyboard('d');
+    await waitFor(() => expect(screen.getAllByText(/2 \/ 3/).length).toBeGreaterThan(0));
+    await userEvent.keyboard('a');
+    await waitFor(() => expect(screen.getAllByText(/1 \/ 3/).length).toBeGreaterThan(0));
+
+    await userEvent.keyboard('e');
+    expect(image().style.transform).toContain('rotate(90deg)');
+    await userEvent.keyboard('q');
+    expect(image().style.transform).toContain('rotate(0deg)');
+
+    await userEvent.keyboard('c');
+    expect(calls).toContain('save-favorites');
+
+    await userEvent.keyboard('o');
+    expect(calls).toContain('show-in-folder');
+  });
+
+  test('Backspace 关闭查看器（先把信息面板关掉）', async () => {
+    const onClose = renderViewer();
+    await userEvent.click(screen.getByRole('button', { name: '图片信息' }));
+    await userEvent.keyboard('{Backspace}');
+    expect(screen.getByRole('button', { name: '图片信息' })).toHaveAttribute('aria-pressed', 'false');
+    expect(onClose).not.toHaveBeenCalled();
+
+    await userEvent.keyboard('{Backspace}');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('Delete 把当前图片移到废纸篓（二次确认）', async () => {
+    const calls = [];
+    window.electronAPI = {
+      platform: 'darwin',
+      invoke: jest.fn(async (channel) => {
+        calls.push(channel);
+        if (channel === 'load-favorites') return { folders: [], albums: [], images: [] };
+        return { ok: true, success: true };
+      })
+    };
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<ImageViewer images={IMAGES} initialIndex={0} title="套图" albumPath="/A/a" albumName="套图" onClose={jest.fn()} />);
+
+    await userEvent.keyboard('{Delete}');
+    await waitFor(() => expect(calls).toContain('trash-image'));
+  });
+
+  test('R 是随机看下一张（不是旋转）', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.9);
+    const { container } = render(
+      <ImageViewer images={IMAGES} initialIndex={0} title="套图" albumPath="/A/a" albumName="套图" onClose={jest.fn()} />
+    );
+    const before = container.querySelector('.viewer-image, .viewer-pair img').style.transform;
+
+    await userEvent.keyboard('r');
+    await waitFor(() => expect(screen.getAllByText(/3 \/ 3/).length).toBeGreaterThan(0));
+    expect(container.querySelector('.viewer-image, .viewer-pair img').style.transform).toBe(before);
+    Math.random.mockRestore();
+  });
+
+  test('T 切换底部工具栏显示', async () => {
+    renderViewer();
+    const viewer = screen.getByRole('dialog', { name: '大图查看器' });
+    expect(viewer.querySelector('.viewer-bar').className).toContain('hidden');
+
+    await userEvent.keyboard('t');
+    expect(viewer.querySelector('.viewer-bar').className).not.toContain('hidden');
+    await userEvent.keyboard('t');
+    expect(viewer.querySelector('.viewer-bar').className).toContain('hidden');
+  });
 });

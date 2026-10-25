@@ -8,7 +8,9 @@ import { CHANNELS } from '../../data/ipc';
 import { RotateIcon } from '../../icons';
 import './cos.css';
 
-const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘, 设置　⌘W 关闭标签';
+import { statusHint } from '../../data/shortcuts';
+
+const STATUS_HINTS = statusHint('cos');
 
 function BigCard({ title, count, hint, coverMediaId, onClick }) {
   return (

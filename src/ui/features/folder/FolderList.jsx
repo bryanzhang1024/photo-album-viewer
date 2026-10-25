@@ -58,6 +58,7 @@ export default function FolderList({
       visible.push(
         <div
           key={item.key}
+          data-key={item.key}
           className={`row folder-row${selectedKey === item.key ? ' selected' : ''}`}
           style={{ top: PAD_TOP + row * ROW_HEIGHT }}
           onClick={() => onSelect?.(item)}
@@ -90,6 +91,7 @@ export default function FolderList({
     visible.push(
       <div
         key={key}
+        data-key={key}
         className={`row folder-row file${selectedKey === key ? ' selected' : ''}`}
         style={{ top: filesTop + (row - items.length) * ROW_HEIGHT }}
         onClick={() => onSelect?.({ kind: 'file', key, ...file })}
@@ -113,6 +115,8 @@ export default function FolderList({
     <div
       ref={ref}
       className={`folder-scroll${isPhotoLayer ? ' photo-layer' : ''}`}
+      tabIndex={0}
+      aria-label="文件列表"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
     >
       <div className="list-head folder-list-head" role="row">
