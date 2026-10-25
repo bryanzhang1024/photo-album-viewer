@@ -59,7 +59,7 @@ section h3{font-size:13px;margin:0 0 8px}
 @media (max-width:1100px){.book{grid-template-columns:1fr}nav{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}main{padding:24px}.cols,.cards3{grid-template-columns:1fr}}
 </style></head><body>
 <div class="book">
-<nav><h1>4.0 界面设计稿</h1><p class="sub">2026-10-25 · 41 屏<br>这份就是实现与验收的唯一对照</p><a href="#model">对象分类：两个对象，三种卡片</a><a href="#shell">窗口外壳与导航</a><a href="#album">相簿与查看器</a><a href="#cos">Cos 图库</a><a href="#favorites">收藏</a><a href="#search">搜索</a><a href="#settings">设置</a><a href="#states">状态与异常</a><a href="#messy">散乱目录与列表变体</a><a href="#responsive">响应式</a><a href="#header">头部与密度</a><a href="#check">连贯性检查</a><a href="#changes">这次改了什么</a><a href="#pending">需要你确认的</a><a href="#materials">材料与原件</a></nav>
+<nav><h1>4.0 界面设计稿</h1><p class="sub">2026-10-25 · 41 屏<br>这份就是实现与验收的唯一对照</p><a href="#model">对象分类：两个对象，三种卡片</a><a href="#shell">窗口外壳与导航</a><a href="#album">相簿与查看器</a><a href="#cos">Cos 图库</a><a href="#favorites">收藏</a><a href="#search">搜索</a><a href="#settings">设置</a><a href="#states">状态与异常</a><a href="#messy">散乱目录与列表变体</a><a href="#responsive">响应式</a><a href="#header">头部与密度</a><a href="#check">连贯性检查</a><a href="#changes">这次改了什么</a><a href="#pending">需要你确认的</a><a href="#notdo">明确不做（4.0 范围外）</a><a href="#materials">材料与原件</a></nav>
 <main>
 <header class="top">
   <h1>Photo Album Viewer · 4.0 界面设计稿</h1>
@@ -175,6 +175,21 @@ section h3{font-size:13px;margin:0 0 8px}
   <li><b>设置「图库」标签只显示状态</b>，增删根目录仍回 Cos 总览页。</li>
   <li><b>状态栏快捷键</b>目前只列 ⌘[ ⌘] ⌘↑ ⌘F 与「双击打开」，要不要再加 ⌘,（设置）和 ⌘W（关标签）。</li>
 </ol>
+</section>
+<section id="notdo">
+<h2>十五、明确不做（4.0 范围外）</h2>
+<p class="lead">4.0 只换界面与交互形态，下面这些是功能能力，界面上不出现入口，等以后单独排期。</p>
+<ul class="list">
+  <li><b>多选与批量操作</b>：⌘A 全选、⌘O 打开、⌘⌫ 批量移到废纸篓。相簿只做单选。</li>
+  <li><b>空格快速查看</b>：状态栏不出现这条提示。</li>
+  <li><b>跨来源全库搜索</b>：搜索范围只到当前文件夹，Cos 图库单独搜。</li>
+  <li><b>大平铺目录的按日期分组 / 快速定位</b>：3,055 张的目录仍靠滚动和搜索。</li>
+  <li><b>Quick Look 预览</b>：与空格快速查看同一条，不做。</li>
+  <li><b>多窗口行为改动</b>：沿用现有打开方式，不重画。</li>
+  <li><b>标签拖拽排序</b>：沿用现有行为，不新增拖拽交互。</li>
+  <li><b>浅色主题逐屏对齐</b>：保留浅色可用，但只按暗色样张验收。</li>
+  <li><b>主进程能力改动</b>：目录扫描、索引算法、缩略图管线都不动，只换界面层。</li>
+</ul>
 </section>
 <section id="materials">
 <h2>十五、材料与原件</h2>
