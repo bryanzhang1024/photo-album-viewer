@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
+import useBreakpoint from '../../hooks/useBreakpoint';
 import { SearchIcon } from '../../icons';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
@@ -12,6 +13,8 @@ const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索
 
 /** 套图列表：按角色 / 按署名 / 全部作品三种入口共用。 */
 export default function CosSetListPage({ viewKind = 'all', entity, onOpenSet }) {
+  const breakpoint = useBreakpoint();
+  const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
 
@@ -46,7 +49,8 @@ export default function CosSetListPage({ viewKind = 'all', entity, onOpenSet }) 
 
   return (
     <>
-      <PageHeader title={title} count={countText} controls={controls} />
+      <PageHeader
+        variant={compactHeader ? 'compact' : 'inline'} title={title} count={countText} controls={controls} />
       <div className="folder-body">
         {error ? <div className="folder-state error">{error}</div> : null}
         <div className="cos-scroll">

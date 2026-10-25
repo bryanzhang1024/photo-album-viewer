@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
+import useBreakpoint from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import Thumb from '../../components/Thumb';
 import ImageViewer from '../../components/ImageViewer';
@@ -32,6 +33,8 @@ function Collage({ samples }) {
 }
 
 export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
+  const breakpoint = useBreakpoint();
+  const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('folders');
   const [viewMode, setViewMode] = useState('grid');
@@ -84,6 +87,7 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
   return (
     <>
       <PageHeader
+        variant={compactHeader ? 'compact' : 'inline'}
         title={tab === 'folders' ? '文件夹收藏' : '图片收藏'}
         count={countText}
         controls={(

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
+import useBreakpoint from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import Thumb from '../../components/Thumb';
 import ImageViewer from '../../components/ImageViewer';
@@ -14,6 +15,8 @@ const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索
 
 /** 套内照片：网格 + 查看器；页头可上一套 / 下一套 / 随机。 */
 export default function CosSetAlbumPage({ setId, setName, options = null, onNavigateSet }) {
+  const breakpoint = useBreakpoint();
+  const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [set, setSet] = useState(null);
   const [images, setImages] = useState([]);
   const [total, setTotal] = useState(0);
@@ -113,6 +116,7 @@ export default function CosSetAlbumPage({ setId, setName, options = null, onNavi
   return (
     <>
       <PageHeader
+        variant={compactHeader ? 'compact' : 'inline'}
         title={title}
         count={countText}
         controls={(

@@ -4,6 +4,7 @@ import StatusBar from '../../shell/StatusBar';
 import { FitIcon, ChevronLeftIcon, ChevronRightIcon, HeartIcon, SettingsIcon, SearchIcon } from '../../icons';
 import useFolderSnapshot from './useFolderSnapshot';
 import useOtherFiles from './useOtherFiles';
+import useBreakpoint from '../../hooks/useBreakpoint';
 import VirtualGrid from './VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
@@ -37,7 +38,9 @@ function fitStorageKey(sourceId, relativePath) {
 }
 
 export default function FolderPage({ source, relativePath, viewMode, onViewModeChange, onOpenFolder, siblings = null }) {
-  const { status, snapshot, items, error } = useFolderSnapshot(source, relativePath);
+  const { status, snapshot, items, error, reload } = useFolderSnapshot(source, relativePath);
+  const breakpoint = useBreakpoint();
+  const compactHeader = viewMode === 'list' || breakpoint === 'medium' || breakpoint === 'small';
   const { files: otherFiles } = useOtherFiles(source, relativePath);
   const [sortKey, setSortKey] = useState(() => getFolderSort(source.sourceId, relativePath));
   const [density, setDensity] = useState(1);
@@ -49,6 +52,7 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
   ));
   const [favorites, setFavorites] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef(null);
 
   const sorted = useMemo(() => {
@@ -212,15 +216,26 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
       ) : null}
       <button className="icon-button" type="button" aria-label="设置"
         onClick={() => invoke(CHANNELS.OPEN_SETTINGS_WINDOW)}><SettingsIcon /></button>
-      <label className="cos-search" ref={searchRef}>
-        <SearchIcon />
-        <input
-          type="search"
-          value={searchQuery}
-          placeholder="搜索这个文件夹"
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
-      </label>
+      {compactHeader ? (
+        <button
+          className={`icon-button${searchOpen || searching ? ' active' : ''}`}
+          type="button"
+          aria-label="搜索"
+          onClick={() => setSearchOpen((open) => !open)}
+        >
+          <SearchIcon />
+        </button>
+      ) : (
+        <label className="cos-search" ref={searchRef}>
+          <SearchIcon />
+          <input
+            type="search"
+            value={searchQuery}
+            placeholder="搜索这个文件夹"
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </label>
+      )}
       {totalImages > 0 ? (
         <button
           className={`icon-button${fitMode ? ' active' : ''}`}
@@ -261,15 +276,41 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
   return (
     <>
       <PageHeader
-        variant={viewMode === 'list' ? 'compact' : 'inline'}
+        variant={compactHeader ? 'compact' : 'inline'}
         crumbs={crumbs}
         title={title}
         count={countText}
         controls={controls}
       />
       <div className="folder-body">
+        {compactHeader && searchOpen ? (
+          <div className="search-bar" ref={searchRef}>
+            <SearchIcon />
+            <input
+              autoFocus
+              type="search"
+              value={searchQuery}
+              placeholder="搜索这个文件夹"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setSearchQuery('');
+                  setSearchOpen(false);
+                }
+              }}
+            />
+            <button type="button" aria-label="关闭搜索"
+              onClick={() => { setSearchQuery(''); setSearchOpen(false); }}>×</button>
+          </div>
+        ) : null}
         {status === 'loading' ? <div className="folder-state">正在读取目录…</div> : null}
-        {status === 'error' ? <div className="folder-state error">{error}</div> : null}
+        {status === 'error' ? (
+          <div className="folder-state error">
+            <div>{error || '这个文件夹读取失败'}</div>
+            <div className="fav-hint">可能是外接盘没接上、目录被删除，或没有访问权限。</div>
+            <button className="btn-primary" type="button" onClick={reload}>重试</button>
+          </div>
+        ) : null}
         {ready && filtered.length === 0 && !searching && otherCount === 0 ? <div className="folder-state">这个文件夹是空的</div> : null}
         {ready && filtered.length === 0 && searching ? (
           <div className="folder-state">

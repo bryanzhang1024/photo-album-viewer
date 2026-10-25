@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
+import useBreakpoint from '../../hooks/useBreakpoint';
 import { SearchIcon } from '../../icons';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
@@ -16,6 +17,8 @@ const FETCHERS = {
 };
 
 export default function CosEntityPage({ kind, onOpenEntity }) {
+  const breakpoint = useBreakpoint();
+  const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
 
@@ -36,6 +39,7 @@ export default function CosEntityPage({ kind, onOpenEntity }) {
   return (
     <>
       <PageHeader
+        variant={compactHeader ? 'compact' : 'inline'}
         title={title}
         count={countText}
         controls={(

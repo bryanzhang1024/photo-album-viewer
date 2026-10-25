@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
+import useBreakpoint from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
 import { getStatus, listSets, listCharacters, listCosers, refresh, selectRoot, removeRoot } from '../../data/cos';
@@ -23,6 +24,8 @@ function BigCard({ title, count, hint, coverMediaId, onClick }) {
 }
 
 export default function CosHomePage({ onNavigate }) {
+  const breakpoint = useBreakpoint();
+  const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [status, setStatus] = useState(null);
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
@@ -108,6 +111,7 @@ export default function CosHomePage({ onNavigate }) {
   return (
     <>
       <PageHeader
+        variant={compactHeader ? 'compact' : 'inline'}
         title="Cos 图库"
         count={countText}
         controls={(
@@ -119,7 +123,7 @@ export default function CosHomePage({ onNavigate }) {
       />
       <div className="folder-body">
         {error ? <div className="folder-state error">{error}</div> : null}
-        {process.env.NODE_ENV !== 'production' || progress ? null : null}
+
         {progress || status?.state === 'indexing' ? (
           <div className="cos-banner">
             <span className="cos-spinner" />
@@ -127,6 +131,11 @@ export default function CosHomePage({ onNavigate }) {
             <span className="cos-dim">{progress ? `${progress.processed || 0} / ${progress.total || 0}` : '准备中…'}</span>
             <span className="cos-grow" />
             <span className="cos-dim">建好后会缓存，下次打开只需几秒</span>
+          </div>
+        ) : null}
+        {status?.roots?.some((root) => root.status !== 'online') ? (
+          <div className="cos-banner offline">
+            <span>部分图库根目录离线，相关套图会标记为不可用；接回磁盘后点「刷新索引」即可恢复。</span>
           </div>
         ) : null}
         <div className="cos-scroll">

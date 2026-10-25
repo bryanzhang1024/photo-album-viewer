@@ -233,3 +233,8 @@
 .cos-chip-x:hover {
   color: var(--text);
 }
+
+.cos-banner.offline {
+  background: rgba(255, 159, 10, 0.1);
+  border-color: rgba(255, 159, 10, 0.32);
+}

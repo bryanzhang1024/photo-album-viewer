@@ -4,6 +4,7 @@ import { getDirectoryLevel, toFolderItems } from '../../data/directory';
 /** 读取一层目录快照并摊平成卡片列表。 */
 export default function useFolderSnapshot(source, relativePath) {
   const [state, setState] = useState({ status: 'idle', snapshot: null, items: [], error: '' });
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const sourceId = source?.sourceId;
@@ -24,7 +25,7 @@ export default function useFolderSnapshot(source, relativePath) {
     return () => {
       alive = false;
     };
-  }, [source, relativePath]);
+  }, [source, relativePath, tick]);
 
-  return state;
+  return { ...state, reload: () => setTick((value) => value + 1) };
 }
