@@ -284,11 +284,55 @@ export default function FolderPage({
     return () => window.removeEventListener('pav:refresh', onRefresh);
   }, [reload]);
 
+  // 键盘导航：列表/网格方向键移动选中、Enter 打开、Esc 清选中；
+  // 列表视图额外支持单键（C 收藏、O 在 Finder 显示、Delete 移到废纸篓）。
   useEffect(() => {
+    const isEditableTarget = (target) => {
+      if (!target) return false;
+      const tag = target.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+    };
+    const rowKeys = () => [
+      ...filtered.map((item) => item.key),
+      ...(viewMode === 'list' ? filteredOtherFiles.map((file) => `file:${file.name}`) : [])
+    ];
+    const openByKey = (key) => {
+      const item = filtered.find((entry) => entry.key === key);
+      if (item) {
+        handleOpen(item);
+        return;
+      }
+      const file = filteredOtherFiles.find((entry) => `file:${entry.name}` === key);
+      if (file) {
+        openExternal(albumImageAbsolutePath(source.rootPath, file.name))
+          .catch((reason) => window.alert(reason?.message || '打开文件失败'));
+      }
+    };
+    const moveSelection = (step) => {
+      const keys = rowKeys();
+      if (keys.length === 0) return;
+      const current = keys.indexOf(selectedKey);
+      let next;
+      if (current < 0) next = step > 0 ? 0 : keys.length - 1;
+      else next = Math.min(keys.length - 1, Math.max(0, current + step));
+      setSelectedKey(keys[next]);
+    };
+    const jumpSelection = (toEnd) => {
+      const keys = rowKeys();
+      if (keys.length === 0) return;
+      setSelectedKey(toEnd ? keys[keys.length - 1] : keys[0]);
+    };
     const onKey = (event) => {
+      // 查看器与输入框自己处理按键
+      if (viewerIndex !== null) return;
+      if (isEditableTarget(event.target)) return;
+
+      const plain = !event.metaKey && !event.ctrlKey && !event.altKey;
       if (event.key === 'Escape') {
-        // 查看器自己处理 Esc（含先关信息面板），这里跳过。
-        if (viewerIndex !== null) return;
+        if (selectedKey) {
+          setSelectedKey('');
+          return;
+        }
         if (searchQuery) {
           onSearchChange?.('');
           return;
@@ -298,13 +342,78 @@ export default function FolderPage({
         else onOpenRoots?.();
         return;
       }
-      if (event.key !== 'Enter' || !selectedKey || viewerIndex !== null) return;
-      const item = sorted.find((entry) => entry.key === selectedKey);
-      if (item) handleOpen(item);
+      if (!plain) return;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveSelection(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveSelection(-1);
+        return;
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        jumpSelection(false);
+        return;
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        jumpSelection(true);
+        return;
+      }
+      if (event.key === 'Enter') {
+        if (selectedKey) openByKey(selectedKey);
+        return;
+      }
+      if (viewMode !== 'list') return;
+
+      const item = filtered.find((entry) => entry.key === selectedKey);
+      const file = filteredOtherFiles.find((entry) => `file:${entry.name}` === selectedKey);
+      if (!item && !file) return;
+      const lower = event.key.toLowerCase();
+      const absolutePath = item
+        ? itemAbsolutePath(item)
+        : albumImageAbsolutePath(source.rootPath, file.name);
+
+      if (lower === 'c' && item) {
+        event.preventDefault();
+        toggleItemFavorite(item);
+        return;
+      }
+      if (lower === 'o') {
+        event.preventDefault();
+        invoke(CHANNELS.SHOW_IN_FOLDER, absolutePath).catch(() => {});
+        return;
+      }
+      if (event.key === 'Delete' && item?.kind === 'image') {
+        event.preventDefault();
+        if (!window.confirm('把这张图片移到废纸篓？')) return;
+        invoke(CHANNELS.TRASH_IMAGE, absolutePath)
+          .then((result) => {
+            if (!result?.success) throw new Error(result?.error || '移到废纸篓失败');
+            setDeletedKeys((prev) => new Set(prev).add(item.key));
+          })
+          .catch((error) => window.alert(error?.message || '移到废纸篓失败'));
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedKey, viewerIndex, sorted, searchQuery, segments, onOpenFolder, onOpenRoots, onSearchChange]);
+  }, [
+    selectedKey, viewerIndex, sorted, filtered, filteredOtherFiles, viewMode,
+    searchQuery, segments, onOpenFolder, onOpenRoots, onSearchChange,
+    source.rootPath, toggleItemFavorite
+  ]);
+
+  // 选中项滚动到可视区
+  useEffect(() => {
+    if (!selectedKey) return;
+    const selector = `[data-key="${String(selectedKey).replace(/["\\]/g, '\\$&')}"]`;
+    document.querySelector(selector)?.scrollIntoView?.({ block: 'nearest' });
+  }, [selectedKey]);
+
 
   const controls = (
     <>

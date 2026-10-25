@@ -228,3 +228,10 @@
 .photo-layer .folder-row {
   grid-template-columns: 1fr 110px 150px;
 }
+
+/* 内容区可 Tab 进入，键盘操作时给可见焦点环 */
+.folder-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
