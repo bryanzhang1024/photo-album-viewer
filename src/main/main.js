@@ -715,6 +715,23 @@ ipcMain.handle(CHANNELS.SAVE_SOURCE_ROOT_V1, async (event, request) => {
   }
 });
 
+ipcMain.handle(CHANNELS.REMOVE_SOURCE_ROOT_V1, async (event, request) => {
+  const sourceId = request && typeof request.sourceId === 'string' ? request.sourceId : null;
+  if (sourceId === null) {
+    return createNavigationRequestErrorEnvelope({
+      valid: false,
+      issues: [{ path: '$.sourceId', code: 'type', message: 'sourceId must be a string' }]
+    });
+  }
+
+  try {
+    const result = await sourceRootService.removeSourceRoot(sourceId);
+    return finalizeNavigationEnvelopeV1(createNavigationSuccessEnvelopeV1(result));
+  } catch (error) {
+    return createSourceRootServiceErrorEnvelope(error);
+  }
+});
+
 ipcMain.handle(CHANNELS.GET_DIRECTORY_LEVEL_V1, async (event, request) => {
   const validation = validateDirectoryLevelRequestV1(request);
   if (!validation.valid) {

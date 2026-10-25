@@ -363,6 +363,30 @@ function createSourceRootService({
     });
   }
 
+  async function removeSourceRoot(sourceId) {
+    return enqueueMutation(async () => {
+      await requireReady();
+      if (typeof sourceId !== 'string' || sourceId.trim().length === 0) {
+        throw createServiceError(
+          'INVALID_SOURCE_ROOT_REQUEST',
+          'A sourceId string is required to remove a SourceRoot'
+        );
+      }
+      const index = sources.findIndex((candidate) => (
+        candidate.sourceId.toLowerCase() === sourceId.trim().toLowerCase()
+      ));
+      if (index < 0) {
+        throw createServiceError('SOURCE_ROOT_NOT_FOUND', 'Source root is not registered');
+      }
+      // 只移除注册表记录，绝不触碰 rootPath 指向的磁盘内容。
+      const removed = sources[index];
+      const nextSources = sources.filter((_candidate, position) => position !== index);
+      await persistSources(nextSources);
+      sources = cloneSources(nextSources);
+      return { source: cloneSource(removed), removed: true };
+    });
+  }
+
   async function listSourceRoots() {
     await requireReady();
     return cloneSources(sources);
@@ -402,6 +426,7 @@ function createSourceRootService({
     getSourceRoot,
     initialize,
     listSourceRoots,
+    removeSourceRoot,
     resolveNavigationTarget,
     saveSourceRoot
   };

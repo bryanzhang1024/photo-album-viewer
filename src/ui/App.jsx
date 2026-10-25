@@ -3,8 +3,11 @@ import Toolbar from './shell/Toolbar';
 import { GridIcon, ListIcon } from './icons';
 import TabBar from './shell/TabBar';
 import Sidebar from './shell/Sidebar';
+import Menu from './components/Menu';
 import useBreakpoint from './hooks/useBreakpoint';
-import { listSourceRoots } from './data/sources';
+import {
+  listSourceRoots, selectDirectory, saveSourceRoot, removeSourceRoot, openInNewWindow
+} from './data/sources';
 import { getFolderView, setFolderView } from './data/prefs';
 import RootsPage from './features/roots/RootsPage';
 import FolderPage from './features/folder/FolderPage';
@@ -16,19 +19,47 @@ import FavoritesPage from './features/favorites/FavoritesPage';
 import { loadSettings, applyTheme } from './data/settings';
 
 /**
- * 4.0 外壳与导航。位置模型：{ kind: 'roots' } 或 { kind: 'folder', sourceId, relativePath }。
- * S1 范围：照片来源页 + 文件夹网格 / 列表。
+ * 4.1 外壳、导航与标签页。
+ * 位置模型：{ kind: 'roots' | 'folder' | 'favorites' | 'cos-*' }。
+ * 每个标签各自持有一份 history/historyIndex（Finder 式），前进后退只作用于当前标签。
  */
+
+let tabSequence = 0;
+
+function createTab(location) {
+  tabSequence += 1;
+  return { id: `tab-${tabSequence}`, history: [location], historyIndex: 0 };
+}
+
+function titleFor(location, sources) {
+  if (location.kind === 'folder') {
+    const source = sources.find((item) => item.sourceId === location.sourceId);
+    const segments = String(location.relativePath || '').split('/').filter(Boolean);
+    if (segments.length > 0) return segments[segments.length - 1];
+    return source?.label || '文件夹';
+  }
+  if (location.kind === 'favorites') return '我的收藏';
+  if (location.kind === 'cos-home') return 'Cos 图库';
+  if (location.kind === 'cos-characters') return '按角色';
+  if (location.kind === 'cos-cosers') return '按署名';
+  if (location.kind === 'cos-sets') return location.entity?.name || '全部作品';
+  if (location.kind === 'cos-set') return location.name || '套图';
+  return '文件夹';
+}
+
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarManuallyToggled, setSidebarManuallyToggled] = useState(false);
   const [sources, setSources] = useState([]);
   const [sourceError, setSourceError] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  const [history, setHistory] = useState([{ kind: 'roots' }]);
-  const [historyIndex, setHistoryIndex] = useState(0);
+  const [tabs, setTabs] = useState(() => [createTab({ kind: 'roots' })]);
+  const [activeTabId, setActiveTabId] = useState(() => tabs[0].id);
+  const [menu, setMenu] = useState(null);
   const breakpoint = useBreakpoint();
 
-  const location = history[historyIndex];
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
+  const location = activeTab.history[activeTab.historyIndex];
   const source = location.kind === 'folder'
     ? sources.find((item) => item.sourceId === location.sourceId)
     : null;
@@ -36,8 +67,11 @@ export default function App() {
   useEffect(() => {
     if (breakpoint === 'medium' || breakpoint === 'small') {
       setSidebarCollapsed(true);
+      setSidebarManuallyToggled(false);
+      return;
     }
-  }, [breakpoint]);
+    if (!sidebarManuallyToggled) setSidebarCollapsed(false);
+  }, [breakpoint, sidebarManuallyToggled]);
 
   useEffect(() => {
     const settings = loadSettings();
@@ -78,12 +112,104 @@ export default function App() {
     }
   };
 
-  const navigate = (next) => {
-    setHistory((prev) => [...prev.slice(0, historyIndex + 1), next]);
-    setHistoryIndex((index) => index + 1);
+  const navigate = (next, options = {}) => {
+    if (options.newTab) {
+      const tab = createTab(next);
+      setTabs((prev) => [...prev, tab]);
+      setActiveTabId(tab.id);
+      return;
+    }
+    setTabs((prev) => prev.map((tab) => {
+      if (tab.id !== activeTabId) return tab;
+      const history = [...tab.history.slice(0, tab.historyIndex + 1), next];
+      return { ...tab, history, historyIndex: history.length - 1 };
+    }));
   };
 
-  const onSidebarNavigate = (key) => {
+  const goBack = () => {
+    setTabs((prev) => prev.map((tab) => (
+      tab.id === activeTabId
+        ? { ...tab, historyIndex: Math.max(0, tab.historyIndex - 1) }
+        : tab
+    )));
+  };
+
+  const goForward = () => {
+    setTabs((prev) => prev.map((tab) => (
+      tab.id === activeTabId
+        ? { ...tab, historyIndex: Math.min(tab.history.length - 1, tab.historyIndex + 1) }
+        : tab
+    )));
+  };
+
+  const openNewTab = () => {
+    const tab = createTab(location);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+  };
+
+  const selectTab = (id) => setActiveTabId(id);
+
+  const closeTab = (id) => {
+    const index = tabs.findIndex((tab) => tab.id === id);
+    if (index < 0) return;
+    if (tabs.length === 1) {
+      const tab = createTab({ kind: 'roots' });
+      setTabs([tab]);
+      setActiveTabId(tab.id);
+      return;
+    }
+    const next = tabs.filter((tab) => tab.id !== id);
+    if (id === activeTabId) {
+      setActiveTabId(next[Math.max(0, index - 1)].id);
+    }
+    setTabs(next);
+  };
+
+  const upsertSource = (nextSource) => {
+    setSources((prev) => {
+      const exists = prev.some((item) => item.sourceId === nextSource.sourceId);
+      return exists
+        ? prev.map((item) => (item.sourceId === nextSource.sourceId ? nextSource : item))
+        : [...prev, nextSource];
+    });
+  };
+
+  // 打开文件夹：选目录 → 注册为照片来源 → 由用户选在当前标签/新标签/新窗口打开。
+  const requestOpenFolder = async (anchor) => {
+    setMenu(null);
+    try {
+      const selectedPath = await selectDirectory();
+      if (!selectedPath) return;
+      const registered = await saveSourceRoot(selectedPath);
+      upsertSource(registered);
+      setSourceError('');
+      setMenu({ kind: 'open-folder', anchor, source: registered });
+    } catch (error) {
+      setSourceError(error?.message || '打开文件夹失败');
+    }
+  };
+
+  const requestRemoveSource = (targetSource, anchor) => {
+    setMenu({ kind: 'remove-source', anchor, source: targetSource });
+  };
+
+  const confirmRemoveSource = async () => {
+    const target = menu?.source;
+    if (!target) return;
+    try {
+      await removeSourceRoot(target.sourceId);
+      setSources((prev) => prev.filter((item) => item.sourceId !== target.sourceId));
+      if (location.kind === 'folder' && location.sourceId === target.sourceId) {
+        navigate({ kind: 'roots' });
+      }
+      setSourceError('');
+    } catch (error) {
+      setSourceError(error?.message || '移除照片来源失败');
+    }
+  };
+
+  const onSidebarNavigate = (key, anchor) => {
     if (key === 'folder') {
       navigate({ kind: 'roots' });
       return;
@@ -108,30 +234,47 @@ export default function App() {
       navigate({ kind: 'cos-cosers' });
       return;
     }
+    if (key === 'open-folder') {
+      requestOpenFolder(anchor);
+      return;
+    }
     if (sources.some((item) => item.sourceId === key)) {
       navigate({ kind: 'folder', sourceId: key, relativePath: '' });
     }
   };
 
-  const segments = location.kind === 'folder'
-    ? String(location.relativePath || '').split('/').filter(Boolean)
-    : [];
-  let title = '文件夹';
-  if (location.kind === 'folder') {
-    title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
-  } else if (location.kind === 'favorites') {
-    title = '我的收藏';
-  } else if (location.kind === 'cos-home') {
-    title = 'Cos 图库';
-  } else if (location.kind === 'cos-characters') {
-    title = '按角色';
-  } else if (location.kind === 'cos-cosers') {
-    title = '按署名';
-  } else if (location.kind === 'cos-sets') {
-    title = location.entity?.name || '全部作品';
-  } else if (location.kind === 'cos-set') {
-    title = location.name || '套图';
-  }
+  const title = titleFor(location, sources);
+
+  const menuItems = useMemo(() => {
+    if (!menu) return [];
+    if (menu.kind === 'open-folder') {
+      const target = { kind: 'folder', sourceId: menu.source.sourceId, relativePath: '' };
+      return [
+        { key: 'current', label: '在当前标签页打开', onSelect: () => navigate(target) },
+        { key: 'new-tab', label: '在新标签页打开', onSelect: () => navigate(target, { newTab: true }) },
+        {
+          key: 'new-window',
+          label: '在新窗口中打开',
+          onSelect: () => {
+            openInNewWindow({ sourceId: menu.source.sourceId }).catch((error) => {
+              setSourceError(error?.message || '创建新窗口失败');
+            });
+          }
+        }
+      ];
+    }
+    if (menu.kind === 'remove-source') {
+      return [
+        {
+          key: 'remove',
+          label: `移除「${menu.source.label}」（不会删除磁盘文件）`,
+          danger: true,
+          onSelect: confirmRemoveSource
+        }
+      ];
+    }
+    return [];
+  }, [menu, sources]);
 
   const activeKey = useMemo(() => {
     if (location.kind === 'roots') return 'folder';
@@ -148,16 +291,25 @@ export default function App() {
     return 'cos';
   }, [location]);
 
+  const tabItems = tabs.map((tab) => ({
+    id: tab.id,
+    title: titleFor(tab.history[tab.historyIndex], sources),
+    active: tab.id === activeTabId
+  }));
+
   return (
     <div className="app">
       <Toolbar
         title={title}
         sidebarCollapsed={sidebarCollapsed}
-        onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
-        canGoBack={historyIndex > 0}
-        canGoForward={historyIndex < history.length - 1}
-        onBack={() => setHistoryIndex((index) => Math.max(0, index - 1))}
-        onForward={() => setHistoryIndex((index) => Math.min(history.length - 1, index + 1))}
+        onToggleSidebar={() => {
+          setSidebarManuallyToggled(true);
+          setSidebarCollapsed((value) => !value);
+        }}
+        canGoBack={activeTab.historyIndex > 0}
+        canGoForward={activeTab.historyIndex < activeTab.history.length - 1}
+        onBack={goBack}
+        onForward={goForward}
         right={location.kind === 'folder' ? (
           <div className="segmented">
             <button className="icon-button" type="button" aria-label="图标视图"
@@ -167,7 +319,7 @@ export default function App() {
           </div>
         ) : null}
       />
-      <TabBar tabs={[{ id: 'current', title, active: true }]} />
+      <TabBar tabs={tabItems} onSelect={selectTab} onClose={closeTab} onNew={openNewTab} />
       <div className="body">
         <Sidebar
           collapsed={sidebarCollapsed}
@@ -175,6 +327,7 @@ export default function App() {
           sourceError={sourceError}
           active={activeKey}
           onNavigate={onSidebarNavigate}
+          onRequestRemoveSource={requestRemoveSource}
         />
         <main className="main">
           {location.kind === 'favorites' ? (
@@ -232,6 +385,7 @@ export default function App() {
             <RootsPage
               sources={sources}
               onOpen={(item) => navigate({ kind: 'folder', sourceId: item.sourceId, relativePath: '' })}
+              onOpenFolder={requestOpenFolder}
             />
           ) : source ? (
             <FolderPage
@@ -241,6 +395,7 @@ export default function App() {
               viewMode={viewMode}
               onViewModeChange={changeViewMode}
               siblings={location.siblings || null}
+              onOpenRoots={() => navigate({ kind: 'roots' })}
               onOpenFolder={(relativePath, context) => navigate({
                 kind: 'folder',
                 sourceId: source.sourceId,
@@ -249,10 +404,19 @@ export default function App() {
               })}
             />
           ) : (
-            <div style={{ padding: 48, color: "var(--text-dim)", textAlign: "center", fontSize: 12.5 }}>正在加载来源…</div>
+            <div style={{ padding: 48, color: 'var(--text-dim)', textAlign: 'center', fontSize: 12.5 }}>
+              照片来源已不存在，请从侧栏重新选择。
+            </div>
           )}
         </main>
       </div>
+      <Menu
+        open={Boolean(menu)}
+        anchor={menu?.anchor}
+        items={menuItems}
+        onClose={() => setMenu(null)}
+        label={menu?.kind === 'remove-source' ? '移除照片来源' : '选择打开方式'}
+      />
     </div>
   );
 }

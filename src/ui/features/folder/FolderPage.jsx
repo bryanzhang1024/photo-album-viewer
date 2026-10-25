@@ -37,7 +37,7 @@ function fitStorageKey(sourceId, relativePath) {
   return `pav.fit.v1:${sourceId}:${relativePath}`;
 }
 
-export default function FolderPage({ source, relativePath, viewMode, onViewModeChange, onOpenFolder, siblings = null }) {
+export default function FolderPage({ source, relativePath, viewMode, onViewModeChange, onOpenFolder, onOpenRoots, siblings = null }) {
   const { status, snapshot, items, error, reload } = useFolderSnapshot(source, relativePath);
   const breakpoint = useBreakpoint();
   const compactHeader = viewMode === 'list' || breakpoint === 'medium' || breakpoint === 'small';
@@ -90,9 +90,32 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
 
   const segments = relativePath.split('/').filter(Boolean);
   const title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
-  const crumbs = segments.length > 0
-    ? ['文件夹', source?.label, ...segments.slice(0, -1)].filter(Boolean)
-    : ['文件夹'];
+  // 面包屑每一级都可点：文件夹 → 照片来源根 → 中间各层；当前层只用标题展示。
+  const crumbs = [
+    { label: '文件夹', clickable: true },
+    ...(segments.length > 0 ? [{ label: source?.label || '来源', clickable: true }] : []),
+    ...segments.slice(0, -1).map((segment, index) => ({
+      label: segment,
+      clickable: true,
+      relativePath: segments.slice(0, index + 1).join('/')
+    }))
+  ].filter((crumb) => crumb.label);
+
+  const handleCrumbClick = (index) => {
+    const crumb = crumbs[index];
+    if (!crumb) return;
+    if (index === 0) {
+      onOpenRoots?.();
+      return;
+    }
+    if (index === 1) {
+      onOpenFolder('', { siblings: null });
+      return;
+    }
+    if (typeof crumb.relativePath === 'string') {
+      onOpenFolder(crumb.relativePath, { siblings: folderSiblings });
+    }
+  };
   const ready = status === 'ready';
   const formatCount = (value) => Number(value).toLocaleString('zh-CN');
   const folders = ready ? snapshot.facts.childDirectoryCount : 0;
@@ -281,6 +304,7 @@ export default function FolderPage({ source, relativePath, viewMode, onViewModeC
         title={title}
         count={countText}
         controls={controls}
+        onCrumbClick={handleCrumbClick}
       />
       <div className="folder-body">
         {compactHeader && searchOpen ? (

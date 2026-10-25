@@ -9,7 +9,7 @@ import './roots.css';
 const STATUS_HINTS = '⌘[ 后退　⌘] 前进　⌘↑ 上一级　⌘F 搜索　⌘, 设置　⌘W 关闭标签';
 
 /** 照片来源页（2.1）：每个根的封面、文件夹数与位置。 */
-export default function RootsPage({ sources, onOpen }) {
+export default function RootsPage({ sources, onOpen, onOpenFolder }) {
   const [snapshots, setSnapshots] = useState({});
 
   useEffect(() => {
@@ -28,8 +28,32 @@ export default function RootsPage({ sources, onOpen }) {
 
   return (
     <>
-      <PageHeader title="照片来源" count={sources.length > 0 ? `${sources.length} 个位置` : ''} />
+      <PageHeader
+        title="照片来源"
+        count={sources.length > 0 ? `${sources.length} 个位置` : ''}
+        controls={onOpenFolder ? (
+          <button
+            className="text-button"
+            type="button"
+            onClick={(event) => onOpenFolder(event.currentTarget)}
+          >
+            打开文件夹
+          </button>
+        ) : null}
+      />
       <div className="folder-body">
+        {sources.length === 0 ? (
+          <div className="roots-empty">
+            <p>还没有照片来源。选一个文件夹加进来，就能在这里浏览。</p>
+            <button
+              className="button-primary"
+              type="button"
+              onClick={(event) => onOpenFolder?.(event.currentTarget)}
+            >
+              打开文件夹
+            </button>
+          </div>
+        ) : null}
         <div className="roots-grid">
           {sources.map((source) => {
             const snapshot = snapshots[source.sourceId];

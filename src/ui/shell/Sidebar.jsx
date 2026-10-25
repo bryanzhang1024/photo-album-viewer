@@ -22,12 +22,8 @@ const NAV_GROUPS = [
   }
 ];
 
-/**
- * 三段侧栏：浏览、Cos 图库、照片来源，底部「打开文件夹」。
- * S0 只做结构与真实来源列表，点击行为在 S1 接入。
- */
+/** 同名来源用上级目录区分：/Volumes/Collection → 根；/Volumes/1TB/Collection → 1TB。 */
 function sourceSuffix(source) {
-  // 同名来源用上级目录区分：/Volumes/Collection → 根；/Volumes/1TB/Collection → 1TB。
   const segments = String(source.rootPath || '').split('/').filter(Boolean);
   const parent = segments.slice(0, -1);
   if (parent.length === 0 || (parent.length === 1 && parent[0] === 'Volumes')) return '根';
@@ -40,7 +36,18 @@ function sourceLabel(source, allSources) {
   return `${source.label} · ${sourceSuffix(source)}`;
 }
 
-export default function Sidebar({ collapsed, sources = [], sourceError = '', active = 'folder', onNavigate }) {
+/**
+ * 三段侧栏：浏览、Cos 图库、照片来源，底部「打开文件夹」。
+ * 照片来源每行悬停出现移除入口；移除只删注册记录，不动磁盘。
+ */
+export default function Sidebar({
+  collapsed,
+  sources = [],
+  sourceError = '',
+  active = 'folder',
+  onNavigate,
+  onRequestRemoveSource
+}) {
   return (
     <aside className="sidebar" data-collapsed={collapsed ? 'true' : 'false'} aria-label="侧栏">
       <div className="sidebar-scroll">
@@ -55,7 +62,7 @@ export default function Sidebar({ collapsed, sources = [], sourceError = '', act
                   className="sidebar-item"
                   type="button"
                   aria-current={active === item.key ? 'page' : undefined}
-                  onClick={() => onNavigate?.(item.key)}
+                  onClick={(event) => onNavigate?.(item.key, event.currentTarget)}
                 >
                   <Icon />
                   <span>{item.label}</span>
@@ -67,17 +74,27 @@ export default function Sidebar({ collapsed, sources = [], sourceError = '', act
 
         <div className="sidebar-group">照片来源</div>
         {sources.map((source) => (
-          <button
-            key={source.sourceId}
-            className="sidebar-item"
-            type="button"
-            aria-current={active === source.sourceId ? 'page' : undefined}
-            title={source.rootPath}
-            onClick={() => onNavigate?.(source.sourceId)}
-          >
-            <FolderIcon />
-            <span>{sourceLabel(source, sources)}</span>
-          </button>
+          <div key={source.sourceId} className="sidebar-item-row">
+            <button
+              className="sidebar-item"
+              type="button"
+              aria-current={active === source.sourceId ? 'page' : undefined}
+              title={source.rootPath}
+              onClick={(event) => onNavigate?.(source.sourceId, event.currentTarget)}
+            >
+              <FolderIcon />
+              <span>{sourceLabel(source, sources)}</span>
+            </button>
+            <button
+              className="sidebar-item-remove"
+              type="button"
+              aria-label={`移除来源 ${sourceLabel(source, sources)}`}
+              title="移除来源（不会删除磁盘文件）"
+              onClick={(event) => onRequestRemoveSource?.(source, event.currentTarget)}
+            >
+              ×
+            </button>
+          </div>
         ))}
         {sourceError ? (
           <div className="sidebar-hint">{sourceError}</div>
@@ -86,7 +103,11 @@ export default function Sidebar({ collapsed, sources = [], sourceError = '', act
         ) : null}
       </div>
       <div className="sidebar-bottom">
-        <button className="sidebar-item" type="button" onClick={() => onNavigate?.('open-folder')}>
+        <button
+          className="sidebar-item"
+          type="button"
+          onClick={(event) => onNavigate?.('open-folder', event.currentTarget)}
+        >
           <PlusIcon />
           <span>打开文件夹</span>
         </button>
