@@ -7,7 +7,7 @@ import Menu from './components/Menu';
 import useBreakpoint, { isNarrowBreakpoint } from './hooks/useBreakpoint';
 import useSettings from './hooks/useSettings';
 import {
-  listSourceRoots, selectDirectory, saveSourceRoot, removeSourceRoot, openInNewWindow,
+  listSourceRoots, selectDirectory, saveSourceRoot, removeSourceRoot, reorderSourceRoots, openInNewWindow,
   resolveDroppedFolders
 } from './data/sources';
 import { getFolderView, setFolderView } from './data/prefs';
@@ -310,6 +310,22 @@ export default function App() {
       setMenu({ kind: 'open-folder', anchor, source: registered });
     } catch (error) {
       setSourceError(error?.message || '打开文件夹失败');
+    }
+  };
+
+  // 拖动照片来源排序：先本地乐观更新，失败时回滚并提示。
+  const moveSource = async (orderedSourceIds) => {
+    const previous = sources;
+    const byId = new Map(previous.map((source) => [source.sourceId, source]));
+    const optimistic = orderedSourceIds.map((id) => byId.get(id)).filter(Boolean);
+    setSources(optimistic);
+    try {
+      const nextSources = await reorderSourceRoots(orderedSourceIds);
+      if (Array.isArray(nextSources) && nextSources.length > 0) setSources(nextSources);
+      setSourceError('');
+    } catch (error) {
+      setSources(previous);
+      setSourceError(error?.message || '调整照片来源顺序失败');
     }
   };
 
@@ -719,6 +735,7 @@ export default function App() {
           active={activeKey}
           onNavigate={onSidebarNavigate}
           onRequestRemoveSource={requestRemoveSource}
+          onReorderSource={moveSource}
         />
         <main className="main">
           {location.kind === 'favorites' ? (

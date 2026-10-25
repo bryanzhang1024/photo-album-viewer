@@ -714,3 +714,17 @@ button.list-head-cell.active {
     display: none;
   }
 }
+
+
+/* 照片来源拖动排序 */
+.sidebar-item-row.dragging {
+  opacity: 0.45;
+}
+
+.sidebar-item-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.sidebar-item-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}

@@ -52,6 +52,18 @@ export async function removeSourceRoot(sourceId) {
   return response.data?.source || null;
 }
 
+/** 按给定顺序重排照片来源；返回重排后的来源列表。 */
+export async function reorderSourceRoots(sourceIds) {
+  const response = await invoke(CHANNELS.REORDER_SOURCE_ROOTS_V1, {
+    contractVersion: 1,
+    sourceIds
+  });
+  if (!response?.ok) {
+    throw new Error(messageOf(response?.error, '调整照片来源顺序失败'));
+  }
+  return Array.isArray(response.data?.sources) ? response.data.sources : [];
+}
+
 /** 在同一个进程里开一个新窗口，定位到指定来源的某个相对路径。 */
 export async function openInNewWindow({ sourceId, relativePath = '' }) {
   const response = await invoke(CHANNELS.CREATE_NEW_INSTANCE, {
