@@ -1,6 +1,6 @@
 {
-  "at": "2026-10-25T07:37:48.128Z",
-  "fixture": "pav-e2e-7wwe5C",
+  "at": "2026-10-25T07:45:17.110Z",
+  "fixture": "pav-e2e-2xuPRm",
   "passed": 7,
   "total": 7,
   "failed": false,
@@ -10,7 +10,7 @@
       "ok": true,
       "detail": {
         "ok": true,
-        "crumbs": "文件夹›pav-e2e-7wwe5C",
+        "crumbs": "文件夹›pav-e2e-2xuPRm",
         "searchLabel": "搜索这个文件夹"
       }
     },

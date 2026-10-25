@@ -44,35 +44,35 @@ v2 变更：按反方审查 [spec-review](redteam/2026-10-25-spec-review.md) 的
 | R01 | 多标签：新建/关闭/切换/关闭其他/关闭右侧 | N05–N08 | `uiApp` 标签 12 例 | 用户 |
 | R02 | 标签拖拽重排 + 顺序持久 | N13 | `uiTabBar` 拖动回调；顺序随 session 落盘（B2） | 脚本 |
 | R03 | 标签组保存/恢复 | N14 | `uiApp` 保存→关闭→恢复 | 脚本 |
-| R04 | 每标签前进后退历史 | H01–H04, N12 | 按钮置灰断言；跨标签独立性未单独断言（**部分**） | 用户 |
+| R04 | 每标签前进后退历史 | H01–H04, N12 | `uiMatrix` 两标签各自后退互不影响 + `uiApp` 按钮置灰 | 用户 |
 | R05 | 打开文件夹三选一 | R01 | `uiApp` 打开文件夹；`test:e2e` 第 1 步 | 用户 |
 | R06 | 拖入文件夹注册 | R02 | `uiApp` 拖入注册 + 非目录提示 | 脚本 |
 | R07 | 新窗口（同进程） | R03 | `uiCoverage` create-new-instance | 脚本 |
-| R08 | 面包屑点击/截断/网格统一 | B01–B05 | `uiFolderBreadcrumb` 3 例；截断无断言（**部分**） | 用户 |
-| R09 | ⌘[ ⌘] ⌘↑ ⌘F | K01–K03 | `uiApp` ⌘F/⌘W/⌘, 与输入框屏蔽；⌘[ ⌘] ⌘↑ 无 UI 断言（**部分**） | 用户 |
-| R10 | 列头排序+升降序+方向记忆 | O01–O06, V03 | `uiFolderFeatures` 单列两态；`uiData` 记忆（**部分**） | 用户 |
+| R08 | 面包屑点击/截断/网格统一 | B01–B05 | `uiFolderBreadcrumb` 3 例 + `uiBlockerFixes` 超 4 段截断后按原始层级回调 | 用户 |
+| R09 | ⌘[ ⌘] ⌘↑ ⌘F | K01–K03 | `uiMatrix` 三键真实改变位置 + `uiApp` ⌘F/⌘W/⌘, 与输入框屏蔽 | 用户 |
+| R10 | 列头排序+升降序+方向记忆 | O01–O06, V03 | `uiMatrix` 四列各点三次的完整序列 + `uiData` 记忆与旧格式兼容 | 用户 |
 | R11 | 收藏三对象 + 卡片心形 | F01–F05, V07, V08 | `uiFavorites` 5 例、`uiFolderFeatures` 心形与右键菜单 | 用户 |
 | R12 | 收藏页排序与记忆 | F06 | `uiFavoritesPage` 3 例 | 脚本 |
-| R13 | 查看器双页 | W12 | `uiImageViewer` V 键；跨页步进未断言（**部分**） | 用户 |
+| R13 | 查看器双页 | W12 | `uiImageViewer` V 键 + `uiMatrix` 双页下前进跨两页 | 用户 |
 | R14 | 复制文件 / 复制像素 | W08 | `uiImageViewer` 两模式调用 | 脚本 |
 | R15 | 在 Finder 中显示 | W09 | `uiImageViewer` 调用断言；e2e 工具栏按钮可见 | 脚本 |
-| R16 | 旋转 / 全屏 / 适应窗口 | W04, W05 | `uiSettings` 旋转方向、`uiBlockerFixes` 适应窗口；全屏未断言（**部分**） | 脚本 |
+| R16 | 旋转 / 全屏 / 适应窗口 | W04, W05 | `uiSettings` 旋转方向、`uiBlockerFixes` 适应窗口、`uiMatrix` 全屏进/退 | 脚本 |
 | R17 | 信息面板（含尺寸） | W06 | `uiBlockerFixes` 尺寸与字段 | 脚本 |
 | R18 | 删除到废纸篓（二次确认） | W10 | `uiCoverage` 取消/确认两态 | 脚本 |
 | R19 | 滚轮翻页 / ⌘滚轮缩放 / 右键关闭 | W13 | `uiImageViewer` 3 例 | 脚本 |
 | R20 | 网格「完整显示」开关 | V11 | `uiCoverage` 切换与持久化 | 脚本 |
 | R21 | 每文件夹视图与排序记忆 | V04, O06 | `uiData` 记忆与旧格式兼容 | 脚本 |
 | R22 | 缩略图密度 | V05 | `uiCoverage` 切档并写入 localStorage | 脚本 |
-| R23 | Cos 全链路 | C01–C05 | 现有 Cos 主进程测试；新界面 Cos 页无 UI 断言（**部分**） | 用户 |
-| R24 | 非图片文件列表与打开 | V12, V13 | 主进程 `listDirectoryFiles` 测试；UI 段无断言（**部分**） | 脚本 |
+| R23 | Cos 全链路 | C01–C05 | 主进程 Cos 测试 + `uiMatrix` 总览统计与三入口 + `uiData` 卡片命名规则 | 用户 |
+| R24 | 非图片文件列表与打开 | V12, V13 | 主进程 `listDirectoryFiles` 测试 + `uiBlockerFixes` 搜索命中时其他文件段仍渲染 | 脚本 |
 | R25 | 搜索（当前层，含非图片） | S01–S10 | `uiFolderFeatures` 搜索、`uiApp` 唯一入口、`test:e2e` 第 2 步 | 用户 |
-| R26 | 设置八项生效 | G01–G05 | `uiSettings` 4 例、`uiApp` 默认视图、`uiBlockerFixes` 分组（**部分**：autoRotate/zoomStep/主题未断言） | 脚本 |
+| R26 | 设置八项生效 | G01–G05 | `uiSettings` 4 例 + `uiMatrix` 主题/自动旋转/缩放步长 + `uiApp` 默认视图 + `uiBlockerFixes` 分组 | 脚本 |
 | R27 | 响应式五档 | L01, T11 | `npm run evidence:responsive`：1440/1280/1024/800/720×480 五档截图，无横向溢出；列数 7/6/6/4/4；≤1099 隐藏密度；<900 搜索收图标、列表三列；720×480 隐藏状态栏快捷键（720 实测 4 列，设计稿写 3 列，列入已知偏差） | 脚本 |
-| R28 | 空态 / 离线 / 解码失败 | E01–E04 | `uiBlockerFixes` 坏图占位；来源离线态有代码无测试（**部分**） | 脚本 |
+| R28 | 空态 / 离线 / 解码失败 | E01–E04 | `uiBlockerFixes` 坏图占位（含末张）+ `uiMatrix` 来源读失败的重试 | 脚本 |
 | R29 | 相册页头（相邻换套+收藏+设置+排序+密度） | N15 | `uiCoverage` 上一套/下一套/收藏 | 用户 |
 | R30 | 照片来源注册/移除 | R04, R05 | `SourceRootService` 26 例 + `test:e2e` 第 7 步（IPC 契约与 registry 都断言） | 用户 |
 
-**当前不能签的**：R04/R08/R09/R10/R13/R16/R23/R24/R26/R28 只到「部分」。R27 已有五档截图证据，剩 720 宽列数差 1 列这一处偏差（设计稿 3 列、实测 4 列），需要你定是否按设计稿压到 3 列。
+**矩阵状态**：30 行现在都有可执行证据。唯一未决的是 R27 里 720×480 的列数偏差（设计稿 3 列、实测 4 列），需要你定是否压到 3 列。T01–T03 仍必须有你的签字才能合并 main。
 
 ---
 
