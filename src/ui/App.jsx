@@ -8,6 +8,10 @@ import { listSourceRoots } from './data/sources';
 import { getFolderView, setFolderView } from './data/prefs';
 import RootsPage from './features/roots/RootsPage';
 import FolderPage from './features/folder/FolderPage';
+import CosHomePage from './features/cos/CosHomePage';
+import CosEntityPage from './features/cos/CosEntityPage';
+import CosSetListPage from './features/cos/CosSetListPage';
+import CosSetAlbumPage from './features/cos/CosSetAlbumPage';
 
 /**
  * 4.0 外壳与导航。位置模型：{ kind: 'roots' } 或 { kind: 'folder', sourceId, relativePath }。
@@ -70,6 +74,22 @@ export default function App() {
       navigate({ kind: 'roots' });
       return;
     }
+    if (key === 'cos') {
+      navigate({ kind: 'cos-home' });
+      return;
+    }
+    if (key === 'cos-all') {
+      navigate({ kind: 'cos-sets', viewKind: 'all' });
+      return;
+    }
+    if (key === 'cos-characters') {
+      navigate({ kind: 'cos-characters' });
+      return;
+    }
+    if (key === 'cos-cosers') {
+      navigate({ kind: 'cos-cosers' });
+      return;
+    }
     if (sources.some((item) => item.sourceId === key)) {
       navigate({ kind: 'folder', sourceId: key, relativePath: '' });
     }
@@ -78,13 +98,33 @@ export default function App() {
   const segments = location.kind === 'folder'
     ? String(location.relativePath || '').split('/').filter(Boolean)
     : [];
-  const title = location.kind === 'folder'
-    ? (segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹'))
-    : '文件夹';
+  let title = '文件夹';
+  if (location.kind === 'folder') {
+    title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
+  } else if (location.kind === 'cos-home') {
+    title = 'Cos 图库';
+  } else if (location.kind === 'cos-characters') {
+    title = '按角色';
+  } else if (location.kind === 'cos-cosers') {
+    title = '按署名';
+  } else if (location.kind === 'cos-sets') {
+    title = location.entity?.name || '全部作品';
+  } else if (location.kind === 'cos-set') {
+    title = location.name || '套图';
+  }
 
   const activeKey = useMemo(() => {
     if (location.kind === 'roots') return 'folder';
-    return location.sourceId;
+    if (location.kind === 'folder') return location.sourceId;
+    if (location.kind === 'cos-home') return 'cos';
+    if (location.kind === 'cos-characters') return 'cos-characters';
+    if (location.kind === 'cos-cosers') return 'cos-cosers';
+    if (location.kind === 'cos-sets') {
+      if (location.viewKind === 'characters') return 'cos-characters';
+      if (location.viewKind === 'cosers') return 'cos-cosers';
+      return 'cos-all';
+    }
+    return 'cos';
   }, [location]);
 
   return (
@@ -116,7 +156,39 @@ export default function App() {
           onNavigate={onSidebarNavigate}
         />
         <main className="main">
-          {location.kind === 'roots' ? (
+          {location.kind === 'cos-home' ? (
+            <CosHomePage onNavigate={navigate} />
+          ) : location.kind === 'cos-characters' ? (
+            <CosEntityPage
+              kind="characters"
+              onOpenEntity={(entity) => navigate({
+                kind: 'cos-sets',
+                viewKind: 'characters',
+                entity
+              })}
+            />
+          ) : location.kind === 'cos-cosers' ? (
+            <CosEntityPage
+              kind="cosers"
+              onOpenEntity={(entity) => navigate({
+                kind: 'cos-sets',
+                viewKind: 'cosers',
+                entity
+              })}
+            />
+          ) : location.kind === 'cos-sets' ? (
+            <CosSetListPage
+              viewKind={location.viewKind}
+              entity={location.entity}
+              onOpenSet={(set) => navigate({
+                kind: 'cos-set',
+                setId: set.id,
+                name: set.displayName
+              })}
+            />
+          ) : location.kind === 'cos-set' ? (
+            <CosSetAlbumPage setId={location.setId} setName={location.name} />
+          ) : location.kind === 'roots' ? (
             <RootsPage
               sources={sources}
               onOpen={(item) => navigate({ kind: 'folder', sourceId: item.sourceId, relativePath: '' })}

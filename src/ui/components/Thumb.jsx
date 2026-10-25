@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { FolderIcon } from '../icons';
-import { loadThumbnail } from '../data/thumbnails';
+import { loadThumbnail, loadThumbnailByPath } from '../data/thumbnails';
 
 /** 异步缩略图：先占位，拿到 URL 后替换；失败保持占位。 */
-export default function Thumb({ rootPath, relativePath, className = '' }) {
+export default function Thumb({ rootPath, relativePath, absolutePath = '', className = '' }) {
   const [src, setSrc] = useState('');
   useEffect(() => {
     let alive = true;
     setSrc('');
-    loadThumbnail(rootPath, relativePath)
+    const loader = absolutePath
+      ? loadThumbnailByPath(absolutePath)
+      : loadThumbnail(rootPath, relativePath);
+    loader
       .then((url) => {
         if (alive) setSrc(url || '');
       })
@@ -16,7 +19,7 @@ export default function Thumb({ rootPath, relativePath, className = '' }) {
     return () => {
       alive = false;
     };
-  }, [rootPath, relativePath]);
+  }, [rootPath, relativePath, absolutePath]);
 
   if (!src) {
     return (

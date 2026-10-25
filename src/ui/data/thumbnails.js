@@ -15,3 +15,16 @@ export async function loadThumbnail(rootPath, relativePath) {
   if (url) cache.set(absolutePath, url);
   return url || null;
 }
+
+
+const absoluteCache = new Map();
+
+/** 已知绝对路径时取缩略图（主进程生成，已授权根之外的路径会被拒绝）。 */
+export async function loadThumbnailByPath(absolutePath, resolution = 600) {
+  if (!absolutePath) return '';
+  const key = `${absolutePath}@${resolution}`;
+  if (absoluteCache.has(key)) return absoluteCache.get(key);
+  const url = await invoke(CHANNELS.GET_THUMBNAIL, absolutePath, 0).catch(() => null);
+  if (url) absoluteCache.set(key, url);
+  return url || '';
+}

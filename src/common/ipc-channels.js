@@ -42,6 +42,7 @@ module.exports = {
     COS_GET_SET_IMAGES: 'cos-get-set-images',
     COS_GET_SET_ALBUM_PATH: 'cos-get-set-album-path',
     COS_GET_MEDIA_THUMBNAIL: 'cos-get-media-thumbnail',
+    COS_GET_MEDIA_PATH: 'cos-get-media-path',
     COS_SHOW_SET_IN_FOLDER: 'cos-show-set-in-folder',
     COS_OPEN_IN_PICTUREVIEW: 'cos-open-in-pictureview',
     COS_INDEX_PROGRESS: 'cos-index-progress',

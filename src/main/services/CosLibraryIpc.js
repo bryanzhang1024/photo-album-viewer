@@ -94,6 +94,10 @@ function registerCosLibraryIpcHandlers({
     return thumbnailService.generateThumbnail(imagePath, width, width * 1.5);
   }));
 
+  ipcMain.handle(CHANNELS.COS_GET_MEDIA_PATH, withService(async (_event, mediaId) => (
+    service.resolveMediaPath(mediaId) || null
+  )));
+
   ipcMain.handle(CHANNELS.COS_SHOW_SET_IN_FOLDER, withService(async (_event, setId) => {
     const albumPath = await service.resolveSetAlbumPath(setId);
     if (!albumPath) return { success: false, error: '套图所在磁盘当前不可用' };
