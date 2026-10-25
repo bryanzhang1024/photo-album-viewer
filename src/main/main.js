@@ -932,6 +932,34 @@ ipcMain.handle(CHANNELS.GET_ALBUM_IMAGE_COUNT, async (event, albumPath) => {
     return FileSystemService.getAlbumImageCount(albumPath);
 });
 
+// 列出当前目录的非图片文件（视频、压缩包等），供列表视图显示
+ipcMain.handle(CHANNELS.LIST_DIRECTORY_FILES_V1, async (event, directoryPath) => {
+  const isAllowed = await assertApprovedPath(directoryPath);
+  if (!isAllowed) {
+    return { success: false, files: [], error: '访问路径不在已授权照片目录范围内' };
+  }
+  try {
+    const files = await FileSystemService.listDirectoryFiles(directoryPath);
+    return { success: true, files };
+  } catch (error) {
+    return { success: false, files: [], error: error?.message || '读取目录文件失败' };
+  }
+});
+
+// 用系统默认程序打开文件（视频、压缩包等）；只允许已授权根内的路径
+ipcMain.handle(CHANNELS.OPEN_PATH_EXTERNAL, async (event, filePath) => {
+  const isAllowed = await assertApprovedPath(filePath);
+  if (!isAllowed) {
+    return { success: false, error: '访问路径不在已授权照片目录范围内' };
+  }
+  try {
+    const errorMessage = await shell.openPath(filePath);
+    return errorMessage ? { success: false, error: errorMessage } : { success: true };
+  } catch (error) {
+    return { success: false, error: error?.message || '打开文件失败' };
+  }
+});
+
 // 处理性能设置更新
 ipcMain.handle(CHANNELS.UPDATE_PERFORMANCE_SETTINGS, async (event, settings) => {
   try {

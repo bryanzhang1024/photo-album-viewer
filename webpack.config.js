@@ -3,7 +3,8 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
   mode: process.env.NODE_ENV || 'development',
-  entry: './src/renderer/index.js',
+  // 4.0 界面重写：PAV_UI=ui 时打包新界面，默认仍打包旧界面。
+  entry: './src/ui/index.jsx',
   target: 'web',
   output: {
     path: path.resolve(__dirname, 'build'),

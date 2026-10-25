@@ -1,0 +1,70 @@
+/* 设计系统：所有值来自设计稿，不允许组件里写死颜色和尺寸。 */
+
+:root {
+  color-scheme: dark;
+
+  /* 分层底色 */
+  --canvas: #111113;
+  --background: #1c1c1e;
+  --chrome: #2a2a2c;
+  --sidebar: #232325;
+  --panel: #232325;
+
+  /* 分隔与状态 */
+  --separator: rgba(255, 255, 255, 0.085);
+  --separator-strong: rgba(255, 255, 255, 0.14);
+  --selection: rgba(255, 255, 255, 0.1);
+  --hover: rgba(255, 255, 255, 0.055);
+
+  /* 文字 */
+  --text: #e9e9ec;
+  --text-dim: #98989f;
+  --text-dimmer: #6f6f76;
+
+  /* 强调色 */
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+
+  /* 尺寸 */
+  --toolbar-height: 46px;
+  --traffic-light-space: 78px;
+  --tabbar-height: 30px;
+  --header-height: 56px;
+  --statusbar-height: 24px;
+  --sidebar-width: 216px;
+  --sidebar-width-wide: 240px;
+  --content-pad-x: 22px;
+  --content-pad-y: 16px;
+  --grid-gap-x: 14px;
+  --grid-gap-y: 16px;
+  --radius-card: 7px;
+  --radius-control: 6px;
+  --radius-window: 11px;
+
+  /* 字号 */
+  --font-ui: 12.5px;
+  --font-caption: 11px;
+  --font-title: 20px;
+  --font-title-compact: 14.5px;
+  --font-card-title: 12px;
+
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --canvas: #f4f4f6;
+  --background: #ffffff;
+  --chrome: #f0f0f2;
+  --sidebar: #ececee;
+  --panel: #ffffff;
+  --separator: rgba(0, 0, 0, 0.09);
+  --separator-strong: rgba(0, 0, 0, 0.16);
+  --selection: rgba(0, 0, 0, 0.07);
+  --hover: rgba(0, 0, 0, 0.04);
+  --text: #1d1d1f;
+  --text-dim: #6e6e73;
+  --text-dimmer: #8e8e93;
+  --accent: #007aff;
+  --accent-soft: rgba(0, 122, 255, 0.12);
+}

@@ -194,7 +194,13 @@ function createDirectorySnapshotService({
       }
 
       if (stats.isDirectory()) {
-        return { kind: 'directory', name, relativePath, absolutePath };
+        return {
+          kind: 'directory',
+          name,
+          relativePath,
+          absolutePath,
+          mtimeMs: Number.isFinite(stats.mtimeMs) ? stats.mtimeMs : null
+        };
       }
       if (!stats.isFile() || !isSupportedMedia(name)) {
         return { kind: 'other' };
@@ -218,6 +224,7 @@ function createDirectorySnapshotService({
           status,
           completeness: unavailableCompleteness,
           facts,
+          ...(Number.isFinite(candidate.mtimeMs) ? { mtimeMs: candidate.mtimeMs } : {}),
           approximate: createApproximate(
             status,
             unavailableCompleteness,
@@ -256,6 +263,7 @@ function createDirectorySnapshotService({
         status: 'ready',
         completeness,
         facts,
+        ...(Number.isFinite(candidate.mtimeMs) ? { mtimeMs: candidate.mtimeMs } : {}),
         approximate: createApproximate('ready', completeness, facts, coverSamples, observedAt)
       };
     }
