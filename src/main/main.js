@@ -527,9 +527,9 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // macOS 默认是留在 Dock 里，但用户要求「点关闭就彻底退出、不留看不见的后台进程」，
+  // 所以所有平台在最后一个窗口关闭后都退出应用。
+  app.quit();
 });
 
 app.on('activate', () => {

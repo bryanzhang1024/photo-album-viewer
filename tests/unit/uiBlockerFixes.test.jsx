@@ -97,7 +97,7 @@ describe('复核阻断项 · 修复验证', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  test('B5 查看器有适应窗口、信息面板有尺寸、显示查看器状态栏', async () => {
+  test('B5 查看器有适应窗口、信息面板有尺寸、没有底部状态栏', async () => {
     mockInvoke();
     const { container } = render(
       <ImageViewer
@@ -111,7 +111,8 @@ describe('复核阻断项 · 修复验证', () => {
     );
 
     expect(screen.getByRole('button', { name: '适应窗口' })).toBeInTheDocument();
-    expect(screen.getByText(/Esc 关闭/)).toBeInTheDocument();
+    // 查看器不再有底部状态栏
+    expect(screen.queryByText(/Esc 关闭/)).not.toBeInTheDocument();
 
     const image = container.querySelector('.viewer-image');
     Object.defineProperty(image, 'naturalWidth', { value: 1200, configurable: true });

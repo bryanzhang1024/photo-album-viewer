@@ -7,7 +7,6 @@ import { localImageUrl } from '../data/album';
 import { loadFavorites, isImageFavorited, toggleImageFavorite } from '../data/favorites';
 import { invoke, CHANNELS } from '../data/ipc';
 import useSettings from '../hooks/useSettings';
-import StatusBar from '../shell/StatusBar';
 import './viewer.css';
 
 function formatSize(bytes) {
@@ -336,10 +335,6 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         <button className="icon-button danger" type="button" aria-label="移到废纸篓" onClick={deleteCurrent}><TrashIcon /></button>
       </div>
       {wrapNotice ? <div className="viewer-toast" role="status">{wrapNotice}</div> : null}
-      <StatusBar
-        left={`${index + 1} / ${images.length}`}
-        right="Esc 关闭　← → 翻页　⌘C 复制"
-      />
     </div>
   );
 }
