@@ -80,3 +80,18 @@ if (typeof window !== 'undefined') {
 }
 
 global.electronMock = electronMock;
+
+
+// jsdom 没有 IntersectionObserver / ResizeObserver，列表分页与虚拟滚动都要用
+if (typeof window !== 'undefined') {
+  window.IntersectionObserver = window.IntersectionObserver || class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  window.ResizeObserver = window.ResizeObserver || class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

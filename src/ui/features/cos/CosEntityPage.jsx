@@ -61,7 +61,7 @@ export default function CosEntityPage({ kind, onOpenEntity }) {
             {items.map((entity) => (
               <button className="cos-card" type="button" key={entity.id}
                 onClick={() => onOpenEntity?.(entity)}>
-                <div className="cos-cover square"><CosThumb mediaId={entity.coverMediaId} /></div>
+                <div className="cos-cover"><CosThumb mediaId={entity.coverMediaId} /></div>
                 <div className="cos-name">{entity.name}</div>
                 <div className="cos-meta">
                   {entity.id && entity.name === '其他'

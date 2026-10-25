@@ -14,7 +14,11 @@ const DirectorySnapshotService = require('./services/DirectorySnapshotService');
 const { resetLegacyNavigationFiles } = require('./services/NavigationStateCutover');
 const ThumbnailService = require('./services/ThumbnailService');
 const FavoritesService = require('./services/FavoritesService');
+const {
+  resolvePortableRelativePath
+} = require('../common/path-codec');
 const { createSourceRootService } = require('./services/SourceRootService');
+const { createFolderCoverService } = require('./services/FolderCoverService');
 const { CosLibraryService } = require('./services/CosLibraryService');
 const { registerCosLibraryIpcHandlers } = require('./services/CosLibraryIpc');
 const {
@@ -37,6 +41,8 @@ const {
   validateSaveSourceRootRequestV1,
   validateSourceRootsEnvelopeV1
 } = require('../common/contracts/navigation-contract-v1');
+
+const folderCoverService = createFolderCoverService();
 
 const sourceRootService = createSourceRootService({
   registryPath: path.join(app.getPath('userData'), 'library-sources-v3.json')
@@ -954,6 +960,29 @@ ipcMain.handle(CHANNELS.GET_ALBUM_IMAGE_COUNT, async (event, albumPath) => {
 });
 
 // 列出当前目录的非图片文件（视频、压缩包等），供列表视图显示
+ipcMain.handle(CHANNELS.GET_FOLDER_COVER_V1, async (event, request) => {
+  const rootPath = request && typeof request.rootPath === 'string' ? request.rootPath : '';
+  const relativePath = request && typeof request.relativePath === 'string' ? request.relativePath : '';
+  if (!rootPath) {
+    return { success: false, error: '缺少来源根目录', samples: [] };
+  }
+  try {
+    const normalizedRoot = normalizeAbsolutePath(rootPath);
+    if (!normalizedRoot) {
+      return { success: false, error: '来源根目录不可用', samples: [] };
+    }
+    const absolute = resolvePortableRelativePath(normalizedRoot, relativePath);
+    const isAllowed = await assertApprovedPath(absolute);
+    if (!isAllowed) {
+      return { success: false, error: '路径不在已授权目录范围内', samples: [] };
+    }
+    const result = await folderCoverService.findCover(normalizedRoot, relativePath);
+    return { success: true, samples: result.samples, truncated: result.truncated };
+  } catch (error) {
+    return { success: false, error: error?.message || '读取封面失败', samples: [] };
+  }
+});
+
 ipcMain.handle(CHANNELS.LIST_DIRECTORY_FILES_V1, async (event, directoryPath) => {
   const isAllowed = await assertApprovedPath(directoryPath);
   if (!isAllowed) {

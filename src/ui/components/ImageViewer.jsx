@@ -33,6 +33,10 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   const [dual, setDual] = useState(Boolean(settings.defaultDualPageViewer));
   const [naturalSize, setNaturalSize] = useState(null);
   const [broken, setBroken] = useState(false);
+  const [barVisible, setBarVisible] = useState(true);
+  const [wrapNotice, setWrapNotice] = useState('');
+  const wheelRef = useRef({ delta: 0, lastFlip: 0 });
+  const barTimerRef = useRef(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [favorites, setFavorites] = useState(null);
   const dragRef = useRef(null);
@@ -52,13 +56,42 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     setBroken(false);
     setIndex((value) => {
       const step = dual ? 2 : 1;
+      const total = Math.max(1, images.length);
       const target = value + delta * step;
-      return Math.max(0, Math.min(images.length - 1, target));
+      if (target >= total) {
+        setWrapNotice('已到末尾，已回到第一张');
+        return 0;
+      }
+      if (target < 0) {
+        setWrapNotice('已到开头，已回到最后一张');
+        return Math.max(0, total - step);
+      }
+      return target;
     });
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setRotation(0);
   }, [dual, images.length]);
+
+  useEffect(() => {
+    if (!wrapNotice) return undefined;
+    const timer = setTimeout(() => setWrapNotice(''), 3000);
+    return () => clearTimeout(timer);
+  }, [wrapNotice]);
+
+  // 底部工具栏：鼠标不动 2.2 秒自动隐藏，移动即出现
+  const wakeBar = useCallback(() => {
+    setBarVisible(true);
+    if (barTimerRef.current) clearTimeout(barTimerRef.current);
+    barTimerRef.current = setTimeout(() => setBarVisible(false), 2200);
+  }, []);
+
+  useEffect(() => {
+    wakeBar();
+    return () => {
+      if (barTimerRef.current) clearTimeout(barTimerRef.current);
+    };
+  }, [wakeBar]);
 
   const close = useCallback(() => onClose?.(), [onClose]);
 
@@ -91,6 +124,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   }, []);
 
   // 旧版双模：普通滚轮翻页，⌘/Ctrl+滚轮缩放。
+  // Smooze 这类平滑滚动会连续发很多小 delta，所以累计到阈值再翻页，并加冷却。
   const onWheel = (event) => {
     event.preventDefault();
     if (event.ctrlKey || event.metaKey) {
@@ -98,8 +132,19 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       setZoom((value) => Math.min(8, Math.max(0.2, value * factor)));
       return;
     }
-    if (event.deltaY > 0) go(1);
-    else if (event.deltaY < 0) go(-1);
+    const now = Date.now();
+    const state = wheelRef.current;
+    if (now - state.lastFlip < 220) {
+      state.delta = 0;
+      return;
+    }
+    state.delta += event.deltaY;
+    if (Math.abs(state.delta) >= 100) {
+      state.lastFlip = now;
+      const direction = state.delta > 0 ? 1 : -1;
+      state.delta = 0;
+      go(direction);
+    }
   };
 
   const onMouseDown = (event) => {
@@ -210,6 +255,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       className="viewer"
       role="dialog"
       aria-label="大图查看器"
+      onMouseMove={wakeBar}
       onContextMenu={(event) => {
         event.preventDefault();
         close();
@@ -223,7 +269,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         <div className="viewer-top-right">
           <button className={`icon-button${infoOpen ? ' active' : ''}`} type="button" aria-label="图片信息"
             aria-pressed={infoOpen} onClick={() => setInfoOpen((value) => !value)}><InfoIcon /></button>
-          <button className={`icon-button${favorited ? ' favorited' : ''}`} type="button" aria-label="收藏"
+          <button className={`icon-button favorite-toggle${favorited ? ' favorited' : ''}`} type="button" aria-label="收藏"
             aria-pressed={favorited} onClick={toggleFavorite}><HeartIcon /></button>
         </div>
       </div>
@@ -278,7 +324,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         </aside>
       ) : null}
 
-      <div className="viewer-bar">
+      <div className={`viewer-bar${barVisible ? '' : ' hidden'}`}>
         <button className="icon-button" type="button" aria-label="缩小" onClick={() => setZoom((v) => Math.max(0.2, v / (1 + settings.zoomStep)))}>−</button>
         <span className="viewer-zoom">{Math.round(zoom * 100)}%</span>
         <button className="icon-button" type="button" aria-label="放大" onClick={() => setZoom((v) => Math.min(8, v * (1 + settings.zoomStep)))}>＋</button>
@@ -296,6 +342,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         <span className="viewer-spacer" />
         <button className="icon-button danger" type="button" aria-label="移到废纸篓" onClick={deleteCurrent}><TrashIcon /></button>
       </div>
+      {wrapNotice ? <div className="viewer-toast" role="status">{wrapNotice}</div> : null}
       <StatusBar
         left={`${index + 1} / ${images.length}`}
         right="Esc 关闭　← → 翻页　⌘C 复制"

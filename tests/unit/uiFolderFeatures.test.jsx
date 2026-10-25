@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 
 import FolderPage from '../../src/ui/features/folder/FolderPage';
+import GridCard from '../../src/ui/features/folder/GridCard';
 
 const SOURCE = { sourceId: 'src_a', label: 'A-库', rootPath: '/A' };
 
@@ -152,4 +153,66 @@ describe('文件夹页 · 搜索', () => {
     expect(screen.getByText('流萤 01')).toBeInTheDocument();
     expect(screen.getAllByText(/个结果 · 搜索范围：当前文件夹/).length).toBeGreaterThan(0);
   });
+
+describe('容器文件夹封面（按需向下取图）', () => {
+  test('自己没图时会请求并显示拼贴封面', async () => {
+    const calls = [];
+    window.electronAPI = {
+      platform: 'darwin',
+      invoke: jest.fn(async (channel, payload) => {
+        calls.push([channel, payload]);
+        if (channel === 'get-folder-cover-v1') {
+          return {
+            success: true,
+            samples: ['容器/子/1.jpg', '容器/子/2.jpg', '容器/子/3.jpg', '容器/子/4.jpg']
+          };
+        }
+        return { ok: true, data: {} };
+      })
+    };
+
+    const item = {
+      kind: 'folder',
+      key: 'folder:容器',
+      name: '容器',
+      relativePath: '容器',
+      childCount: 2,
+      imageCount: 0,
+      coverSamples: []
+    };
+    const { container } = render(
+      <GridCard item={item} rootPath="/A" width={180} coverHeight={240} />
+    );
+
+    await waitFor(() => expect(container.querySelector('.collage')).toBeTruthy());
+    expect(calls.some(([channel]) => channel === 'get-folder-cover-v1')).toBe(true);
+  });
+
+  test('快照里已有足够封面时不再发请求', async () => {
+    const calls = [];
+    window.electronAPI = {
+      platform: 'darwin',
+      invoke: jest.fn(async (channel) => {
+        calls.push(channel);
+        return { ok: true, data: {} };
+      })
+    };
+
+    const item = {
+      kind: 'folder',
+      key: 'folder:套图',
+      name: '套图',
+      relativePath: '套图',
+      childCount: 2,
+      imageCount: 3,
+      coverSamples: ['套图/1.jpg', '套图/2.jpg', '套图/3.jpg']
+    };
+    const { container } = render(
+      <GridCard item={item} rootPath="/A" width={180} coverHeight={240} />
+    );
+
+    await waitFor(() => expect(container.querySelector('.collage')).toBeTruthy());
+    expect(calls).not.toContain('get-folder-cover-v1');
+  });
+});
 });

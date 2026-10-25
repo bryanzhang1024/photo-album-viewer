@@ -40,3 +40,36 @@ export function toFolderItems(snapshot) {
   }));
   return [...folders, ...images];
 }
+
+const folderCoverCache = new Map();
+const folderCoverInflight = new Map();
+
+/**
+ * 按需取文件夹封面（容器文件夹自己没图时，向下找几张）。
+ * 结果按来源+路径缓存；失败也缓存空数组，避免反复请求。
+ */
+export async function loadFolderCover(source, relativePath) {
+  const key = `${source?.sourceId || source?.rootPath}:${relativePath}`;
+  if (folderCoverCache.has(key)) return folderCoverCache.get(key);
+  if (folderCoverInflight.has(key)) return folderCoverInflight.get(key);
+
+  const promise = invoke(CHANNELS.GET_FOLDER_COVER_V1, {
+    rootPath: source?.rootPath || '',
+    relativePath
+  })
+    .then((response) => {
+      const samples = Array.isArray(response?.samples) ? response.samples : [];
+      folderCoverCache.set(key, samples);
+      return samples;
+    })
+    .catch(() => {
+      folderCoverCache.set(key, []);
+      return [];
+    })
+    .finally(() => {
+      folderCoverInflight.delete(key);
+    });
+
+  folderCoverInflight.set(key, promise);
+  return promise;
+}

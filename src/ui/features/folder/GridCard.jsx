@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { FolderIcon, HeartIcon } from '../../icons';
 import Thumb from '../../components/Thumb';
+import { loadFolderCover } from '../../data/directory';
 
 export function formatDate(mtimeMs) {
   if (!mtimeMs) return '—';
@@ -9,7 +10,20 @@ export function formatDate(mtimeMs) {
 }
 
 function Cover({ item, rootPath, coverMode = 'auto' }) {
-  const samples = (item.coverSamples || []).slice(0, 4);
+  const [samples, setSamples] = useState(() => (item.coverSamples || []).slice(0, 4));
+
+  // 容器文件夹自己没图时，按需往下一两层找封面（有预算、带缓存）。
+  useEffect(() => {
+    if (samples.length >= 3) return undefined;
+    let alive = true;
+    loadFolderCover({ rootPath }, item.relativePath).then((next) => {
+      if (alive && next.length > samples.length) setSamples(next.slice(0, 4));
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.relativePath, rootPath]);
   const collage = coverMode === 'collage' || (coverMode !== 'single' && item.childCount > 0);
   if (collage && samples.length >= 3) {
     return (
