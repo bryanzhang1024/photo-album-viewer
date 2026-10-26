@@ -1,5 +1,7 @@
 # 产品三件事 · 历史 Cos MVP 规格
 
+> 状态：历史档案，不再更新。当前状态见 [project.md](project.md) 顶部；当前界面规格见 [design/shell-spec-final.md](design/shell-spec-final.md)。
+
 > 本文保存早期 MVP 的实现背景、基线和当时验收。2026-10-03 起，当前需求确认、修订与待办统一以 [Cos 当前需求清单](cos-requirements.md) 为准；本文的“本次要做”不自动成为当前执行范围。
 
 ## 1. 要解决的问题
