@@ -40,6 +40,15 @@ export function useCosDensity() {
   return [density, setDensity, DENSITY_LEVELS[density] || DENSITY_LEVELS[0]];
 }
 
+/**
+ * 密度档位 → 网格最小卡宽：COS 三页与文件夹页用同一条规则（窄窗下限 200），
+ * 滑杆调档必须真正改变网格列数，不能只记住偏好。
+ */
+export function minWidthForDensity(density, windowWidth = Number.POSITIVE_INFINITY) {
+  const level = DENSITY_LEVELS[density] || DENSITY_LEVELS[0];
+  return windowWidth < 760 ? Math.max(200, level.minWidth) : level.minWidth;
+}
+
 /** 排序偏好：每类页面各记一份（全部作品 / 某个署名下的套图 / 某套照片）。 */
 export function useCosSort(pageKey, field = 'name') {
   const [sort, setSortState] = useState(() => {

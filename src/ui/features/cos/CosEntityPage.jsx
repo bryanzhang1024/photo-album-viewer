@@ -7,14 +7,14 @@ import GridCard from '../../components/GridCard';
 import VirtualGrid from '../../components/VirtualGrid';
 import Menu from '../../components/Menu';
 import { SettingsIcon } from '../../icons';
-import { DEFAULT_MIN_ITEM_WIDTH } from '../../data/prefs';
 import { invoke, CHANNELS } from '../../data/ipc';
 import { listCharacters, listCosers } from '../../data/cos';
 import { entityCardItems } from './cardItems';
 import useCosPagedList from './useCosPagedList';
 import useGridSelection from './useGridSelection';
 import useCosAutoRefresh from './useCosAutoRefresh';
-import { useCosDensity } from './useCosPrefs';
+import useWindowWidth from '../../hooks/useWindowWidth';
+import { minWidthForDensity, useCosDensity } from './useCosPrefs';
 import CosHeaderControls from './CosHeaderControls';
 import './cos.css';
 
@@ -35,6 +35,8 @@ export default function CosEntityPage({ kind, onOpenEntity, onNavigate, searchQu
   const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [menu, setMenu] = useState(null);
   const [density, setDensity] = useCosDensity();
+  const windowWidth = useWindowWidth();
+  const minItemWidth = minWidthForDensity(density, windowWidth);
 
   const fetcher = FETCHERS[kind] || listCharacters;
   const options = { sortBy: 'name' };
@@ -102,7 +104,7 @@ export default function CosEntityPage({ kind, onOpenEntity, onNavigate, searchQu
         {cards.length > 0 ? (
           <VirtualGrid
             items={cards}
-            minItemWidth={DEFAULT_MIN_ITEM_WIDTH}
+            minItemWidth={minItemWidth}
             hasMore={hasMore && !error}
             loadingMore={loading}
             onLoadMore={loadMore}

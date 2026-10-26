@@ -10,7 +10,6 @@ import ImageViewer from '../../components/ImageViewer';
 import {
   ChevronLeftIcon, ChevronRightIcon, ShuffleIcon, HeartIcon, SettingsIcon, FitIcon
 } from '../../icons';
-import { DEFAULT_MIN_ITEM_WIDTH } from '../../data/prefs';
 import { invoke, CHANNELS } from '../../data/ipc';
 import {
   getSet, getSetImages, listSetIds, listRandomSetIds
@@ -19,7 +18,8 @@ import { photoCardItems, setFavoriteEntry } from './cardItems';
 import useGridSelection from './useGridSelection';
 import useCosFavorites from './useCosFavorites';
 import useCosAutoRefresh from './useCosAutoRefresh';
-import { useCosDensity, useCosFit, useCosSort } from './useCosPrefs';
+import useWindowWidth from '../../hooks/useWindowWidth';
+import { minWidthForDensity, useCosDensity, useCosFit, useCosSort } from './useCosPrefs';
 import CosHeaderControls from './CosHeaderControls';
 import './cos.css';
 
@@ -60,6 +60,8 @@ export default function CosSetAlbumPage({
 
   const [sort, setSort] = useCosSort(`set:${setId}`, 'name');
   const [density, setDensity] = useCosDensity();
+  const windowWidth = useWindowWidth();
+  const minItemWidth = minWidthForDensity(density, windowWidth);
   const [fit, setFit] = useCosFit(setId);
   const { isAlbumFavorited, isPhotoFavorited, toggleAlbum, togglePhoto } = useCosFavorites();
   const forceNextRef = useRef(false);
@@ -189,9 +191,18 @@ export default function CosSetAlbumPage({
   const albumPath = albumEntry?.path || '';
 
   const openPhoto = useCallback((card) => setViewerIndex(card.payload.index), []);
+  // 套图界面与文件夹相簿一致：←/→ 切上一套/下一套，只有 ↑↓ 移动选中
+  const switchSet = useCallback((step) => {
+    if (position < 0) return false;
+    const target = setIds[position + step];
+    if (!target) return false;
+    navigateTo(target);
+    return true;
+  }, [position, setIds, navigateTo]);
   const [selectedKey] = useGridSelection({
     items: cards,
     onOpen: openPhoto,
+    horizontalAction: switchSet,
     escapeAction: () => { if (searchQuery) onSearchChange?.(''); }
   });
 
@@ -308,7 +319,7 @@ export default function CosSetAlbumPage({
         {cards.length > 0 ? (
           <VirtualGrid
             items={cards}
-            minItemWidth={DEFAULT_MIN_ITEM_WIDTH}
+            minItemWidth={minItemWidth}
             hasMore={hasMore && !error}
             loadingMore={loading}
             onLoadMore={loadMore}

@@ -7,7 +7,6 @@ import GridCard from '../../components/GridCard';
 import VirtualGrid from '../../components/VirtualGrid';
 import Menu from '../../components/Menu';
 import { SettingsIcon } from '../../icons';
-import { DEFAULT_MIN_ITEM_WIDTH } from '../../data/prefs';
 import { invoke, CHANNELS } from '../../data/ipc';
 import { listSets, showSetInFolder } from '../../data/cos';
 import { setCardItems, setFavoriteEntry } from './cardItems';
@@ -15,7 +14,8 @@ import useCosPagedList from './useCosPagedList';
 import useGridSelection from './useGridSelection';
 import useCosFavorites from './useCosFavorites';
 import useCosAutoRefresh from './useCosAutoRefresh';
-import { useCosDensity, useCosSort } from './useCosPrefs';
+import useWindowWidth from '../../hooks/useWindowWidth';
+import { minWidthForDensity, useCosDensity, useCosSort } from './useCosPrefs';
 import CosHeaderControls from './CosHeaderControls';
 import './cos.css';
 
@@ -44,6 +44,8 @@ export default function CosSetListPage({
 
   const [sort, setSort] = useCosSort(`sets:${viewKind}:${entity?.id || 'all'}`, 'name');
   const [density, setDensity] = useCosDensity();
+  const windowWidth = useWindowWidth();
+  const minItemWidth = minWidthForDensity(density, windowWidth);
   const options = { sortBy: sort.field, sortDirection: sort.direction };
   if (viewKind === 'characters' && entity?.id) options.characterId = entity.id;
   if (viewKind === 'cosers' && entity?.id) options.coserId = entity.id;
@@ -148,7 +150,7 @@ export default function CosSetListPage({
         {cards.length > 0 ? (
           <VirtualGrid
             items={cards}
-            minItemWidth={DEFAULT_MIN_ITEM_WIDTH}
+            minItemWidth={minItemWidth}
             hasMore={hasMore && !error}
             loadingMore={loading}
             onLoadMore={loadMore}

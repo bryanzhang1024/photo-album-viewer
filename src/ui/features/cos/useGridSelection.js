@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
  * 网格键盘导航：与文件夹页一致——↑↓←→ 移动选中、Home/End 首尾、Enter 打开、Esc 清选中。
  * 网格点击仍然直接打开；选中态只服务键盘，不改变鼠标习惯。
  */
-export default function useGridSelection({ items = [], onOpen, escapeAction, enabled = true }) {
+export default function useGridSelection({ items = [], onOpen, escapeAction, horizontalAction, enabled = true }) {
   const [selectedKey, setSelectedKey] = useState('');
 
   // 数据刷新/翻页后，选中项还在就保留，不在了就清掉
@@ -45,12 +45,24 @@ export default function useGridSelection({ items = [], onOpen, escapeAction, ena
         }
         return;
       }
-      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        if (horizontalAction?.(1)) return;
+        move(1);
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        if (horizontalAction?.(-1)) return;
+        move(-1);
+        return;
+      }
+      if (event.key === 'ArrowDown') {
         event.preventDefault();
         move(1);
         return;
       }
-      if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      if (event.key === 'ArrowUp') {
         event.preventDefault();
         move(-1);
         return;
@@ -75,7 +87,7 @@ export default function useGridSelection({ items = [], onOpen, escapeAction, ena
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [items, selectedKey, onOpen, escapeAction, enabled]);
+  }, [items, selectedKey, onOpen, escapeAction, horizontalAction, enabled]);
 
   // 键盘移动后把选中卡滚进可视区
   useEffect(() => {
