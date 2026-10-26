@@ -252,6 +252,8 @@ function measureExpression(kind) {
 
     return {
       kind: ${JSON.stringify(kind)},
+      toolbarSearch: Boolean(document.querySelector('.toolbar-search input')),
+      headerSearchInput: Boolean(document.querySelector('.page-header input[type="search"]')),
       sidebarActiveItem: T(document.querySelector('.sidebar-item[aria-current="page"]')),
       viewport: { innerWidth, innerHeight, devicePixelRatio },
       sidebar: document.querySelector('.sidebar') ? {
@@ -320,7 +322,14 @@ async function main() {
   measurements.meta.catalogCopyMs = Date.now() - t0;
   log(`已复制 COS 索引缓存 ${(measurements.meta.catalogBytes / 1024 / 1024).toFixed(1)}MB，用时 ${measurements.meta.catalogCopyMs}ms`);
 
-  const child = spawn(APP, [`--remote-debugging-port=${port}`, `--user-data-dir=${profileDir}`], {
+  const child = spawn(APP, [
+    `--remote-debugging-port=${port}`,
+    `--user-data-dir=${profileDir}`,
+    // 窗口可能被别的窗口挡住；不让 Chromium 把遮挡窗口降频，否则截图会等不到新帧
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-background-timer-throttling'
+  ], {
     stdio: ['ignore', 'pipe', 'pipe']
   });
   const pid = child.pid;
@@ -581,6 +590,8 @@ async function main() {
         cardTag: data.cards?.firstCardTag ?? null,
         heartCount: data.cards?.heartCount ?? null,
         selectedCount: data.cards?.selectedCount ?? null,
+        toolbarSearch: data.toolbarSearch ?? null,
+        headerSearchInput: data.headerSearchInput ?? null,
         nameFontSize: data.text?.name?.fontSize || null,
         nameLineHeight: data.text?.name?.lineHeight || null,
         nameColor: data.text?.name?.color || null,
@@ -619,13 +630,24 @@ async function main() {
         `${left.nameFontSize}/${left.nameLineHeight} vs ${right.nameFontSize}/${right.nameLineHeight}`);
       check(`${label} 次行字号一致`, left.metaFontSize === right.metaFontSize, `${left.metaFontSize} vs ${right.metaFontSize}`);
       check(`${label} 卡片元素一致`, left.cardTag === right.cardTag, `${left.cardTag} vs ${right.cardTag}`);
+      check(`${label} 都有面包屑`, left.crumbCount >= 1 && right.crumbCount >= 1, `${left.crumbCount} vs ${right.crumbCount}`);
+      check(`${label} 都有排序控件`, left.headerControls?.select === 1 && right.headerControls?.select === 1,
+        `${left.headerControls?.select} vs ${right.headerControls?.select}`);
+      check(`${label} 都有缩略图密度`, left.headerControls?.range === 1 && right.headerControls?.range === 1,
+        `${left.headerControls?.range} vs ${right.headerControls?.range}`);
+      check(`${label} 搜索都在工具栏`, left.toolbarSearch === true && right.toolbarSearch === true,
+        `${left.toolbarSearch} vs ${right.toolbarSearch}`);
+      check(`${label} 页头不再有搜索框`, left.headerSearchInput === false && right.headerSearchInput === false,
+        `${left.headerSearchInput} vs ${right.headerSearchInput}`);
+      check(`${label} 卡片都有收藏心形`, left.heartCount > 0 && right.heartCount > 0,
+        `${left.heartCount} vs ${right.heartCount}`);
     };
     comparePair('A', 'B', '套图列表 vs 文件夹网格');
     comparePair('C', 'D', '套图照片页 vs 文件夹照片页');
     measurements.parity = {
       checks,
       ok: checks.every((item) => item.ok),
-      note: '心形数量、页头控件、面包屑属于 S2/S3 范围，本轮只断言网格与文字层级；截图仍会一并拍下供对照'
+      note: 'S1–S3 后两处网格、页头控件、搜索位置与收藏入口都应一致；文案与数据口径差异（套 / 个文件夹、其他文件计数）不在断言内'
     };
     log(`一致性断言：${checks.filter((item) => item.ok).length}/${checks.length} 通过`);
     for (const item of checks) if (!item.ok) log(`  ✗ ${item.name}（${item.detail}）`);

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PAGE_SIZE = 60;
 
-/** Cos 列表分页：换条件重载，滚到底继续加载。 */
+/** Cos 列表分页：换条件重载，滚到底继续加载；reload 用于 ⌘R 与索引更新后重取。 */
 export default function useCosPagedList(fetcher, options) {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [tick, setTick] = useState(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const key = JSON.stringify(options);
@@ -34,7 +35,7 @@ export default function useCosPagedList(fetcher, options) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetcher, key]);
+  }, [fetcher, key, tick]);
 
   const loadMore = useCallback(() => {
     setLoading((current) => {
@@ -52,5 +53,7 @@ export default function useCosPagedList(fetcher, options) {
       .finally(() => setLoading(false));
   }, [fetcher, items.length, total, loading]);
 
-  return { items, total, loading, error, loadMore, hasMore: items.length < total };
+  const reload = useCallback(() => setTick((value) => value + 1), []);
+
+  return { items, total, loading, error, loadMore, reload, hasMore: items.length < total };
 }

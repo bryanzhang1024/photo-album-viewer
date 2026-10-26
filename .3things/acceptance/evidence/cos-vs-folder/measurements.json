@@ -1,55 +1,57 @@
 {
   "meta": {
-    "startedAt": "2026-10-26T13:53:58.516Z",
+    "startedAt": "2026-10-26T14:16:07.375Z",
     "appBinary": "/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
-    "profileDir": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-mLQVo9",
-    "port": 57811,
-    "appLogPath": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-app-1793022838517.log",
+    "profileDir": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-8dLL8l",
+    "port": 63263,
+    "appLogPath": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-app-1793024167378.log",
     "catalogSource": "/Users/clover/Library/Application Support/photo-album-viewer/cos-library-catalog-v1.json",
     "catalogCopied": true,
     "pageSizes": "窗口默认 1280x800，未改尺寸",
     "note": "隔离 profile，只读访问真实图库；未点击刷新索引/添加根目录/移除来源，未收藏",
-    "catalogBytes": 112965818,
-    "catalogCopyMs": 83,
-    "pid": 10507,
-    "finishedAt": "2026-10-26T13:54:36.478Z",
-    "durationMs": 37962,
+    "catalogBytes": 112891848,
+    "catalogCopyMs": 58,
+    "pid": 18922,
+    "finishedAt": "2026-10-26T14:16:44.736Z",
+    "durationMs": 37361,
     "logLines": [
-      "[13:53:58] 临时 profile：/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-mLQVo9",
-      "[13:53:58] CDP 端口：57811",
-      "[13:53:58] 已复制 COS 索引缓存 107.7MB，用时 83ms",
-      "[13:53:58] 已启动测试实例 PID=10507",
-      "[13:53:59] CDP 已连接",
-      "[13:53:59] 等待侧栏… 0s",
-      "[13:54:00] 初始侧栏：[\"文件夹\",\"我的收藏\",\"Cos 图库\",\"全部作品\",\"按角色\",\"按署名\",\"300-Cos套图库\",\"打开文件夹\"]",
-      "[13:54:00] 已点击：侧栏「全部作品」",
-      "[13:54:00] 等待COS 套图网格… 0s",
-      "[13:54:07] 截图：A-cos-all-1280x800.png（1280x800, 992KB）",
-      "[13:54:07] ✓ A 测量完成",
-      "[13:54:07] 已点击：照片来源「300-Cos套图库」",
-      "[13:54:07] 等待文件夹网格卡片… 0s",
-      "[13:54:22] 截图：B-folder-1280x800.png（1280x800, 1011KB）",
-      "[13:54:22] ✓ B 测量完成",
-      "[13:54:22] 已点击：侧栏「全部作品」（回 A）",
-      "[13:54:23] A 第一张卡片：51酱｜修女",
-      "[13:54:23] 等待套图照片网格… 0s",
-      "[13:54:27] 截图：C-cos-set-photos.png（1280x800, 847KB）",
-      "[13:54:27] ✓ C 测量完成",
-      "[13:54:27] 已点击：照片来源（回 B）",
-      "[13:54:28] 等待文件夹卡片（返回）… 0s",
-      "[13:54:30] D 搜索候选：[\"51酱｜修女（原创写真）\",\"51酱｜修女\",\"51酱\",\"修女\"]",
-      "[13:54:31] D 候选「51酱｜修女（原创写真）」→ 1 张卡片（[\"51酱｜修女（原创写真）\"]）",
-      "[13:54:31] 等待进入文件夹照片层… 0s",
-      "[13:54:35] 截图：D-folder-photos.png（1280x800, 856KB）",
-      "[13:54:35] ✓ D 测量完成",
-      "[13:54:35] 一致性断言：12/12 通过",
-      "[13:54:36] 已结束自己的进程 PID=10507"
+      "[14:16:07] 临时 profile：/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-8dLL8l",
+      "[14:16:07] CDP 端口：63263",
+      "[14:16:07] 已复制 COS 索引缓存 107.7MB，用时 58ms",
+      "[14:16:07] 已启动测试实例 PID=18922",
+      "[14:16:07] CDP 已连接",
+      "[14:16:08] 等待侧栏… 0s",
+      "[14:16:08] 初始侧栏：[\"文件夹\",\"我的收藏\",\"Cos 图库\",\"全部作品\",\"按角色\",\"按署名\",\"300-Cos套图库\",\"打开文件夹\"]",
+      "[14:16:08] 已点击：侧栏「全部作品」",
+      "[14:16:08] 等待COS 套图网格… 0s",
+      "[14:16:16] 截图：A-cos-all-1280x800.png（1280x800, 994KB）",
+      "[14:16:16] ✓ A 测量完成",
+      "[14:16:16] 已点击：照片来源「300-Cos套图库」",
+      "[14:16:16] 等待文件夹网格卡片… 0s",
+      "[14:16:30] 截图：B-folder-1280x800.png（1280x800, 1011KB）",
+      "[14:16:30] ✓ B 测量完成",
+      "[14:16:30] 已点击：侧栏「全部作品」（回 A）",
+      "[14:16:32] A 第一张卡片：51酱｜修女",
+      "[14:16:32] 等待套图照片网格… 0s",
+      "[14:16:36] 截图：C-cos-set-photos.png（1280x800, 850KB）",
+      "[14:16:36] ✓ C 测量完成",
+      "[14:16:36] 已点击：照片来源（回 B）",
+      "[14:16:36] 等待文件夹卡片（返回）… 0s",
+      "[14:16:38] D 搜索候选：[\"51酱｜修女（原创写真）\",\"51酱｜修女\",\"51酱\",\"修女\"]",
+      "[14:16:39] D 候选「51酱｜修女（原创写真）」→ 1 张卡片（[\"51酱｜修女（原创写真）\"]）",
+      "[14:16:39] 等待进入文件夹照片层… 0s",
+      "[14:16:43] 截图：D-folder-photos.png（1280x800, 856KB）",
+      "[14:16:43] ✓ D 测量完成",
+      "[14:16:43] 一致性断言：24/24 通过",
+      "[14:16:44] 已结束自己的进程 PID=18922"
     ],
-    "appLogTail": "[ThumbnailService] 更新并发度: 6\n\nDevTools listening on ws://127.0.0.1:57811/devtools/browser/e403401d-8b13-4fbf-abce-e7b661645e18\n[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/300-Cos套图库\n命令行参数: [\n  '/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer',\n  '--remote-debugging-port=57811',\n  '--user-data-dir=/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-mLQVo9'\n]\n解析到的文件夹路径: null\n启动时的初始路径: null\nDOM已就绪\n窗口ready-to-show事件触发\n窗口已显示并聚焦\n[Cos] 缓存预热完成，耗时 94ms（首屏后延迟 5000ms 启动）\n"
+    "appLogTail": "[ThumbnailService] 更新并发度: 6\n\nDevTools listening on ws://127.0.0.1:63263/devtools/browser/e855d29a-2290-4f94-824c-94dde09b6d37\n[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/300-Cos套图库\n命令行参数: [\n  '/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer',\n  '--remote-debugging-port=63263',\n  '--user-data-dir=/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-8dLL8l',\n  '--disable-backgrounding-occluded-windows',\n  '--disable-renderer-backgrounding',\n  '--disable-background-timer-throttling'\n]\n解析到的文件夹路径: null\n启动时的初始路径: null\nDOM已就绪\n窗口ready-to-show事件触发\n窗口已显示并聚焦\n[Cos] 缓存预热完成，耗时 89ms（首屏后延迟 5000ms 启动）\n"
   },
   "pages": {
     "A": {
       "kind": "cos",
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "sidebarActiveItem": "全部作品",
       "viewport": {
         "innerWidth": 1280,
@@ -79,24 +81,54 @@
           "left": "18px",
           "right": "18px"
         },
-        "crumbCount": 0,
-        "crumbs": [],
+        "crumbCount": 1,
+        "crumbs": [
+          "Cos 图库"
+        ],
         "title": "全部作品",
-        "count": "9,591 套",
+        "count": "9,585 套",
         "controlSummary": {
-          "select": 0,
-          "search": 1,
-          "range": 0,
-          "iconButton": 0,
-          "button": 0,
+          "select": 1,
+          "search": 0,
+          "range": 1,
+          "iconButton": 2,
+          "button": 3,
           "input": 1
         },
         "controlDetail": [
           {
-            "tag": "INPUT",
-            "type": "search",
-            "className": "",
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "page-header-crumb",
             "ariaLabel": null,
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "设置",
+            "text": null
+          },
+          {
+            "tag": "SELECT",
+            "type": "select-one",
+            "className": "ctrl-select",
+            "ariaLabel": "排序",
+            "text": "名称图片修改日期"
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "升序，点击改为降序",
+            "text": null
+          },
+          {
+            "tag": "INPUT",
+            "type": "range",
+            "className": "ctrl-range",
+            "ariaLabel": "缩略图大小",
             "text": null
           }
         ]
@@ -166,7 +198,7 @@
         "coverAspectRatioCss": "auto",
         "coverAspectRatioMeasured": 0.75,
         "coverBorderRadius": "7px",
-        "heartCount": 0,
+        "heartCount": 30,
         "selectedCount": 0,
         "cosMoreExists": false,
         "firstCardText": "51酱｜修女原创写真 · 33 张",
@@ -206,6 +238,8 @@
     },
     "B": {
       "kind": "grid",
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "sidebarActiveItem": "300-Cos套图库",
       "viewport": {
         "innerWidth": 1280,
@@ -240,7 +274,7 @@
           "文件夹"
         ],
         "title": "300-Cos套图库",
-        "count": "9,591 个文件夹",
+        "count": "9,585 个文件夹",
         "controlSummary": {
           "select": 1,
           "search": 0,
@@ -323,7 +357,7 @@
           "ariaLabel": "文件网格",
           "clientWidth": 1054,
           "clientHeight": 659,
-          "scrollHeight": 458751
+          "scrollHeight": 458464
         }
       },
       "cards": {
@@ -399,6 +433,8 @@
     },
     "C": {
       "kind": "cosPhotos",
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "sidebarActiveItem": "Cos 图库",
       "viewport": {
         "innerWidth": 1280,
@@ -416,11 +452,11 @@
           "top": 76,
           "left": 216,
           "right": 1280,
-          "bottom": 115,
+          "bottom": 117,
           "width": 1064,
-          "height": 39
+          "height": 41
         },
-        "height": 39,
+        "height": 41,
         "className": "page-header page-header-compact page-header-inline",
         "padding": {
           "top": "8px",
@@ -428,19 +464,28 @@
           "left": "18px",
           "right": "18px"
         },
-        "crumbCount": 0,
-        "crumbs": [],
+        "crumbCount": 1,
+        "crumbs": [
+          "Cos 图库"
+        ],
         "title": "51酱｜修女（原创写真）",
         "count": "33 张照片",
         "controlSummary": {
-          "select": 0,
+          "select": 1,
           "search": 0,
-          "range": 0,
-          "iconButton": 3,
-          "button": 3,
-          "input": 0
+          "range": 1,
+          "iconButton": 7,
+          "button": 8,
+          "input": 1
         },
         "controlDetail": [
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "page-header-crumb",
+            "ariaLabel": null,
+            "text": null
+          },
           {
             "tag": "BUTTON",
             "type": "button",
@@ -461,6 +506,48 @@
             "className": "icon-button",
             "ariaLabel": "随机一套",
             "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "收藏这个套图",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "设置",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "完整显示",
+            "text": null
+          },
+          {
+            "tag": "SELECT",
+            "type": "select-one",
+            "className": "ctrl-select",
+            "ariaLabel": "排序",
+            "text": "名称大小修改日期"
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "升序，点击改为降序",
+            "text": null
+          },
+          {
+            "tag": "INPUT",
+            "type": "range",
+            "className": "ctrl-range",
+            "ariaLabel": "缩略图大小",
+            "text": null
           }
         ]
       },
@@ -480,11 +567,11 @@
         "clientWidth": 1054,
         "rect": {
           "x": 238,
-          "y": 131,
-          "top": 131,
+          "y": 133,
+          "top": 133,
           "left": 238,
           "right": 1248,
-          "bottom": 396.3,
+          "bottom": 398.3,
           "width": 1010,
           "height": 265.3
         },
@@ -492,7 +579,7 @@
           "className": "folder-scroll",
           "ariaLabel": "文件网格",
           "clientWidth": 1054,
-          "clientHeight": 661,
+          "clientHeight": 659,
           "scrollHeight": 1737
         }
       },
@@ -504,11 +591,11 @@
         "firstCardClass": "grid-card",
         "firstCardRect": {
           "x": 238,
-          "y": 131,
-          "top": 131,
+          "y": 133,
+          "top": 133,
           "left": 238,
           "right": 394.7,
-          "bottom": 396.3,
+          "bottom": 398.3,
           "width": 156.7,
           "height": 265.3
         },
@@ -516,11 +603,11 @@
         "firstCardHeight": 265.3,
         "coverRect": {
           "x": 238,
-          "y": 131,
-          "top": 131,
+          "y": 133,
+          "top": 133,
           "left": 238,
           "right": 394.7,
-          "bottom": 339.9,
+          "bottom": 341.9,
           "width": 156.7,
           "height": 208.9
         },
@@ -529,7 +616,7 @@
         "coverAspectRatioCss": "auto",
         "coverAspectRatioMeasured": 0.75,
         "coverBorderRadius": "7px",
-        "heartCount": 0,
+        "heartCount": 30,
         "selectedCount": 0,
         "cosMoreExists": false,
         "firstCardText": "51酱｜修女（原创写真） 001.jpg825 KB · 2022年12月7日",
@@ -570,6 +657,8 @@
     },
     "D": {
       "kind": "grid",
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "sidebarActiveItem": "300-Cos套图库",
       "viewport": {
         "innerWidth": 1280,
@@ -813,16 +902,16 @@
     "A": {
       "page": "A",
       "title": "全部作品",
-      "count": "9,591 套",
+      "count": "9,585 套",
       "headerHeight": 41,
       "headerClass": "page-header page-header-compact page-header-inline",
-      "crumbCount": 0,
+      "crumbCount": 1,
       "headerControls": {
-        "select": 0,
-        "search": 1,
-        "range": 0,
-        "iconButton": 0,
-        "button": 0,
+        "select": 1,
+        "search": 0,
+        "range": 1,
+        "iconButton": 2,
+        "button": 3,
         "input": 1
       },
       "columns": 6,
@@ -832,8 +921,10 @@
       "coverWidth": 156.7,
       "coverHeight": 208.9,
       "cardTag": "ARTICLE",
-      "heartCount": 0,
+      "heartCount": 30,
       "selectedCount": 0,
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "nameFontSize": "12px",
       "nameLineHeight": "16.2px",
       "nameColor": "rgb(233, 233, 236)",
@@ -845,7 +936,7 @@
     "B": {
       "page": "B",
       "title": "300-Cos套图库",
-      "count": "9,591 个文件夹",
+      "count": "9,585 个文件夹",
       "headerHeight": 41,
       "headerClass": "page-header page-header-compact page-header-inline",
       "crumbCount": 1,
@@ -866,6 +957,8 @@
       "cardTag": "ARTICLE",
       "heartCount": 30,
       "selectedCount": 0,
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "nameFontSize": "12px",
       "nameLineHeight": "16.2px",
       "nameColor": "rgb(233, 233, 236)",
@@ -878,16 +971,16 @@
       "page": "C",
       "title": "51酱｜修女（原创写真）",
       "count": "33 张照片",
-      "headerHeight": 39,
+      "headerHeight": 41,
       "headerClass": "page-header page-header-compact page-header-inline",
-      "crumbCount": 0,
+      "crumbCount": 1,
       "headerControls": {
-        "select": 0,
+        "select": 1,
         "search": 0,
-        "range": 0,
-        "iconButton": 3,
-        "button": 3,
-        "input": 0
+        "range": 1,
+        "iconButton": 7,
+        "button": 8,
+        "input": 1
       },
       "columns": 6,
       "columnGap": "14px",
@@ -896,8 +989,10 @@
       "coverWidth": 156.7,
       "coverHeight": 208.9,
       "cardTag": "ARTICLE",
-      "heartCount": 0,
+      "heartCount": 30,
       "selectedCount": 0,
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "nameFontSize": "12px",
       "nameLineHeight": "16.2px",
       "nameColor": "rgb(233, 233, 236)",
@@ -930,6 +1025,8 @@
       "cardTag": "ARTICLE",
       "heartCount": 30,
       "selectedCount": 0,
+      "toolbarSearch": true,
+      "headerSearchInput": false,
       "nameFontSize": "12px",
       "nameLineHeight": "16.2px",
       "nameColor": "rgb(233, 233, 236)",
@@ -943,7 +1040,7 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/A-cos-all-1280x800.png",
         "width": 1280,
         "height": 800,
-        "bytes": 1015627,
+        "bytes": 1018157,
         "viewport": {
           "width": 1280,
           "height": 800,
@@ -955,7 +1052,7 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/B-folder-1280x800.png",
         "width": 1280,
         "height": 800,
-        "bytes": 1035540,
+        "bytes": 1035611,
         "viewport": {
           "width": 1280,
           "height": 800,
@@ -967,7 +1064,7 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/C-cos-set-photos.png",
         "width": 1280,
         "height": 800,
-        "bytes": 867183,
+        "bytes": 870887,
         "viewport": {
           "width": 1280,
           "height": 800,
@@ -979,7 +1076,7 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/D-folder-photos.png",
         "width": 1280,
         "height": 800,
-        "bytes": 876439,
+        "bytes": 876578,
         "viewport": {
           "width": 1280,
           "height": 800,
@@ -1044,6 +1141,36 @@
         "detail": "ARTICLE vs ARTICLE"
       },
       {
+        "name": "套图列表 vs 文件夹网格 都有面包屑",
+        "ok": true,
+        "detail": "1 vs 1"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 都有排序控件",
+        "ok": true,
+        "detail": "1 vs 1"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 都有缩略图密度",
+        "ok": true,
+        "detail": "1 vs 1"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 搜索都在工具栏",
+        "ok": true,
+        "detail": "true vs true"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 页头不再有搜索框",
+        "ok": true,
+        "detail": "false vs false"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 卡片都有收藏心形",
+        "ok": true,
+        "detail": "30 vs 30"
+      },
+      {
         "name": "套图照片页 vs 文件夹照片页 列数一致",
         "ok": true,
         "detail": "6 vs 6"
@@ -1072,10 +1199,40 @@
         "name": "套图照片页 vs 文件夹照片页 卡片元素一致",
         "ok": true,
         "detail": "ARTICLE vs ARTICLE"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 都有面包屑",
+        "ok": true,
+        "detail": "1 vs 2"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 都有排序控件",
+        "ok": true,
+        "detail": "1 vs 1"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 都有缩略图密度",
+        "ok": true,
+        "detail": "1 vs 1"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 搜索都在工具栏",
+        "ok": true,
+        "detail": "true vs true"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 页头不再有搜索框",
+        "ok": true,
+        "detail": "false vs false"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 卡片都有收藏心形",
+        "ok": true,
+        "detail": "30 vs 30"
       }
     ],
     "ok": true,
-    "note": "心形数量、页头控件、面包屑属于 S2/S3 范围，本轮只断言网格与文字层级；截图仍会一并拍下供对照"
+    "note": "S1–S3 后两处网格、页头控件、搜索位置与收藏入口都应一致；文案与数据口径差异（套 / 个文件夹、其他文件计数）不在断言内"
   },
   "ok": true
 }

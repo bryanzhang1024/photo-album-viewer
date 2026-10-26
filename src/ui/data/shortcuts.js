@@ -48,7 +48,7 @@ const SCOPE_KEYS = {
   roots: ['back', 'forward', 'newTab', 'settings', 'closeTab'],
   favorites: ['back', 'forward', 'settings', 'closeTab'],
   cos: ['back', 'forward', 'settings', 'closeTab'],
-  cosSearch: ['back', 'forward', 'search', 'settings', 'closeTab'],
+  cosSearch: ['back', 'forward', 'search', 'reload', 'settings', 'closeTab'],
   viewer: ['viewerClose', 'viewerPrev', 'viewerNext', 'viewerCopy']
 };
 

@@ -585,6 +585,12 @@ export default function App() {
     };
   });
 
+  const searchableKinds = ['folder', 'cos-sets', 'cos-set', 'cos-characters', 'cos-cosers'];
+  const searchable = searchableKinds.includes(location.kind);
+  const searchPlaceholder = location.kind === 'folder'
+    ? '搜索这个文件夹'
+    : location.kind === 'cos-set' ? '搜索这个套图' : '搜索名称、角色、作品';
+
   const title = titleFor(location, sources);
 
   const menuItems = useMemo(() => {
@@ -676,14 +682,16 @@ export default function App() {
         onBack={goBack}
         onForward={goForward}
         onBackLongPress={openHistoryMenu}
-        right={location.kind === 'folder' ? (
+        right={searchable ? (
           <>
-            <div className="segmented">
-              <button className="icon-button" type="button" aria-label="图标视图"
-                aria-pressed={viewMode === 'grid'} onClick={() => changeViewMode('grid')}><GridIcon /></button>
-              <button className="icon-button" type="button" aria-label="列表视图"
-                aria-pressed={viewMode === 'list'} onClick={() => changeViewMode('list')}><ListIcon /></button>
-            </div>
+            {location.kind === 'folder' ? (
+              <div className="segmented">
+                <button className="icon-button" type="button" aria-label="图标视图"
+                  aria-pressed={viewMode === 'grid'} onClick={() => changeViewMode('grid')}><GridIcon /></button>
+                <button className="icon-button" type="button" aria-label="列表视图"
+                  aria-pressed={viewMode === 'list'} onClick={() => changeViewMode('list')}><ListIcon /></button>
+              </div>
+            ) : null}
             {(breakpoint === 'compact' || breakpoint === 'small') && !searchExpanded && !searchQuery ? (
               <button
                 className="icon-button"
@@ -704,8 +712,8 @@ export default function App() {
                 <input
                   type="search"
                   value={searchQuery}
-                  aria-label="搜索这个文件夹"
-                  placeholder="搜索这个文件夹"
+                  aria-label={searchPlaceholder}
+                  placeholder={searchPlaceholder}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') {
@@ -751,42 +759,61 @@ export default function App() {
           ) : location.kind === 'cos-characters' ? (
             <CosEntityPage
               kind="characters"
-              onOpenEntity={(entity) => navigate({
+              onNavigate={navigate}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onOpenEntity={(entity, navigateOptions) => navigate({
                 kind: 'cos-sets',
                 viewKind: 'characters',
                 entity
-              })}
+              }, navigateOptions || {})}
             />
           ) : location.kind === 'cos-cosers' ? (
             <CosEntityPage
               kind="cosers"
-              onOpenEntity={(entity) => navigate({
+              onNavigate={navigate}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onOpenEntity={(entity, navigateOptions) => navigate({
                 kind: 'cos-sets',
                 viewKind: 'cosers',
                 entity
-              })}
+              }, navigateOptions || {})}
             />
           ) : location.kind === 'cos-sets' ? (
             <CosSetListPage
               viewKind={location.viewKind}
               entity={location.entity}
-              onOpenSet={(set, options) => navigate({
+              onNavigate={navigate}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onOpenSet={(set, options, navigateOptions) => navigate({
                 kind: 'cos-set',
                 setId: set.id,
                 name: set.displayName,
-                options
-              })}
+                options,
+                origin: {
+                  viewKind: location.viewKind || 'all',
+                  entityId: location.entity?.id || null,
+                  entityName: location.entity?.name || ''
+                }
+              }, navigateOptions || {})}
             />
           ) : location.kind === 'cos-set' ? (
             <CosSetAlbumPage
               setId={location.setId}
               setName={location.name}
               options={location.options || null}
+              origin={location.origin || null}
+              onNavigate={navigate}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
               onNavigateSet={(next) => navigate({
                 kind: 'cos-set',
                 setId: next.setId,
                 name: next.name,
-                options: next.options
+                options: next.options,
+                origin: next.origin || location.origin || null
               })}
             />
           ) : location.kind === 'roots' ? (

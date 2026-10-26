@@ -35,6 +35,26 @@ export function entityCardItems(entities) {
   }));
 }
 
+/**
+ * Cos 套图 → 收藏记录（与文件夹页/收藏页同一份 favorites.json）。
+ * 主进程在 favoriteTargets 里给出套图目录的绝对路径与封面；套图不可用时返回 null。
+ */
+export function setFavoriteEntry(set) {
+  const target = (set?.favoriteTargets || []).find((item) => item && item.path);
+  if (!target) return null;
+  const preview = target.previewImagePath
+    ? [{ path: target.previewImagePath, name: '' }]
+    : [];
+  return {
+    path: target.path,
+    name: set.displayName || set.originalName || '套图',
+    kind: 'photoSet',
+    imageCount: Number(set.imageCount) || 0,
+    previewImages: preview,
+    previewImagePath: target.previewImagePath || ''
+  };
+}
+
 export function photoCardItems(images) {
   return images.map((image, index) => ({
     key: image.path,

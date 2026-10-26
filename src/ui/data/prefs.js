@@ -6,7 +6,8 @@ const SORT_DEFAULT_DIRECTION = {
   imageCount: 'desc',
   childCount: 'desc',
   size: 'desc',
-  mtimeMs: 'desc'
+  mtimeMs: 'desc',
+  lastModified: 'desc'
 };
 
 const viewKey = (sourceId, relativePath) => `pav.view.v1:${sourceId}:${relativePath}`;
