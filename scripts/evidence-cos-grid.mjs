@@ -440,6 +440,39 @@ async function main() {
       data.screenshot = await takeScreenshot('A-cos-all-1280x800.png');
       aData = data;
       recordStep('A', true, data);
+
+      // 缩略图滑杆必须真正改变列数（4.5.1 回归）
+      try {
+        const before = data.grid?.columnCount || 0;
+        const applied = await cdp.evaluate(`(() => {
+          const input = document.querySelector('.page-header input[type="range"]');
+          if (!input) return false;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, '2');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        })()`);
+        await sleep(900);
+        const after = await cdp.evaluate(`(() => {
+          const row = document.querySelector('.vg-row');
+          return row ? getComputedStyle(row).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
+        })()`);
+        await cdp.evaluate(`(() => {
+          const input = document.querySelector('.page-header input[type="range"]');
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, '0');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        })()`);
+        await sleep(600);
+        measurements.densityCheck = { applied, before, after, ok: applied && after > 0 && after < before };
+        log(`密度滑杆：${before} 列 → ${after} 列（${measurements.densityCheck.ok ? '生效' : '未生效'}）`);
+      } catch (densityError) {
+        measurements.densityCheck = { ok: false, error: densityError.message };
+        log(`密度滑杆检查失败：${densityError.message}`);
+      }
     } catch (error) {
       recordStep('A', false, null, error.message);
       try {
@@ -651,6 +684,13 @@ async function main() {
     };
     log(`一致性断言：${checks.filter((item) => item.ok).length}/${checks.length} 通过`);
     for (const item of checks) if (!item.ok) log(`  ✗ ${item.name}（${item.detail}）`);
+    measurements.parity.checks.push({
+      name: '缩略图滑杆真正改变列数',
+      ok: measurements.densityCheck?.ok === true,
+      detail: `${measurements.densityCheck?.before} 列 → ${measurements.densityCheck?.after} 列`
+    });
+    measurements.parity.ok = measurements.parity.checks.every((item) => item.ok);
+    log(`一致性断言：${measurements.parity.checks.filter((item) => item.ok).length}/${measurements.parity.checks.length} 通过`);
     measurements.ok = !steps.some((step) => !step.ok) && measurements.parity.ok;
   } catch (error) {
     measurements.fatal = error.message;

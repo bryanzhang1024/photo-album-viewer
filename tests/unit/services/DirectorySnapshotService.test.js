@@ -62,6 +62,10 @@ function trackArrayIndexReads(values, reads) {
 }
 
 describe('DirectorySnapshotService', () => {
+  // 这些用例是重 I/O 模拟（并发 readdir/stat + setImmediate 轮询），
+  // 并行跑全量测试时默认 5s 偶尔不够；放宽超时，不改断言。
+  jest.setTimeout(20000);
+
   let mockFs;
 
   afterEach(() => {

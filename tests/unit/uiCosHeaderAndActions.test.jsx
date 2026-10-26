@@ -168,4 +168,41 @@ describe('Cos 页头与操作（S2/S3）', () => {
       expect(last[2].sortBy).toBe('size');
     });
   });
+
+  test('套图照片页 ←/→ 切上一套/下一套，↑↓ 仍移动选中（4.5.1）', async () => {
+    const { calls } = installMock((channel, arg) => {
+      if (channel === 'cos-get-set') {
+        if (arg === 's2') return { ...SET, id: 's2', displayName: '流萤·第二套' };
+        return SET;
+      }
+      if (channel === 'cos-get-set-images') {
+        return { images: [IMAGE], totalCount: 1, hasMore: false };
+      }
+      if (channel === 'cos-list-set-ids') return ['s1', 's2'];
+      return base(channel);
+    });
+    const onNavigateSet = jest.fn();
+    const { container } = render(
+      <CosSetAlbumPage
+        setId="s1"
+        setName="流萤（作品A）"
+        options={{ sortBy: 'name' }}
+        onNavigateSet={onNavigateSet}
+        onNavigate={jest.fn()}
+      />
+    );
+
+    await screen.findByText('001.jpg');
+    await waitFor(() => {
+      expect(calls.some(([channel]) => channel === 'cos-list-set-ids')).toBe(true);
+    });
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(onNavigateSet).toHaveBeenCalledWith(expect.objectContaining({ setId: 's2' }));
+    });
+
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await waitFor(() => expect(container.querySelector('.grid-card.selected')).toBeTruthy());
+  });
 });
