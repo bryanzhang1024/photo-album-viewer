@@ -68,13 +68,29 @@ export function setFolderSort(sourceId, relativePath, sort) {
 
 const densityKey = (sourceId, relativePath) => `pav.density.v1:${sourceId}:${relativePath}`;
 
+/** 缩略图密度三档：文件夹页与 Cos 页共用同一份尺寸定义。 */
+export const DENSITY_LEVELS = [
+  { key: 'compact', minWidth: 148 },
+  { key: 'standard', minWidth: 168 },
+  { key: 'comfortable', minWidth: 196 }
+];
+
+/**
+ * 缺省档位：紧凑（148）。
+ * 2026-10-26 用户拍板「默认密度跟照片来源保持一致」，即保持照片来源当前观感；
+ * 4.4.1 之前靠 Number(null) === 0 恰好落到这一档，现在改为显式返回，行为不变。
+ */
+export const DEFAULT_DENSITY = 0;
+export const DEFAULT_MIN_ITEM_WIDTH = DENSITY_LEVELS[DEFAULT_DENSITY].minWidth;
+
 export function getFolderDensity(sourceId, relativePath) {
   try {
     const raw = window.localStorage.getItem(densityKey(sourceId, relativePath));
+    if (raw === null) return DEFAULT_DENSITY;
     const value = Number(raw);
-    return Number.isFinite(value) && value >= 0 && value <= 2 ? value : 1;
+    return Number.isFinite(value) && value >= 0 && value <= 2 ? value : DEFAULT_DENSITY;
   } catch (_error) {
-    return 1;
+    return DEFAULT_DENSITY;
   }
 }
 

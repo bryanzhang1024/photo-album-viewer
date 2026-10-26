@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
 import useBreakpoint from '../../hooks/useBreakpoint';
 import { SearchIcon } from '../../icons';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
-import { listSets, describeSet } from '../../data/cos';
+import GridCard from '../../components/GridCard';
+import VirtualGrid from '../../components/VirtualGrid';
+import { DEFAULT_MIN_ITEM_WIDTH } from '../../data/prefs';
+import { listSets } from '../../data/cos';
+import { setCardItems } from './cardItems';
 import useCosPagedList from './useCosPagedList';
-import CosLoadMore from './CosLoadMore';
 import './cos.css';
 
 import { statusHint } from '../../data/shortcuts';
@@ -31,8 +34,9 @@ export default function CosSetListPage({ viewKind = 'all', entity, onOpenSet }) 
   if (search) options.query = search;
 
   const { items, total, loading, error, loadMore, hasMore } = useCosPagedList(listSets, options);
+  const coserName = viewKind === 'cosers' ? entity?.name : '';
+  const cards = useMemo(() => setCardItems(items, { coserName }), [items, coserName]);
   const title = entity?.name || '全部作品';
-  const context = { coserName: viewKind === 'cosers' ? entity?.name : '' };
   const countText = loading && items.length === 0
     ? '读取中…'
     : `${Number(total).toLocaleString('zh-CN')} 套`;
@@ -55,25 +59,32 @@ export default function CosSetListPage({ viewKind = 'all', entity, onOpenSet }) 
         variant={compactHeader ? 'compact' : 'inline'} title={title} count={countText} controls={controls} />
       <div className="folder-body">
         {error ? <div className="folder-state error">{error}</div> : null}
-        <div className="cos-scroll">
-          <div className="cos-grid">
-            {items.map((set) => {
-              const text = describeSet(set, context);
-              return (
-                <button className="cos-card" type="button" key={set.id}
-                  onClick={() => onOpenSet?.(set, options)}>
-                  <div className="cos-cover"><CosThumb mediaId={set.coverMediaId} /></div>
-                  <div className="cos-name">{text.name}</div>
-                  <div className="cos-meta">{text.meta}</div>
-                </button>
-              );
-            })}
+        {!error && cards.length === 0 ? (
+          <div className="folder-state">
+            {loading ? '读取中…' : (search ? `没有找到「${search}」` : '还没有套图')}
           </div>
-          {!loading && items.length === 0 && !error ? (
-            <div className="folder-state">{search ? `没有找到「${search}」` : '还没有套图'}</div>
-          ) : null}
-          <CosLoadMore onLoadMore={loadMore} hasMore={hasMore} loading={loading} />
-        </div>
+        ) : null}
+        {cards.length > 0 ? (
+          <VirtualGrid
+            items={cards}
+            minItemWidth={DEFAULT_MIN_ITEM_WIDTH}
+            hasMore={hasMore && !error}
+            loadingMore={loading}
+            onLoadMore={loadMore}
+            renderItem={(card, width, coverHeight) => (
+              <GridCard
+                key={card.key}
+                dataKey={card.key}
+                width={width}
+                coverHeight={coverHeight}
+                name={card.name}
+                meta={card.meta}
+                cover={<CosThumb mediaId={card.coverMediaId} />}
+                onClick={() => onOpenSet?.(card.payload, options)}
+              />
+            )}
+          />
+        ) : null}
       </div>
       <StatusBar left={countText} right={STATUS_HINTS} />
     </>
