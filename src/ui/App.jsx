@@ -20,6 +20,7 @@ import CosSetAlbumPage from './features/cos/CosSetAlbumPage';
 import FavoritesPage from './features/favorites/FavoritesPage';
 import { applyTheme } from './data/settings';
 import { invoke, CHANNELS } from './data/ipc';
+import parentLocation from './data/hierarchy';
 
 /**
  * 4.1 外壳、导航与标签页。
@@ -427,19 +428,11 @@ export default function App() {
       return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
     };
     const viewerOpen = () => Boolean(document.querySelector('[role="dialog"]'));
+    // ⌘↑ 与 Esc 退层走同一个父级目标（文件夹与 Cos 各页都由 parentLocation 决定）。
     const goUp = () => {
-      if (location.kind !== 'folder') return;
-      const segments = String(location.relativePath || '').split('/').filter(Boolean);
-      if (segments.length === 0) {
-        navigate({ kind: 'roots' });
-        return;
-      }
-      navigate({
-        kind: 'folder',
-        sourceId: location.sourceId,
-        relativePath: segments.slice(0, -1).join('/'),
-        siblings: null
-      });
+      const target = parentLocation(location);
+      if (!target) return;
+      navigate(target);
     };
     const cycleTab = (step) => {
       const index = tabs.findIndex((tab) => tab.id === activeTabId);
@@ -448,6 +441,28 @@ export default function App() {
       setActiveTabId(tabs[next].id);
     };
     const onKey = (event) => {
+      // Esc 分层唯一入口：浮层（Menu 在捕获阶段已拦）→ 查看器（自己处理）→ 搜索框 → 上一层。
+      // 选中态与页面级搜索词不单独占一层（B 方案）。
+      if (event.key === 'Escape') {
+        if (event.isComposing || event.defaultPrevented || event.repeat) return;
+        if (viewerOpen()) return;
+        const target = event.target;
+        if (isEditable(target)) {
+          event.preventDefault();
+          if (target.value) {
+            setSearchQuery('');
+            setSearchExpanded(false);
+            target.blur();
+            return;
+          }
+          target.blur();
+        }
+        const up = parentLocation(location);
+        if (!up) return;
+        event.preventDefault();
+        navigate(up);
+        return;
+      }
       // 查看器打开时，⌘[ ⌘] ⌘W ⌘F 等窗口级组合键不作用在背后的主窗口
       if (viewerOpen()) return;
       if (isEditable(event.target)) return;
@@ -715,12 +730,6 @@ export default function App() {
                   aria-label={searchPlaceholder}
                   placeholder={searchPlaceholder}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      setSearchQuery('');
-                      setSearchExpanded(false);
-                    }
-                  }}
                 />
               </label>
             )}

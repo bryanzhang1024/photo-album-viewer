@@ -1,0 +1,191 @@
+{
+  "meta": {
+    "startedAt": "2026-10-26T16:31:46.657Z",
+    "finishedAt": "2026-10-26T16:32:42.677Z",
+    "appBinary": "/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+    "appVersion": "4.5.3",
+    "profileDir": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-esc-EPmMbA",
+    "catalogCopied": true,
+    "keySource": "System Events 真实按键（key code），CDP 只用于读 DOM 与点击",
+    "note": "隔离 profile，只读访问真实图库；未修改图库、收藏或索引"
+  },
+  "passed": 26,
+  "total": 26,
+  "ok": true,
+  "results": [
+    {
+      "name": "启动后停在照片来源页",
+      "pass": true,
+      "detail": "›照片来源"
+    },
+    {
+      "name": "E02 照片来源 Esc 无动作",
+      "pass": true,
+      "detail": "›照片来源"
+    },
+    {
+      "name": "E02 我的收藏 Esc 无动作",
+      "pass": true,
+      "detail": "›文件夹收藏"
+    },
+    {
+      "name": "进入来源根文件夹",
+      "pass": true,
+      "detail": "文件夹›300-Cos套图库 / 30 卡"
+    },
+    {
+      "name": "E03 方向键选中一张卡",
+      "pass": true,
+      "detail": "selected=1"
+    },
+    {
+      "name": "E03 有选中项时 Esc 直接退层（回照片来源）",
+      "pass": true,
+      "detail": "›照片来源"
+    },
+    {
+      "name": "进入子文件夹",
+      "pass": true,
+      "detail": "300-Cos套图库 → 51酱｜修女（原创写真）"
+    },
+    {
+      "name": "E01 子目录 Esc 回上一级",
+      "pass": true,
+      "detail": "文件夹›300-Cos套图库"
+    },
+    {
+      "name": "搜索框输入生效",
+      "pass": true,
+      "detail": "value=流萤"
+    },
+    {
+      "name": "E04 搜索框有词 Esc 只清空并失焦",
+      "pass": true,
+      "detail": "value= focused=false"
+    },
+    {
+      "name": "E04 再按 Esc 才退层（回照片来源）",
+      "pass": true,
+      "detail": "›照片来源"
+    },
+    {
+      "name": "E06 菜单开着 Esc 只关菜单",
+      "pass": true,
+      "detail": "文件夹›300-Cos套图库"
+    },
+    {
+      "name": "进入某角色套图列表",
+      "pass": true,
+      "detail": "02"
+    },
+    {
+      "name": "进入套图照片页",
+      "pass": true,
+      "detail": "Hana Bunny｜02·Swimsuit（DARLING in the FRANXX） / 8 张卡"
+    },
+    {
+      "name": "E09 ⌘↑ 与 Esc 同父级：照片 → 套图列表",
+      "pass": true,
+      "detail": "Hana Bunny｜02·Swimsuit（DARLING in the FRANXX） → 02"
+    },
+    {
+      "name": "E07 套图列表 Esc 回入口页",
+      "pass": true,
+      "detail": "按角色"
+    },
+    {
+      "name": "E07 入口页 Esc 回 Cos 总览",
+      "pass": true,
+      "detail": "Cos 图库 | ›Cos 图库"
+    },
+    {
+      "name": "E02 Cos 总览 Esc 无动作",
+      "pass": true,
+      "detail": "›Cos 图库"
+    },
+    {
+      "name": "E08 全部作品入口的套图照片页面包屑含「全部作品」",
+      "pass": true,
+      "detail": "Cos 图库›全部作品›51酱｜修女（原创写真）"
+    },
+    {
+      "name": "E05 查看器 Esc 只关查看器，不退层",
+      "pass": true,
+      "detail": "Cos 图库›全部作品›51酱｜修女（原创写真）"
+    },
+    {
+      "name": "查看器 F 进入全屏",
+      "pass": true,
+      "detail": "fullscreen=true"
+    },
+    {
+      "name": "全屏下 Esc 行为记录",
+      "pass": true,
+      "detail": "fullscreen=false dialog=true"
+    },
+    {
+      "name": "全屏退出后再按 Esc 关查看器",
+      "pass": true,
+      "detail": "dialog=false fullscreen=false"
+    },
+    {
+      "name": "E07 全部作品套图照片 Esc 回全部作品列表",
+      "pass": true,
+      "detail": "全部作品 / 9,585 套"
+    },
+    {
+      "name": "⌘, 打开设置窗口",
+      "pass": true,
+      "detail": "2 个页面"
+    },
+    {
+      "name": "E02 设置窗口 Esc 无动作（窗口仍在）",
+      "pass": true,
+      "detail": "2 个页面"
+    }
+  ],
+  "screenshots": [
+    "01-roots",
+    "02-cos-album",
+    "03-cos-home",
+    "04-viewer-fullscreen",
+    "05-back-to-all-works"
+  ],
+  "logLines": [
+    "[16:31:46] 启动已安装应用：/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+    "[16:31:46] 隔离 profile：/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-esc-EPmMbA",
+    "[16:31:47] CDP 已连接",
+    "[16:31:47] PASS 启动后停在照片来源页 — ›照片来源",
+    "[16:31:48] 已截图 01-roots.png",
+    "[16:31:49] PASS E02 照片来源 Esc 无动作 — ›照片来源",
+    "[16:31:50] PASS E02 我的收藏 Esc 无动作 — ›文件夹收藏",
+    "[16:32:02] PASS 进入来源根文件夹 — 文件夹›300-Cos套图库 / 30 卡",
+    "[16:32:03] PASS E03 方向键选中一张卡 — selected=1",
+    "[16:32:04] PASS E03 有选中项时 Esc 直接退层（回照片来源） — ›照片来源",
+    "[16:32:09] PASS 进入子文件夹 — 300-Cos套图库 → 51酱｜修女（原创写真）",
+    "[16:32:11] PASS E01 子目录 Esc 回上一级 — 文件夹›300-Cos套图库",
+    "[16:32:11] PASS 搜索框输入生效 — value=流萤",
+    "[16:32:12] PASS E04 搜索框有词 Esc 只清空并失焦 — value= focused=false",
+    "[16:32:13] PASS E04 再按 Esc 才退层（回照片来源） — ›照片来源",
+    "[16:32:15] PASS E06 菜单开着 Esc 只关菜单 — 文件夹›300-Cos套图库",
+    "[16:32:17] PASS 进入某角色套图列表 — 02",
+    "[16:32:19] 已截图 02-cos-album.png",
+    "[16:32:19] PASS 进入套图照片页 — Hana Bunny｜02·Swimsuit（DARLING in the FRANXX） / 8 张卡",
+    "[16:32:21] PASS E09 ⌘↑ 与 Esc 同父级：照片 → 套图列表 — Hana Bunny｜02·Swimsuit（DARLING in the FRANXX） → 02",
+    "[16:32:22] PASS E07 套图列表 Esc 回入口页 — 按角色",
+    "[16:32:23] PASS E07 入口页 Esc 回 Cos 总览 — Cos 图库 | ›Cos 图库",
+    "[16:32:24] 已截图 03-cos-home.png",
+    "[16:32:25] PASS E02 Cos 总览 Esc 无动作 — ›Cos 图库",
+    "[16:32:28] PASS E08 全部作品入口的套图照片页面包屑含「全部作品」 — Cos 图库›全部作品›51酱｜修女（原创写真）",
+    "[16:32:29] PASS E05 查看器 Esc 只关查看器，不退层 — Cos 图库›全部作品›51酱｜修女（原创写真）",
+    "[16:32:31] PASS 查看器 F 进入全屏 — fullscreen=true",
+    "[16:32:33] 已截图 04-viewer-fullscreen.png",
+    "[16:32:34] PASS 全屏下 Esc 行为记录 — fullscreen=false dialog=true",
+    "[16:32:36] PASS 全屏退出后再按 Esc 关查看器 — dialog=false fullscreen=false",
+    "[16:32:37] PASS E07 全部作品套图照片 Esc 回全部作品列表 — 全部作品 / 9,585 套",
+    "[16:32:38] 已截图 05-back-to-all-works.png",
+    "[16:32:40] PASS ⌘, 打开设置窗口 — 2 个页面",
+    "[16:32:41] PASS E02 设置窗口 Esc 无动作（窗口仍在） — 2 个页面",
+    "[16:32:42] 已结束验证实例 PID=71165"
+  ]
+}
