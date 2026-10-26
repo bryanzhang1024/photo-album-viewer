@@ -52,8 +52,7 @@ export default function CosEntityPage({ kind, onOpenEntity, onNavigate, searchQu
 
   const [selectedKey] = useGridSelection({
     items: cards,
-    onOpen: (card) => openEntity(card),
-    escapeAction: () => { if (searchQuery) onSearchChange?.(''); }
+    onOpen: (card) => openEntity(card)
   });
 
   const title = TITLES[kind] || '按角色';

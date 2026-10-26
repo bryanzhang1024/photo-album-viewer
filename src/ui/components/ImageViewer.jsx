@@ -259,6 +259,11 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       }
       if (key === 'Escape' || key === 'Backspace') {
         event.preventDefault();
+        // 全屏时先退全屏，再按一次才关查看器（macOS 习惯；Chromium 可能已先吞掉这次按键）。
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+          return;
+        }
         closeLayer();
         return;
       }

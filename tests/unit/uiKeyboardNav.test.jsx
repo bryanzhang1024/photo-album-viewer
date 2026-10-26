@@ -60,7 +60,7 @@ const selectedName = (container) => container.querySelector('.folder-row.selecte
 describe('P2 列表键盘导航与单键', () => {
   beforeEach(() => window.localStorage.clear());
 
-  test('方向键移动选中、Home/End 跳首尾、Esc 清选中', async () => {
+  test('方向键移动选中、Home/End 跳首尾；Esc 不再由本页清选中（交给 App 退层）', async () => {
     install();
     const { container } = renderList();
     await screen.findByText('a-文件夹');
@@ -77,8 +77,9 @@ describe('P2 列表键盘导航与单键', () => {
     fireEvent.keyDown(window, { key: 'Home' });
     await waitFor(() => expect(selectedName(container)).toBe('a-文件夹'));
 
+    // B 方案：Esc 只退层，选中态随换页消失，不由页面清空。
     fireEvent.keyDown(window, { key: 'Escape' });
-    await waitFor(() => expect(container.querySelector('.folder-row.selected')).toBeNull());
+    await waitFor(() => expect(selectedName(container)).toBe('a-文件夹'));
   });
 
   test('Enter 打开选中项：文件夹进入目录', async () => {

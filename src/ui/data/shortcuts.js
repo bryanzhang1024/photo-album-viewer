@@ -6,6 +6,7 @@ export const SHORTCUTS = {
   back: { keys: '⌘[', label: '后退' },
   forward: { keys: '⌘]', label: '前进' },
   up: { keys: '⌘↑', label: '上一级' },
+  escapeBack: { keys: 'Esc', label: '上一层' },
   search: { keys: '⌘F', label: '搜索' },
   gridView: { keys: '⌘1', label: '网格' },
   listView: { keys: '⌘2', label: '列表' },
@@ -21,7 +22,6 @@ export const SHORTCUTS = {
   moveSelection: { keys: '↑ ↓', label: '移动选中' },
   jumpEnds: { keys: 'Home / End', label: '首尾' },
   openSelected: { keys: 'Enter', label: '打开' },
-  clearSelection: { keys: 'Esc', label: '取消选中' },
   favorite: { keys: 'C', label: '收藏' },
   reveal: { keys: 'O', label: '在 Finder 显示' },
   trash: { keys: 'Delete', label: '移到废纸篓' },
@@ -48,7 +48,7 @@ const SCOPE_KEYS = {
   roots: ['back', 'forward', 'newTab', 'settings', 'closeTab'],
   favorites: ['back', 'forward', 'settings', 'closeTab'],
   cos: ['back', 'forward', 'settings', 'closeTab'],
-  cosSearch: ['back', 'forward', 'search', 'reload', 'settings', 'closeTab'],
+  cosSearch: ['back', 'forward', 'up', 'search', 'reload', 'settings', 'closeTab'],
   viewer: ['viewerClose', 'viewerPrev', 'viewerNext', 'viewerCopy']
 };
 
@@ -61,11 +61,11 @@ export function statusHint(scope) {
 export const HELP_GROUPS = [
   {
     title: '浏览与标签',
-    ids: ['back', 'forward', 'up', 'search', 'gridView', 'listView', 'reload', 'newTab', 'newWindow', 'closeTab', 'prevTab', 'settings']
+    ids: ['escapeBack', 'back', 'forward', 'up', 'search', 'gridView', 'listView', 'reload', 'newTab', 'newWindow', 'closeTab', 'prevTab', 'settings']
   },
   {
     title: '文件夹列表',
-    ids: ['moveSelection', 'jumpEnds', 'openSelected', 'clearSelection', 'favorite', 'reveal', 'trash', 'openFolder']
+    ids: ['moveSelection', 'jumpEnds', 'openSelected', 'favorite', 'reveal', 'trash', 'openFolder']
   },
   {
     title: '大图查看器',

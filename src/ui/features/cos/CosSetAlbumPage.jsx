@@ -202,27 +202,30 @@ export default function CosSetAlbumPage({
   const [selectedKey] = useGridSelection({
     items: cards,
     onOpen: openPhoto,
-    horizontalAction: switchSet,
-    escapeAction: () => { if (searchQuery) onSearchChange?.(''); }
+    horizontalAction: switchSet
   });
 
+  // 面包屑与 Esc 的父级一致：全部作品入口补「全部作品」一段，其余入口用入口页一段。
+  const viewKind = origin?.viewKind || 'all';
+  const entrance = ENTRANCE[viewKind] || null;
   const crumbs = [{ label: 'Cos 图库', clickable: true }];
-  const entrance = ENTRANCE[origin?.viewKind] || null;
   if (entrance) crumbs.push({ label: entrance.label, clickable: true });
+  else crumbs.push({ label: '全部作品', clickable: true });
   if (origin?.entityName) crumbs.push({ label: origin.entityName, clickable: true });
   const handleCrumbClick = (index) => {
     if (index === 0) {
       onNavigate?.({ kind: 'cos-home' });
       return;
     }
-    if (index === 1 && entrance) {
-      onNavigate?.({ kind: entrance.kind });
+    if (index === 1) {
+      if (entrance) onNavigate?.({ kind: entrance.kind });
+      else onNavigate?.({ kind: 'cos-sets', viewKind: 'all' });
       return;
     }
     if (index === 2 && origin?.entityName) {
       onNavigate?.({
         kind: 'cos-sets',
-        viewKind: origin.viewKind,
+        viewKind,
         entity: { id: origin.entityId || '', name: origin.entityName }
       });
     }

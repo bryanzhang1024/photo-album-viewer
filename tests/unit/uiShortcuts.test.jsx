@@ -39,8 +39,14 @@ describe('快捷键单一事实源', () => {
     expect(statusHint('folder')).toContain('⌘R 刷新');
     expect(statusHint('roots')).not.toContain('⌘↑ 上一级');
     expect(statusHint('cosSearch')).toContain('⌘F 搜索');
+    // Cos 列表页也能按⌘↑ 上一层（与 Esc 同一目标）
+    expect(statusHint('cosSearch')).toContain('⌘↑ 上一级');
     expect(statusHint('cos')).not.toContain('⌘F 搜索');
     expect(statusHint('viewer')).toContain('⌘C / ⇧⌘C 复制文件 / 像素');
+    // Esc 只做「上一层」，不再单独占「取消选中」
+    expect(SHORTCUTS.escapeBack.keys).toBe('Esc');
+    expect(SHORTCUTS.escapeBack.label).toBe('上一层');
+    expect(SHORTCUTS.clearSelection).toBeUndefined();
   });
 
   test('帮助分组里的每个键都在表里', () => {
@@ -81,5 +87,8 @@ describe('设置窗口 · 快捷键帮助页', () => {
     expect(screen.getByText('⌘1')).toBeInTheDocument();
     expect(screen.getByText('Esc / ⌫')).toBeInTheDocument();
     expect(screen.getByText('随机一张')).toBeInTheDocument();
+    // 帮助页说明 Esc 是「上一层」，不再写「取消选中」
+    expect(screen.getByText('上一层')).toBeInTheDocument();
+    expect(screen.queryByText('取消选中')).not.toBeInTheDocument();
   });
 });

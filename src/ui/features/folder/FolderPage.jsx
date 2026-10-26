@@ -302,7 +302,8 @@ export default function FolderPage({
     return () => window.removeEventListener('pav:refresh', onRefresh);
   }, [reload]);
 
-  // 键盘导航：列表/网格方向键移动选中、Enter 打开、Esc 清选中；
+  // 键盘导航：列表/网格方向键移动选中、Enter 打开；
+  // Esc 统一由 App 的层级入口处理（先浮层/查看器/搜索框，再退一层）。
   // 列表视图额外支持单键（C 收藏、O 在 Finder 显示、Delete 移到废纸篓）。
   useEffect(() => {
     const isEditableTarget = (target) => {
@@ -341,25 +342,11 @@ export default function FolderPage({
       setSelectedKey(toEnd ? keys[keys.length - 1] : keys[0]);
     };
     const onKey = (event) => {
-      // 查看器与输入框自己处理按键
+      // 查看器与输入框自己处理按键；Esc 统一由 App 的层级入口处理。
       if (viewerIndex !== null) return;
       if (isEditableTarget(event.target)) return;
 
       const plain = !event.metaKey && !event.ctrlKey && !event.altKey;
-      if (event.key === 'Escape') {
-        if (selectedKey) {
-          setSelectedKey('');
-          return;
-        }
-        if (searchQuery) {
-          onSearchChange?.('');
-          return;
-        }
-        const parent = segments.slice(0, -1).join('/');
-        if (parent) onOpenFolder(parent, { siblings: null });
-        else onOpenRoots?.();
-        return;
-      }
       if (!plain) return;
 
       // 套图界面：←/→ 切上一套/下一套（与顶部的上一套/下一套按钮一致）
@@ -441,8 +428,7 @@ export default function FolderPage({
   }, [
     selectedKey, viewerIndex, sorted, filtered, filteredOtherFiles, viewMode, images,
     isAlbum, siblings, siblingIndex,
-    searchQuery, segments, onOpenFolder, onOpenRoots, onSearchChange,
-    source.rootPath, toggleItemFavorite
+    onOpenFolder, source.rootPath, toggleItemFavorite
   ]);
 
   // 选中项滚动到可视区

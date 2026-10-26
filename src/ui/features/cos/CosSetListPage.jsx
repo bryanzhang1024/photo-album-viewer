@@ -71,8 +71,7 @@ export default function CosSetListPage({
 
   const [selectedKey] = useGridSelection({
     items: cards,
-    onOpen: (card) => openSet(card),
-    escapeAction: () => { if (searchQuery) onSearchChange?.(''); }
+    onOpen: (card) => openSet(card)
   });
 
   const title = entity?.name || '全部作品';
