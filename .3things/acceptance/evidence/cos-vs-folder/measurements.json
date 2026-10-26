@@ -1,0 +1,1003 @@
+{
+  "meta": {
+    "startedAt": "2026-10-26T13:18:48.758Z",
+    "appBinary": "/Users/clover/Develop/photo-album-viewer6/dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+    "profileDir": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-cezXfp",
+    "port": 65415,
+    "appLogPath": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-app-1793020728761.log",
+    "catalogSource": "/Users/clover/Library/Application Support/photo-album-viewer/cos-library-catalog-v1.json",
+    "catalogCopied": true,
+    "pageSizes": "窗口默认 1280x800，未改尺寸",
+    "note": "隔离 profile，只读访问真实图库；未点击刷新索引/添加根目录/移除来源，未收藏",
+    "catalogBytes": 112965818,
+    "catalogCopyMs": 83,
+    "pid": 95854,
+    "finishedAt": "2026-10-26T13:19:31.164Z",
+    "durationMs": 42406,
+    "logLines": [
+      "[13:18:48] 临时 profile：/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-cezXfp",
+      "[13:18:48] CDP 端口：65415",
+      "[13:18:48] 已复制 COS 索引缓存 107.7MB，用时 83ms",
+      "[13:18:48] 已启动测试实例 PID=95854",
+      "[13:18:49] CDP 已连接",
+      "[13:18:49] 初始侧栏：[\"文件夹\",\"我的收藏\",\"Cos 图库\",\"全部作品\",\"按角色\",\"按署名\",\"300-Cos套图库\",\"打开文件夹\"]",
+      "[13:18:49] 已点击：侧栏「全部作品」",
+      "[13:18:49] 等待COS 套图卡片… 0s",
+      "[13:18:58] 截图：A-cos-all-1280x800.png（1280x800, 937KB）",
+      "[13:18:58] ✓ A 测量完成",
+      "[13:18:58] 已点击：照片来源「300-Cos套图库」",
+      "[13:18:58] 等待文件夹网格卡片… 0s",
+      "[13:19:15] 截图：B-folder-1280x800.png（1280x800, 1011KB）",
+      "[13:19:15] ✓ B 测量完成",
+      "[13:19:15] 已点击：侧栏「全部作品」（回 A）",
+      "[13:19:16] A 第一张卡片：51酱｜修女",
+      "[13:19:16] 等待套图照片网格… 0s",
+      "[13:19:21] 截图：C-cos-set-photos.png（1280x800, 849KB）",
+      "[13:19:21] ✓ C 测量完成",
+      "[13:19:21] 已点击：照片来源（回 B）",
+      "[13:19:22] 等待文件夹卡片（返回）… 0s",
+      "[13:19:24] D 搜索候选：[\"51酱｜修女（原创写真）\",\"51酱｜修女\",\"51酱\",\"修女\"]",
+      "[13:19:25] D 候选「51酱｜修女（原创写真）」→ 1 张卡片（[\"51酱｜修女（原创写真）\"]）",
+      "[13:19:25] 等待进入文件夹照片层… 0s",
+      "[13:19:29] 截图：D-folder-photos.png（1280x800, 856KB）",
+      "[13:19:29] ✓ D 测量完成",
+      "[13:19:31] 已结束自己的进程 PID=95854"
+    ],
+    "appLogTail": "[ThumbnailService] 更新并发度: 6\n\nDevTools listening on ws://127.0.0.1:65415/devtools/browser/0cda1a46-1065-4155-be08-14da2aa5c2b8\n[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/300-Cos套图库\n命令行参数: [\n  '/Users/clover/Develop/photo-album-viewer6/dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer',\n  '--remote-debugging-port=65415',\n  '--user-data-dir=/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-cezXfp'\n]\n解析到的文件夹路径: null\n启动时的初始路径: null\nDOM已就绪\n窗口ready-to-show事件触发\n窗口已显示并聚焦\n[Cos] 缓存预热完成，耗时 98ms（首屏后延迟 5000ms 启动）\n"
+  },
+  "pages": {
+    "A": {
+      "kind": "cos",
+      "sidebarActiveItem": "全部作品",
+      "viewport": {
+        "innerWidth": 1280,
+        "innerHeight": 800,
+        "devicePixelRatio": 2
+      },
+      "sidebar": {
+        "width": 216,
+        "collapsed": "false"
+      },
+      "pageHeader": {
+        "rect": {
+          "x": 216,
+          "y": 76,
+          "top": 76,
+          "left": 216,
+          "right": 1280,
+          "bottom": 117,
+          "width": 1064,
+          "height": 41
+        },
+        "height": 41,
+        "className": "page-header page-header-compact page-header-inline",
+        "padding": {
+          "top": "8px",
+          "bottom": "8px",
+          "left": "18px",
+          "right": "18px"
+        },
+        "crumbCount": 0,
+        "crumbs": [],
+        "title": "全部作品",
+        "count": "9,591 套",
+        "controlSummary": {
+          "select": 0,
+          "search": 1,
+          "range": 0,
+          "iconButton": 0,
+          "button": 0,
+          "input": 1
+        },
+        "controlDetail": [
+          {
+            "tag": "INPUT",
+            "type": "search",
+            "className": "",
+            "ariaLabel": null,
+            "text": null
+          }
+        ]
+      },
+      "grid": {
+        "containerSelector": ".cos-grid",
+        "className": "cos-grid",
+        "computedGridTemplateColumns": "190.797px 190.797px 190.805px 190.797px 190.805px",
+        "columnCount": 5,
+        "columnGap": "14px",
+        "rowGap": "16px",
+        "padding": {
+          "left": "0px",
+          "right": "0px",
+          "top": "0px",
+          "bottom": "0px"
+        },
+        "clientWidth": 1010,
+        "rect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 1248,
+          "bottom": 1494.6,
+          "width": 1010,
+          "height": 1361.6
+        },
+        "scrollContainer": {
+          "className": "cos-scroll",
+          "clientWidth": 1054,
+          "clientHeight": 659,
+          "scrollHeight": 1450
+        }
+      },
+      "cards": {
+        "selector": ".cos-card",
+        "totalCount": 60,
+        "visibleCount": 15,
+        "firstCardTag": "BUTTON",
+        "firstCardClass": "cos-card",
+        "firstCardRect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 428.8,
+          "bottom": 443.8,
+          "width": 190.8,
+          "height": 310.8
+        },
+        "firstCardWidth": 190.8,
+        "firstCardHeight": 310.8,
+        "coverRect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 428.8,
+          "bottom": 387.4,
+          "width": 190.8,
+          "height": 254.4
+        },
+        "coverWidth": 190.8,
+        "coverHeight": 254.4,
+        "coverAspectRatioCss": "3 / 4",
+        "coverAspectRatioMeasured": 0.75,
+        "coverBorderRadius": "7px",
+        "heartCount": 0,
+        "selectedCount": 0,
+        "cosMoreExists": true,
+        "firstCardText": "51酱｜修女原创写真 · 33 张",
+        "firstCardSecondLine": "原创写真 · 33 张"
+      },
+      "text": {
+        "name": {
+          "text": "51酱｜修女",
+          "fontSize": "12px",
+          "lineHeight": "16.2px",
+          "marginTop": "7px",
+          "minHeight": "32.4px",
+          "color": "rgb(233, 233, 236)",
+          "fontWeight": "400"
+        },
+        "meta": {
+          "text": "原创写真 · 33 张",
+          "fontSize": "11px",
+          "lineHeight": "normal",
+          "marginTop": "2px",
+          "minHeight": "auto",
+          "color": "rgb(152, 152, 159)",
+          "fontWeight": "400"
+        }
+      },
+      "cardTextSamples": [
+        "51酱｜修女原创写真 · 33 张",
+        "Aery Tiefling｜星野爱【我推的孩子】 · 80 张",
+        "Akariia｜初音未来·兔女郎VOCALOID · 19 张"
+      ],
+      "screenshot": {
+        "path": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/A-cos-all-1280x800.png",
+        "width": 1280,
+        "height": 800,
+        "emulated": true
+      }
+    },
+    "B": {
+      "kind": "grid",
+      "sidebarActiveItem": "300-Cos套图库",
+      "viewport": {
+        "innerWidth": 1280,
+        "innerHeight": 800,
+        "devicePixelRatio": 2
+      },
+      "sidebar": {
+        "width": 216,
+        "collapsed": "false"
+      },
+      "pageHeader": {
+        "rect": {
+          "x": 216,
+          "y": 76,
+          "top": 76,
+          "left": 216,
+          "right": 1280,
+          "bottom": 117,
+          "width": 1064,
+          "height": 41
+        },
+        "height": 41,
+        "className": "page-header page-header-compact page-header-inline",
+        "padding": {
+          "top": "8px",
+          "bottom": "8px",
+          "left": "18px",
+          "right": "18px"
+        },
+        "crumbCount": 1,
+        "crumbs": [
+          "文件夹"
+        ],
+        "title": "300-Cos套图库",
+        "count": "9,591 个文件夹",
+        "controlSummary": {
+          "select": 1,
+          "search": 0,
+          "range": 1,
+          "iconButton": 3,
+          "button": 4,
+          "input": 1
+        },
+        "controlDetail": [
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "page-header-crumb",
+            "ariaLabel": null,
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "收藏这个文件夹",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "设置",
+            "text": null
+          },
+          {
+            "tag": "SELECT",
+            "type": "select-one",
+            "className": "ctrl-select",
+            "ariaLabel": "排序",
+            "text": "名称图片子文件夹修改日期"
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "升序，点击改为降序",
+            "text": null
+          },
+          {
+            "tag": "INPUT",
+            "type": "range",
+            "className": "ctrl-range",
+            "ariaLabel": "缩略图大小",
+            "text": null
+          }
+        ]
+      },
+      "grid": {
+        "containerSelector": ".vg-row",
+        "rowCount": 5,
+        "className": "vg-row",
+        "inlineGridTemplateColumns": "repeat(6, 156.667px)",
+        "computedGridTemplateColumns": "156.664px 156.664px 156.664px 156.664px 156.664px 156.664px",
+        "columnCount": 6,
+        "columnGap": "14px",
+        "rowGap": "normal",
+        "padding": {
+          "left": "22px",
+          "right": "22px"
+        },
+        "clientWidth": 1054,
+        "rect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 1248,
+          "bottom": 398.3,
+          "width": 1010,
+          "height": 265.3
+        },
+        "scrollContainer": {
+          "className": "folder-scroll",
+          "ariaLabel": "文件网格",
+          "clientWidth": 1054,
+          "clientHeight": 659,
+          "scrollHeight": 458751
+        }
+      },
+      "cards": {
+        "selector": ".grid-card",
+        "totalCount": 30,
+        "visibleCount": 18,
+        "firstCardTag": "ARTICLE",
+        "firstCardClass": "grid-card",
+        "firstCardRect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 394.7,
+          "bottom": 398.3,
+          "width": 156.7,
+          "height": 265.3
+        },
+        "firstCardWidth": 156.7,
+        "firstCardHeight": 265.3,
+        "coverRect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 394.7,
+          "bottom": 341.9,
+          "width": 156.7,
+          "height": 208.9
+        },
+        "coverWidth": 156.7,
+        "coverHeight": 208.9,
+        "coverAspectRatioCss": "auto",
+        "coverAspectRatioMeasured": 0.75,
+        "coverBorderRadius": "7px",
+        "heartCount": 30,
+        "selectedCount": 0,
+        "cosMoreExists": false,
+        "firstCardText": "51酱｜修女（原创写真）33 张 · 2026年8月20日",
+        "firstCardSecondLine": "33 张 · 2026年8月20日"
+      },
+      "text": {
+        "name": {
+          "text": "51酱｜修女（原创写真）",
+          "fontSize": "12px",
+          "lineHeight": "16.2px",
+          "marginTop": "7px",
+          "minHeight": "32.4px",
+          "color": "rgb(233, 233, 236)",
+          "fontWeight": "400"
+        },
+        "meta": {
+          "text": "33 张 · 2026年8月20日",
+          "fontSize": "11px",
+          "lineHeight": "normal",
+          "marginTop": "2px",
+          "minHeight": "auto",
+          "color": "rgb(152, 152, 159)",
+          "fontWeight": "400"
+        }
+      },
+      "cardTextSamples": [
+        "51酱｜修女（原创写真）33 张 · 2026年8月20日",
+        "阿半今天很开心｜爱宕·兔女郎（碧蓝航线）27 张 · 2026年8月20日",
+        "阿半今天很开心｜透明女仆（原创写真）39 张 · 2026年8月20日"
+      ],
+      "screenshot": {
+        "path": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/B-folder-1280x800.png",
+        "width": 1280,
+        "height": 800,
+        "emulated": true
+      }
+    },
+    "C": {
+      "kind": "cosPhotos",
+      "sidebarActiveItem": "Cos 图库",
+      "viewport": {
+        "innerWidth": 1280,
+        "innerHeight": 800,
+        "devicePixelRatio": 2
+      },
+      "sidebar": {
+        "width": 216,
+        "collapsed": "false"
+      },
+      "pageHeader": {
+        "rect": {
+          "x": 216,
+          "y": 76,
+          "top": 76,
+          "left": 216,
+          "right": 1280,
+          "bottom": 115,
+          "width": 1064,
+          "height": 39
+        },
+        "height": 39,
+        "className": "page-header page-header-compact page-header-inline",
+        "padding": {
+          "top": "8px",
+          "bottom": "8px",
+          "left": "18px",
+          "right": "18px"
+        },
+        "crumbCount": 0,
+        "crumbs": [],
+        "title": "51酱｜修女（原创写真）",
+        "count": "33 张照片",
+        "controlSummary": {
+          "select": 0,
+          "search": 0,
+          "range": 0,
+          "iconButton": 3,
+          "button": 3,
+          "input": 0
+        },
+        "controlDetail": [
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "上一套",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "下一套",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "随机一套",
+            "text": null
+          }
+        ]
+      },
+      "grid": {
+        "containerSelector": ".cos-grid",
+        "className": "cos-grid photos",
+        "computedGridTemplateColumns": "190.797px 190.797px 190.805px 190.797px 190.805px",
+        "columnCount": 5,
+        "columnGap": "14px",
+        "rowGap": "16px",
+        "padding": {
+          "left": "0px",
+          "right": "0px",
+          "top": "0px",
+          "bottom": "0px"
+        },
+        "clientWidth": 1010,
+        "rect": {
+          "x": 238,
+          "y": 131,
+          "top": 131,
+          "left": 238,
+          "right": 1248,
+          "bottom": 1266,
+          "width": 1010,
+          "height": 1135
+        },
+        "scrollContainer": {
+          "className": "cos-scroll",
+          "clientWidth": 1054,
+          "clientHeight": 661,
+          "scrollHeight": 1175
+        }
+      },
+      "cards": {
+        "selector": ".cos-card",
+        "totalCount": 33,
+        "visibleCount": 15,
+        "firstCardTag": "BUTTON",
+        "firstCardClass": "cos-card",
+        "firstCardRect": {
+          "x": 238,
+          "y": 131,
+          "top": 131,
+          "left": 238,
+          "right": 428.8,
+          "bottom": 424.8,
+          "width": 190.8,
+          "height": 293.8
+        },
+        "firstCardWidth": 190.8,
+        "firstCardHeight": 293.8,
+        "coverRect": {
+          "x": 238,
+          "y": 131,
+          "top": 131,
+          "left": 238,
+          "right": 428.8,
+          "bottom": 385.4,
+          "width": 190.8,
+          "height": 254.4
+        },
+        "coverWidth": 190.8,
+        "coverHeight": 254.4,
+        "coverAspectRatioCss": "3 / 4",
+        "coverAspectRatioMeasured": 0.75,
+        "coverBorderRadius": "7px",
+        "heartCount": 0,
+        "selectedCount": 0,
+        "cosMoreExists": false,
+        "firstCardText": "51酱｜修女（原创写真） 001.jpg",
+        "firstCardSecondLine": null
+      },
+      "text": {
+        "name": {
+          "text": "51酱｜修女（原创写真） 001.jpg",
+          "fontSize": "12px",
+          "lineHeight": "16.2px",
+          "marginTop": "7px",
+          "minHeight": "32.4px",
+          "color": "rgb(233, 233, 236)",
+          "fontWeight": "400"
+        },
+        "meta": null
+      },
+      "cardTextSamples": [
+        "51酱｜修女（原创写真） 001.jpg",
+        "51酱｜修女（原创写真） 002.jpg",
+        "51酱｜修女（原创写真） 003.jpg"
+      ],
+      "screenshot": {
+        "path": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/C-cos-set-photos.png",
+        "width": 1280,
+        "height": 800,
+        "emulated": true
+      },
+      "setTitle": "51酱｜修女（原创写真）"
+    },
+    "D": {
+      "kind": "grid",
+      "sidebarActiveItem": "300-Cos套图库",
+      "viewport": {
+        "innerWidth": 1280,
+        "innerHeight": 800,
+        "devicePixelRatio": 2
+      },
+      "sidebar": {
+        "width": 216,
+        "collapsed": "false"
+      },
+      "pageHeader": {
+        "rect": {
+          "x": 216,
+          "y": 76,
+          "top": 76,
+          "left": 216,
+          "right": 1280,
+          "bottom": 117,
+          "width": 1064,
+          "height": 41
+        },
+        "height": 41,
+        "className": "page-header page-header-compact page-header-inline",
+        "padding": {
+          "top": "8px",
+          "bottom": "8px",
+          "left": "18px",
+          "right": "18px"
+        },
+        "crumbCount": 2,
+        "crumbs": [
+          "文件夹",
+          "300-Cos套图库"
+        ],
+        "title": "51酱｜修女（原创写真）",
+        "count": "33 张照片 · 1 个其他文件",
+        "controlSummary": {
+          "select": 1,
+          "search": 0,
+          "range": 1,
+          "iconButton": 6,
+          "button": 8,
+          "input": 1
+        },
+        "controlDetail": [
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "page-header-crumb",
+            "ariaLabel": null,
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "page-header-crumb",
+            "ariaLabel": null,
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "上一套",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "下一套",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "收藏这个相簿",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "设置",
+            "text": null
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "完整显示",
+            "text": null
+          },
+          {
+            "tag": "SELECT",
+            "type": "select-one",
+            "className": "ctrl-select",
+            "ariaLabel": "排序",
+            "text": "名称大小修改日期"
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button",
+            "className": "icon-button",
+            "ariaLabel": "升序，点击改为降序",
+            "text": null
+          },
+          {
+            "tag": "INPUT",
+            "type": "range",
+            "className": "ctrl-range",
+            "ariaLabel": "缩略图大小",
+            "text": null
+          }
+        ]
+      },
+      "grid": {
+        "containerSelector": ".vg-row",
+        "rowCount": 5,
+        "className": "vg-row",
+        "inlineGridTemplateColumns": "repeat(6, 156.667px)",
+        "computedGridTemplateColumns": "156.664px 156.664px 156.664px 156.664px 156.664px 156.664px",
+        "columnCount": 6,
+        "columnGap": "14px",
+        "rowGap": "normal",
+        "padding": {
+          "left": "22px",
+          "right": "22px"
+        },
+        "clientWidth": 1054,
+        "rect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 1248,
+          "bottom": 398.3,
+          "width": 1010,
+          "height": 265.3
+        },
+        "scrollContainer": {
+          "className": "folder-scroll",
+          "ariaLabel": "文件网格",
+          "clientWidth": 1054,
+          "clientHeight": 659,
+          "scrollHeight": 1737
+        }
+      },
+      "cards": {
+        "selector": ".grid-card",
+        "totalCount": 30,
+        "visibleCount": 18,
+        "firstCardTag": "ARTICLE",
+        "firstCardClass": "grid-card",
+        "firstCardRect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 394.7,
+          "bottom": 398.3,
+          "width": 156.7,
+          "height": 265.3
+        },
+        "firstCardWidth": 156.7,
+        "firstCardHeight": 265.3,
+        "coverRect": {
+          "x": 238,
+          "y": 133,
+          "top": 133,
+          "left": 238,
+          "right": 394.7,
+          "bottom": 341.9,
+          "width": 156.7,
+          "height": 208.9
+        },
+        "coverWidth": 156.7,
+        "coverHeight": 208.9,
+        "coverAspectRatioCss": "auto",
+        "coverAspectRatioMeasured": 0.75,
+        "coverBorderRadius": "7px",
+        "heartCount": 30,
+        "selectedCount": 0,
+        "cosMoreExists": false,
+        "firstCardText": "51酱｜修女（原创写真） 001.jpg825 KB · 2022年12月7日",
+        "firstCardSecondLine": "825 KB · 2022年12月7日"
+      },
+      "text": {
+        "name": {
+          "text": "51酱｜修女（原创写真） 001.jpg",
+          "fontSize": "12px",
+          "lineHeight": "16.2px",
+          "marginTop": "7px",
+          "minHeight": "32.4px",
+          "color": "rgb(233, 233, 236)",
+          "fontWeight": "400"
+        },
+        "meta": {
+          "text": "825 KB · 2022年12月7日",
+          "fontSize": "11px",
+          "lineHeight": "normal",
+          "marginTop": "2px",
+          "minHeight": "auto",
+          "color": "rgb(152, 152, 159)",
+          "fontWeight": "400"
+        }
+      },
+      "cardTextSamples": [
+        "51酱｜修女（原创写真） 001.jpg825 KB · 2022年12月7日",
+        "51酱｜修女（原创写真） 002.jpg908 KB · 2022年12月7日",
+        "51酱｜修女（原创写真） 003.jpg1407 KB · 2022年12月7日"
+      ],
+      "screenshot": {
+        "path": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/D-folder-photos.png",
+        "width": 1280,
+        "height": 800,
+        "emulated": true
+      },
+      "dSearch": {
+        "candidate": "51酱｜修女（原创写真）",
+        "typedAriaLabel": "搜索这个文件夹",
+        "beforeTitle": "300-Cos套图库",
+        "enteredFolderName": "51酱｜修女（原创写真）"
+      }
+    }
+  },
+  "smoke": {
+    "initialSidebarItems": [
+      "文件夹",
+      "我的收藏",
+      "Cos 图库",
+      "全部作品",
+      "按角色",
+      "按署名",
+      "300-Cos套图库",
+      "打开文件夹"
+    ]
+  },
+  "summary": {
+    "A": {
+      "page": "A",
+      "title": "全部作品",
+      "count": "9,591 套",
+      "headerHeight": 41,
+      "headerClass": "page-header page-header-compact page-header-inline",
+      "crumbCount": 0,
+      "headerControls": {
+        "select": 0,
+        "search": 1,
+        "range": 0,
+        "iconButton": 0,
+        "button": 0,
+        "input": 1
+      },
+      "columns": 5,
+      "columnGap": "14px",
+      "rowGap": "16px",
+      "cardWidth": 190.8,
+      "coverWidth": 190.8,
+      "coverHeight": 254.4,
+      "cardTag": "BUTTON",
+      "heartCount": 0,
+      "selectedCount": 0,
+      "nameFontSize": "12px",
+      "nameLineHeight": "16.2px",
+      "nameColor": "rgb(233, 233, 236)",
+      "metaFontSize": "11px",
+      "metaLineHeight": "normal",
+      "firstCard": "51酱｜修女原创写真 · 33 张",
+      "secondLine": "原创写真 · 33 张"
+    },
+    "B": {
+      "page": "B",
+      "title": "300-Cos套图库",
+      "count": "9,591 个文件夹",
+      "headerHeight": 41,
+      "headerClass": "page-header page-header-compact page-header-inline",
+      "crumbCount": 1,
+      "headerControls": {
+        "select": 1,
+        "search": 0,
+        "range": 1,
+        "iconButton": 3,
+        "button": 4,
+        "input": 1
+      },
+      "columns": 6,
+      "columnGap": "14px",
+      "rowGap": "normal",
+      "cardWidth": 156.7,
+      "coverWidth": 156.7,
+      "coverHeight": 208.9,
+      "cardTag": "ARTICLE",
+      "heartCount": 30,
+      "selectedCount": 0,
+      "nameFontSize": "12px",
+      "nameLineHeight": "16.2px",
+      "nameColor": "rgb(233, 233, 236)",
+      "metaFontSize": "11px",
+      "metaLineHeight": "normal",
+      "firstCard": "51酱｜修女（原创写真）33 张 · 2026年8月20日",
+      "secondLine": "33 张 · 2026年8月20日"
+    },
+    "C": {
+      "page": "C",
+      "title": "51酱｜修女（原创写真）",
+      "count": "33 张照片",
+      "headerHeight": 39,
+      "headerClass": "page-header page-header-compact page-header-inline",
+      "crumbCount": 0,
+      "headerControls": {
+        "select": 0,
+        "search": 0,
+        "range": 0,
+        "iconButton": 3,
+        "button": 3,
+        "input": 0
+      },
+      "columns": 5,
+      "columnGap": "14px",
+      "rowGap": "16px",
+      "cardWidth": 190.8,
+      "coverWidth": 190.8,
+      "coverHeight": 254.4,
+      "cardTag": "BUTTON",
+      "heartCount": 0,
+      "selectedCount": 0,
+      "nameFontSize": "12px",
+      "nameLineHeight": "16.2px",
+      "nameColor": "rgb(233, 233, 236)",
+      "metaFontSize": null,
+      "metaLineHeight": null,
+      "firstCard": "51酱｜修女（原创写真） 001.jpg",
+      "secondLine": null
+    },
+    "D": {
+      "page": "D",
+      "title": "51酱｜修女（原创写真）",
+      "count": "33 张照片 · 1 个其他文件",
+      "headerHeight": 41,
+      "headerClass": "page-header page-header-compact page-header-inline",
+      "crumbCount": 2,
+      "headerControls": {
+        "select": 1,
+        "search": 0,
+        "range": 1,
+        "iconButton": 6,
+        "button": 8,
+        "input": 1
+      },
+      "columns": 6,
+      "columnGap": "14px",
+      "rowGap": "normal",
+      "cardWidth": 156.7,
+      "coverWidth": 156.7,
+      "coverHeight": 208.9,
+      "cardTag": "ARTICLE",
+      "heartCount": 30,
+      "selectedCount": 0,
+      "nameFontSize": "12px",
+      "nameLineHeight": "16.2px",
+      "nameColor": "rgb(233, 233, 236)",
+      "metaFontSize": "11px",
+      "metaLineHeight": "normal",
+      "firstCard": "51酱｜修女（原创写真） 001.jpg825 KB · 2022年12月7日",
+      "secondLine": "825 KB · 2022年12月7日"
+    },
+    "shots": [
+      {
+        "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/A-cos-all-1280x800.png",
+        "width": 1280,
+        "height": 800,
+        "bytes": 959967,
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "dpr": 2
+        },
+        "cdpDprEmulationUsed": true
+      },
+      {
+        "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/B-folder-1280x800.png",
+        "width": 1280,
+        "height": 800,
+        "bytes": 1035571,
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "dpr": 2
+        },
+        "cdpDprEmulationUsed": true
+      },
+      {
+        "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/C-cos-set-photos.png",
+        "width": 1280,
+        "height": 800,
+        "bytes": 868962,
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "dpr": 2
+        },
+        "cdpDprEmulationUsed": true
+      },
+      {
+        "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/D-folder-photos.png",
+        "width": 1280,
+        "height": 800,
+        "bytes": 876619,
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "dpr": 2
+        },
+        "cdpDprEmulationUsed": true
+      }
+    ]
+  },
+  "steps": [
+    {
+      "page": "A",
+      "ok": true,
+      "error": null
+    },
+    {
+      "page": "B",
+      "ok": true,
+      "error": null
+    },
+    {
+      "page": "C",
+      "ok": true,
+      "error": null
+    },
+    {
+      "page": "D",
+      "ok": true,
+      "error": null
+    }
+  ],
+  "ok": true
+}
