@@ -17,6 +17,7 @@ const APP = process.env.PAV_APP
   || path.join(ROOT, 'dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer');
 const EVID = path.join(ROOT, '.3things/acceptance/evidence/cos-vs-folder');
 const REAL_CATALOG = path.join(os.homedir(), 'Library/Application Support/photo-album-viewer/cos-library-catalog-v1.json');
+const REAL_FAVORITES = path.join(os.homedir(), 'Library/Application Support/photo-album-viewer/favorites.json');
 const LIBRARY_SOURCES = {
   schemaVersion: 1,
   sources: [{
@@ -165,22 +166,24 @@ function measureExpression(kind) {
     let grid = null;
     if (isGrid) {
       const row = document.querySelector('.vg-row');
+      const flow = document.querySelector('.card-grid');
       const inner = document.querySelector('.folder-scroll-inner');
-      const scroll = document.querySelector('.folder-scroll');
-      const rowCs = row ? getComputedStyle(row) : null;
+      const scroll = document.querySelector('.folder-scroll') || document.querySelector('.fav-scroll');
+      const container = row || flow;
+      const containerCs = container ? getComputedStyle(container) : null;
       const innerCs = inner ? getComputedStyle(inner) : null;
       grid = {
-        containerSelector: '.vg-row',
+        containerSelector: row ? '.vg-row' : (flow ? '.card-grid' : null),
         rowCount: document.querySelectorAll('.vg-row').length,
-        className: row ? row.className : null,
+        className: container ? container.className : null,
         inlineGridTemplateColumns: row ? row.style.gridTemplateColumns : null,
-        computedGridTemplateColumns: rowCs ? rowCs.gridTemplateColumns : null,
-        columnCount: rowCs ? rowCs.gridTemplateColumns.split(' ').filter(Boolean).length : 0,
-        columnGap: rowCs ? rowCs.columnGap : null,
-        rowGap: rowCs ? rowCs.rowGap : null,
+        computedGridTemplateColumns: containerCs ? containerCs.gridTemplateColumns : null,
+        columnCount: containerCs ? containerCs.gridTemplateColumns.split(' ').filter(Boolean).length : 0,
+        columnGap: containerCs ? containerCs.columnGap : null,
+        rowGap: containerCs ? containerCs.rowGap : null,
         padding: innerCs ? { left: innerCs.paddingLeft, right: innerCs.paddingRight } : null,
-        clientWidth: inner ? inner.clientWidth : null,
-        rect: R(row),
+        clientWidth: (inner || container) ? (inner || container).clientWidth : null,
+        rect: R(container),
         scrollContainer: scroll ? {
           className: scroll.className,
           ariaLabel: scroll.getAttribute('aria-label'),
@@ -321,6 +324,14 @@ async function main() {
   measurements.meta.catalogBytes = fs.statSync(REAL_CATALOG).size;
   measurements.meta.catalogCopyMs = Date.now() - t0;
   log(`已复制 COS 索引缓存 ${(measurements.meta.catalogBytes / 1024 / 1024).toFixed(1)}MB，用时 ${measurements.meta.catalogCopyMs}ms`);
+  try {
+    fs.copyFileSync(REAL_FAVORITES, path.join(profileDir, 'favorites.json'));
+    measurements.meta.favoritesCopied = true;
+    log('已复制收藏数据（用于收藏页卡片比对）');
+  } catch (error) {
+    measurements.meta.favoritesCopied = false;
+    log(`复制收藏数据失败：${error.message}`);
+  }
 
   const child = spawn(APP, [
     `--remote-debugging-port=${port}`,
@@ -499,6 +510,19 @@ async function main() {
       } catch (_error) { /* ignore */ }
     }
 
+    // ---------- E：我的收藏（S4 卡片一致性） ----------
+    try {
+      await clickByText('.sidebar-item', '我的收藏', '侧栏「我的收藏」');
+      await waitFor(`document.querySelectorAll(".grid-card").length > 0 && String(document.querySelector('.page-header-title-compact, .page-header-title')?.textContent || '').includes('收藏')`, 60000, '收藏页网格');
+      await sleep(2000);
+      const data = await measure('grid');
+      data.screenshot = await takeScreenshot('E-favorites.png');
+      recordStep('E', true, data);
+    } catch (error) {
+      recordStep('E', false, null, error.message);
+      measurements.pages.E = { failed: true, error: error.message };
+    }
+
     // ---------- C：COS 套图照片页 ----------
     const cHints = { title: null, setCardName: null };
     try {
@@ -639,6 +663,7 @@ async function main() {
       B: summarize('B'),
       C: summarize('C'),
       D: summarize('D'),
+      E: summarize('E'),
       shots
     };
     measurements.steps = steps;
@@ -677,6 +702,18 @@ async function main() {
     };
     comparePair('A', 'B', '套图列表 vs 文件夹网格');
     comparePair('C', 'D', '套图照片页 vs 文件夹照片页');
+    const favorites = measurements.summary.E;
+    const folderGrid = measurements.summary.B;
+    if (favorites && folderGrid) {
+      check('收藏页与文件夹网格列数一致', favorites.columns === folderGrid.columns,
+        `${favorites.columns} vs ${folderGrid.columns}`);
+      check('收藏页与文件夹网格卡宽一致(±0.5px)', close(favorites.cardWidth, folderGrid.cardWidth),
+        `${favorites.cardWidth} vs ${folderGrid.cardWidth}`);
+      check('收藏页用共用卡片', favorites.cardTag === 'ARTICLE', favorites.cardTag);
+      check('收藏页卡片有收藏心形', favorites.heartCount > 0, favorites.heartCount);
+    } else {
+      check('收藏页测得', false, `E=${Boolean(favorites)} B=${Boolean(folderGrid)}`);
+    }
     measurements.parity = {
       checks,
       ok: checks.every((item) => item.ok),

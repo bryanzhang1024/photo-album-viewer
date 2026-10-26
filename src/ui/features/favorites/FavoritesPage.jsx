@@ -3,6 +3,7 @@ import PageHeader from '../../shell/PageHeader';
 import useBreakpoint, { isNarrowBreakpoint } from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import Thumb from '../../components/Thumb';
+import GridCard from '../../components/GridCard';
 import ImageViewer from '../../components/ImageViewer';
 import { HeartIcon, GridIcon, ListIcon, FolderIcon } from '../../icons';
 import { loadFavorites, saveFavorites } from '../../data/favorites';
@@ -20,17 +21,25 @@ function coverSamples(item) {
   return [];
 }
 
-function Collage({ samples }) {
+/**
+ * 收藏卡封面：用共用卡的封面槽。相簿/相册取单张，文件夹取最多 4 张拼贴；
+ * 位置失效时保留占位与「位置不可用」角标（原样搬自旧 fav-cover）。
+ */
+function FavoriteCover({ samples, broken }) {
   const taken = samples.slice(0, 4);
-  if (taken.length === 0) {
-    return <div className="fav-noCover"><FolderIcon /></div>;
-  }
   return (
-    <div className={`fav-collage${taken.length === 1 ? ' single' : ''}`}>
-      {taken.map((sample) => (
-        <div key={sample} className="fav-tile"><Thumb absolutePath={sample} /></div>
-      ))}
-    </div>
+    <>
+      {taken.length === 0 ? (
+        <div className="fav-noCover"><FolderIcon /></div>
+      ) : (
+        <div className={`collage${taken.length === 1 ? ' single' : ''}`}>
+          {taken.map((sample) => (
+            <div key={sample} className="fav-tile"><Thumb absolutePath={sample} /></div>
+          ))}
+        </div>
+      )}
+      {broken ? <span className="fav-broken">位置不可用</span> : null}
+    </>
   );
 }
 
@@ -157,30 +166,22 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="fav-scroll">
-              <div className="fav-grid">
+              <div className="card-grid">
                 {folders.map((item) => {
                   const broken = !item.sourceId || typeof item.relativePath !== 'string';
+                  const samples = coverSamples(item);
+                  const single = item.kind === 'photoSet' || item.kind === 'album';
                   return (
-                    <div className="fav-card" key={item.id}>
-                      <button className={`fav-cover${broken ? ' broken' : ''}`} type="button"
-                        onClick={() => openFolder(item)}>
-                        <Collage
-                          samples={item.kind === 'photoSet' || item.kind === 'album'
-                            ? coverSamples(item).slice(0, 1)
-                            : coverSamples(item)}
-                        />
-                        {broken ? <span className="fav-broken">位置不可用</span> : null}
-                      </button>
-                      <div className="fav-name">{item.name}</div>
-                      <div className="fav-meta">
-                        文件夹
-                        {Number.isFinite(item.imageCount) ? ` · ${item.imageCount} 张` : ''}
-                        <button className="fav-heart" type="button" aria-label="取消收藏"
-                          onClick={() => removeItem(item)}>
-                          <HeartIcon />
-                        </button>
-                      </div>
-                    </div>
+                    <GridCard
+                      key={item.id}
+                      dataKey={item.id}
+                      name={item.name}
+                      meta={`文件夹${Number.isFinite(item.imageCount) ? ` · ${item.imageCount} 张` : ''}`}
+                      cover={<FavoriteCover samples={single ? samples.slice(0, 1) : samples} broken={broken} />}
+                      favorited
+                      onToggleFavorite={() => removeItem(item)}
+                      onClick={() => openFolder(item)}
+                    />
                   );
                 })}
               </div>
@@ -217,21 +218,20 @@ export default function FavoritesPage({ onOpenFolder, onOpenImage }) {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="fav-scroll">
-              <div className="fav-grid photos">
+              <div className="card-grid">
                 {images.map((image, index) => (
-                  <div className="fav-card" key={image.id || image.path}>
-                    <button className="fav-cover photo" type="button" onClick={() => setViewerIndex(index)}>
-                      {image.path ? <Thumb absolutePath={image.path} /> : <div className="fav-noCover"><FolderIcon /></div>}
-                    </button>
-                    <div className="fav-name">{image.name}</div>
-                    <div className="fav-meta">
-                      {image.albumName || '图片'}
-                      <button className="fav-heart" type="button" aria-label="取消收藏"
-                        onClick={() => removeItem(image)}>
-                        <HeartIcon />
-                      </button>
-                    </div>
-                  </div>
+                  <GridCard
+                    key={image.id || image.path}
+                    dataKey={image.id || image.path}
+                    name={image.name}
+                    meta={image.albumName || '图片'}
+                    cover={image.path
+                      ? <Thumb absolutePath={image.path} />
+                      : <div className="fav-noCover"><FolderIcon /></div>}
+                    favorited
+                    onToggleFavorite={() => removeItem(image)}
+                    onClick={() => setViewerIndex(index)}
+                  />
                 ))}
               </div>
             </div>

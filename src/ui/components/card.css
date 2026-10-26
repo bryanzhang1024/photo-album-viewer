@@ -98,3 +98,8 @@
   gap: 1px;
   height: 100%;
 }
+
+.collage.single {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}

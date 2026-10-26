@@ -45,11 +45,11 @@ describe('收藏页', () => {
     await screen.findByText('收藏的文件夹');
 
     await userEvent.click(screen.getByRole('button', { name: /图片/ }));
-    await waitFor(() => expect(container.querySelector('.fav-grid')).toBeTruthy());
+    await waitFor(() => expect(container.querySelector('.card-grid')).toBeTruthy());
 
     await userEvent.click(screen.getByRole('button', { name: '列表视图' }));
     await waitFor(() => expect(container.querySelectorAll('.fav-row').length).toBe(1));
-    expect(container.querySelector('.fav-grid')).toBeNull();
+    expect(container.querySelector('.card-grid')).toBeNull();
   });
 
   test('收藏页可切换排序字段与方向', async () => {
@@ -63,5 +63,19 @@ describe('收藏页', () => {
     // 默认按收藏时间倒序，点一下变升序
     await userEvent.click(screen.getByRole('button', { name: /降序，点击改为升序/ }));
     expect(screen.getByRole('button', { name: /升序，点击改为降序/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('网格卡片与文件夹页共用同一套卡片（S4）', async () => {
+    const { container } = render(<FavoritesPage />);
+    await screen.findByText('收藏的文件夹');
+
+    const cards = container.querySelectorAll('.grid-card');
+    expect(cards.length).toBe(2);
+    expect(container.querySelector('.fav-card')).toBeNull();
+    expect(cards[0].querySelector('.grid-card-cover')).toBeTruthy();
+    expect(cards[0].querySelector('.grid-card-name').textContent).toBe('收藏的文件夹');
+    expect(cards[0].querySelector('.grid-card-meta').textContent).toBe('文件夹 · 8 张');
+    // 收藏页的卡都是已收藏状态，心形常显
+    expect(cards[0].querySelector('.card-heart.favorited')).toBeTruthy();
   });
 });
