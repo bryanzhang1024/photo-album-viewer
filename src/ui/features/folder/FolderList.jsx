@@ -3,7 +3,7 @@ import {
   FolderIcon, VideoIcon, ArchiveIcon, DocumentIcon, AudioIcon, InstallerIcon, FileIcon
 } from '../../icons';
 import Thumb from '../../components/Thumb';
-import { formatDate } from './GridCard';
+import { formatDate } from '../../components/cardModel';
 import { fileKindLabel, formatFileSize } from '../../data/files';
 
 const ROW_HEIGHT = 34;

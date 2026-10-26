@@ -37,6 +37,8 @@
   --content-pad-y: 16px;
   --grid-gap-x: 14px;
   --grid-gap-y: 16px;
+  /* 流式网格的最小卡宽：与"紧凑"缩略图档一致（2026-10-26 拍板以照片来源为基准） */
+  --card-min-width: 148px;
   --radius-card: 7px;
   --radius-control: 6px;
   --radius-window: 11px;

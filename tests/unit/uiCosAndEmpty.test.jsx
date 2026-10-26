@@ -57,11 +57,13 @@ describe('Cos 各页与空态（R23 / R28）', () => {
     expect(await screen.findByText('克鲁鲁')).toBeInTheDocument();
     expect(screen.getAllByText(/1,341 个角色/).length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByText('克鲁鲁').closest('button'));
+    await userEvent.click(screen.getByText('克鲁鲁').closest('.grid-card'));
     expect(onOpenEntity).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }));
 
     // 封面与套图页一致是 3:4，不能再有 1:1 的 square
-    const cover = document.querySelector('.cos-cover');
+    // 共用卡片：封面统一走 .grid-card-cover，不再有 Cos 专用的 .cos-cover / 1:1 变体
+    const cover = document.querySelector('.grid-card-cover');
+    expect(cover).toBeTruthy();
     expect(cover.className).not.toContain('square');
   });
 
@@ -95,7 +97,7 @@ describe('Cos 各页与空态（R23 / R28）', () => {
     expect(await screen.findByText('流萤')).toBeInTheDocument();
     expect(screen.getAllByText(/1 套/).length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByText('流萤').closest('button'));
+    await userEvent.click(screen.getByText('流萤').closest('.grid-card'));
     expect(onOpenSet).toHaveBeenCalledWith(
       expect.objectContaining({ id: 's1' }),
       expect.objectContaining({ sortBy: 'name', coserId: 'coser1' })

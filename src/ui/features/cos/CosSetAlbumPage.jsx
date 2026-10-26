@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
 import useBreakpoint from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import Thumb from '../../components/Thumb';
+import GridCard from '../../components/GridCard';
+import VirtualGrid from '../../components/VirtualGrid';
 import ImageViewer from '../../components/ImageViewer';
 import { ChevronLeftIcon, ChevronRightIcon, ShuffleIcon } from '../../icons';
+import { DEFAULT_MIN_ITEM_WIDTH } from '../../data/prefs';
 import {
   getSet, getSetImages, listSetIds, listRandomSetIds
 } from '../../data/cos';
+import { photoCardItems } from './cardItems';
 import './cos.css';
 
 const PAGE_SIZE = 120;
@@ -106,6 +110,7 @@ export default function CosSetAlbumPage({ setId, setName, options = null, onNavi
 
   const title = set?.displayName || setName || '套图';
   const countText = total > 0 ? `${Number(total).toLocaleString('zh-CN')} 张照片` : '读取中…';
+  const cards = useMemo(() => photoCardItems(images), [images]);
   const viewerImages = images.map((image) => ({
     path: image.path,
     name: image.name,
@@ -137,20 +142,29 @@ export default function CosSetAlbumPage({ setId, setName, options = null, onNavi
         )}
       />
       <div className="folder-body">
-        <div className="cos-scroll" onScroll={(event) => {
-          const el = event.currentTarget;
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 600) loadMore();
-        }}>
-          <div className="cos-grid photos">
-            {images.map((image, index) => (
-              <button className="cos-card" type="button" key={image.path} onClick={() => setViewerIndex(index)}>
-                <div className="cos-cover"><Thumb absolutePath={image.path} /></div>
-                <div className="cos-name">{image.name}</div>
-              </button>
-            ))}
-          </div>
-          {loading ? <div className="cos-more">加载中…</div> : null}
-        </div>
+        {cards.length === 0 ? (
+          <div className="folder-state">{total > 0 ? '读取中…' : '这套图里没有照片'}</div>
+        ) : (
+          <VirtualGrid
+            items={cards}
+            minItemWidth={DEFAULT_MIN_ITEM_WIDTH}
+            hasMore={hasMore}
+            loadingMore={loading}
+            onLoadMore={loadMore}
+            renderItem={(card, width, coverHeight) => (
+              <GridCard
+                key={card.key}
+                dataKey={card.key}
+                width={width}
+                coverHeight={coverHeight}
+                name={card.name}
+                meta={card.meta}
+                cover={<Thumb absolutePath={card.payload.image.path} />}
+                onClick={() => setViewerIndex(card.payload.index)}
+              />
+            )}
+          />
+        )}
       </div>
       <StatusBar left={countText} right={STATUS_HINTS} />
       {viewerIndex !== null && viewerImages[viewerIndex] ? (

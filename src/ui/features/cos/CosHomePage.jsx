@@ -3,7 +3,9 @@ import PageHeader from '../../shell/PageHeader';
 import useBreakpoint from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
+import GridCard from '../../components/GridCard';
 import { getStatus, listSets, listCharacters, listCosers, refresh, selectRoot, removeRoot } from '../../data/cos';
+import { setCardItems } from './cardItems';
 import { CHANNELS } from '../../data/ipc';
 import { RotateIcon } from '../../icons';
 import './cos.css';
@@ -184,14 +186,16 @@ export default function CosHomePage({ onNavigate }) {
           </div>
 
           <div className="cos-section-head">最近添加</div>
-          <div className="cos-grid">
-            {recent.map((set) => (
-              <button className="cos-card" type="button" key={set.id}
-                onClick={() => onNavigate?.({ kind: 'cos-set', setId: set.id })}>
-                <div className="cos-cover"><CosThumb mediaId={set.coverMediaId} /></div>
-                <div className="cos-name">{set.displayName}</div>
-                <div className="cos-meta">{set.imageCount} 张</div>
-              </button>
+          <div className="card-grid">
+            {setCardItems(recent).map((card) => (
+              <GridCard
+                key={card.key}
+                dataKey={card.key}
+                name={card.name}
+                meta={card.meta}
+                cover={<CosThumb mediaId={card.coverMediaId} />}
+                onClick={() => onNavigate?.({ kind: 'cos-set', setId: card.payload.id })}
+              />
             ))}
           </div>
         </div>

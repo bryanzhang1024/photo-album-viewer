@@ -1,49 +1,51 @@
 {
   "meta": {
-    "startedAt": "2026-10-26T13:18:48.758Z",
-    "appBinary": "/Users/clover/Develop/photo-album-viewer6/dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
-    "profileDir": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-cezXfp",
-    "port": 65415,
-    "appLogPath": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-app-1793020728761.log",
+    "startedAt": "2026-10-26T13:53:58.516Z",
+    "appBinary": "/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+    "profileDir": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-mLQVo9",
+    "port": 57811,
+    "appLogPath": "/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-app-1793022838517.log",
     "catalogSource": "/Users/clover/Library/Application Support/photo-album-viewer/cos-library-catalog-v1.json",
     "catalogCopied": true,
     "pageSizes": "窗口默认 1280x800，未改尺寸",
     "note": "隔离 profile，只读访问真实图库；未点击刷新索引/添加根目录/移除来源，未收藏",
     "catalogBytes": 112965818,
     "catalogCopyMs": 83,
-    "pid": 95854,
-    "finishedAt": "2026-10-26T13:19:31.164Z",
-    "durationMs": 42406,
+    "pid": 10507,
+    "finishedAt": "2026-10-26T13:54:36.478Z",
+    "durationMs": 37962,
     "logLines": [
-      "[13:18:48] 临时 profile：/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-cezXfp",
-      "[13:18:48] CDP 端口：65415",
-      "[13:18:48] 已复制 COS 索引缓存 107.7MB，用时 83ms",
-      "[13:18:48] 已启动测试实例 PID=95854",
-      "[13:18:49] CDP 已连接",
-      "[13:18:49] 初始侧栏：[\"文件夹\",\"我的收藏\",\"Cos 图库\",\"全部作品\",\"按角色\",\"按署名\",\"300-Cos套图库\",\"打开文件夹\"]",
-      "[13:18:49] 已点击：侧栏「全部作品」",
-      "[13:18:49] 等待COS 套图卡片… 0s",
-      "[13:18:58] 截图：A-cos-all-1280x800.png（1280x800, 937KB）",
-      "[13:18:58] ✓ A 测量完成",
-      "[13:18:58] 已点击：照片来源「300-Cos套图库」",
-      "[13:18:58] 等待文件夹网格卡片… 0s",
-      "[13:19:15] 截图：B-folder-1280x800.png（1280x800, 1011KB）",
-      "[13:19:15] ✓ B 测量完成",
-      "[13:19:15] 已点击：侧栏「全部作品」（回 A）",
-      "[13:19:16] A 第一张卡片：51酱｜修女",
-      "[13:19:16] 等待套图照片网格… 0s",
-      "[13:19:21] 截图：C-cos-set-photos.png（1280x800, 849KB）",
-      "[13:19:21] ✓ C 测量完成",
-      "[13:19:21] 已点击：照片来源（回 B）",
-      "[13:19:22] 等待文件夹卡片（返回）… 0s",
-      "[13:19:24] D 搜索候选：[\"51酱｜修女（原创写真）\",\"51酱｜修女\",\"51酱\",\"修女\"]",
-      "[13:19:25] D 候选「51酱｜修女（原创写真）」→ 1 张卡片（[\"51酱｜修女（原创写真）\"]）",
-      "[13:19:25] 等待进入文件夹照片层… 0s",
-      "[13:19:29] 截图：D-folder-photos.png（1280x800, 856KB）",
-      "[13:19:29] ✓ D 测量完成",
-      "[13:19:31] 已结束自己的进程 PID=95854"
+      "[13:53:58] 临时 profile：/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-mLQVo9",
+      "[13:53:58] CDP 端口：57811",
+      "[13:53:58] 已复制 COS 索引缓存 107.7MB，用时 83ms",
+      "[13:53:58] 已启动测试实例 PID=10507",
+      "[13:53:59] CDP 已连接",
+      "[13:53:59] 等待侧栏… 0s",
+      "[13:54:00] 初始侧栏：[\"文件夹\",\"我的收藏\",\"Cos 图库\",\"全部作品\",\"按角色\",\"按署名\",\"300-Cos套图库\",\"打开文件夹\"]",
+      "[13:54:00] 已点击：侧栏「全部作品」",
+      "[13:54:00] 等待COS 套图网格… 0s",
+      "[13:54:07] 截图：A-cos-all-1280x800.png（1280x800, 992KB）",
+      "[13:54:07] ✓ A 测量完成",
+      "[13:54:07] 已点击：照片来源「300-Cos套图库」",
+      "[13:54:07] 等待文件夹网格卡片… 0s",
+      "[13:54:22] 截图：B-folder-1280x800.png（1280x800, 1011KB）",
+      "[13:54:22] ✓ B 测量完成",
+      "[13:54:22] 已点击：侧栏「全部作品」（回 A）",
+      "[13:54:23] A 第一张卡片：51酱｜修女",
+      "[13:54:23] 等待套图照片网格… 0s",
+      "[13:54:27] 截图：C-cos-set-photos.png（1280x800, 847KB）",
+      "[13:54:27] ✓ C 测量完成",
+      "[13:54:27] 已点击：照片来源（回 B）",
+      "[13:54:28] 等待文件夹卡片（返回）… 0s",
+      "[13:54:30] D 搜索候选：[\"51酱｜修女（原创写真）\",\"51酱｜修女\",\"51酱\",\"修女\"]",
+      "[13:54:31] D 候选「51酱｜修女（原创写真）」→ 1 张卡片（[\"51酱｜修女（原创写真）\"]）",
+      "[13:54:31] 等待进入文件夹照片层… 0s",
+      "[13:54:35] 截图：D-folder-photos.png（1280x800, 856KB）",
+      "[13:54:35] ✓ D 测量完成",
+      "[13:54:35] 一致性断言：12/12 通过",
+      "[13:54:36] 已结束自己的进程 PID=10507"
     ],
-    "appLogTail": "[ThumbnailService] 更新并发度: 6\n\nDevTools listening on ws://127.0.0.1:65415/devtools/browser/0cda1a46-1065-4155-be08-14da2aa5c2b8\n[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/300-Cos套图库\n命令行参数: [\n  '/Users/clover/Develop/photo-album-viewer6/dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer',\n  '--remote-debugging-port=65415',\n  '--user-data-dir=/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-cezXfp'\n]\n解析到的文件夹路径: null\n启动时的初始路径: null\nDOM已就绪\n窗口ready-to-show事件触发\n窗口已显示并聚焦\n[Cos] 缓存预热完成，耗时 98ms（首屏后延迟 5000ms 启动）\n"
+    "appLogTail": "[ThumbnailService] 更新并发度: 6\n\nDevTools listening on ws://127.0.0.1:57811/devtools/browser/e403401d-8b13-4fbf-abce-e7b661645e18\n[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/300-Cos套图库\n命令行参数: [\n  '/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer',\n  '--remote-debugging-port=57811',\n  '--user-data-dir=/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-cosgrid-mLQVo9'\n]\n解析到的文件夹路径: null\n启动时的初始路径: null\nDOM已就绪\n窗口ready-to-show事件触发\n窗口已显示并聚焦\n[Cos] 缓存预热完成，耗时 94ms（首屏后延迟 5000ms 启动）\n"
   },
   "pages": {
     "A": {
@@ -100,72 +102,73 @@
         ]
       },
       "grid": {
-        "containerSelector": ".cos-grid",
-        "className": "cos-grid",
-        "computedGridTemplateColumns": "190.797px 190.797px 190.805px 190.797px 190.805px",
-        "columnCount": 5,
+        "containerSelector": ".vg-row",
+        "rowCount": 5,
+        "className": "vg-row",
+        "inlineGridTemplateColumns": "repeat(6, 156.667px)",
+        "computedGridTemplateColumns": "156.664px 156.664px 156.664px 156.664px 156.664px 156.664px",
+        "columnCount": 6,
         "columnGap": "14px",
-        "rowGap": "16px",
+        "rowGap": "normal",
         "padding": {
-          "left": "0px",
-          "right": "0px",
-          "top": "0px",
-          "bottom": "0px"
+          "left": "22px",
+          "right": "22px"
         },
-        "clientWidth": 1010,
+        "clientWidth": 1054,
         "rect": {
           "x": 238,
           "y": 133,
           "top": 133,
           "left": 238,
           "right": 1248,
-          "bottom": 1494.6,
+          "bottom": 398.3,
           "width": 1010,
-          "height": 1361.6
+          "height": 265.3
         },
         "scrollContainer": {
-          "className": "cos-scroll",
+          "className": "folder-scroll",
+          "ariaLabel": "文件网格",
           "clientWidth": 1054,
           "clientHeight": 659,
-          "scrollHeight": 1450
+          "scrollHeight": 2885
         }
       },
       "cards": {
-        "selector": ".cos-card",
-        "totalCount": 60,
-        "visibleCount": 15,
-        "firstCardTag": "BUTTON",
-        "firstCardClass": "cos-card",
+        "selector": ".grid-card",
+        "totalCount": 30,
+        "visibleCount": 18,
+        "firstCardTag": "ARTICLE",
+        "firstCardClass": "grid-card",
         "firstCardRect": {
           "x": 238,
           "y": 133,
           "top": 133,
           "left": 238,
-          "right": 428.8,
-          "bottom": 443.8,
-          "width": 190.8,
-          "height": 310.8
+          "right": 394.7,
+          "bottom": 398.3,
+          "width": 156.7,
+          "height": 265.3
         },
-        "firstCardWidth": 190.8,
-        "firstCardHeight": 310.8,
+        "firstCardWidth": 156.7,
+        "firstCardHeight": 265.3,
         "coverRect": {
           "x": 238,
           "y": 133,
           "top": 133,
           "left": 238,
-          "right": 428.8,
-          "bottom": 387.4,
-          "width": 190.8,
-          "height": 254.4
+          "right": 394.7,
+          "bottom": 341.9,
+          "width": 156.7,
+          "height": 208.9
         },
-        "coverWidth": 190.8,
-        "coverHeight": 254.4,
-        "coverAspectRatioCss": "3 / 4",
+        "coverWidth": 156.7,
+        "coverHeight": 208.9,
+        "coverAspectRatioCss": "auto",
         "coverAspectRatioMeasured": 0.75,
         "coverBorderRadius": "7px",
         "heartCount": 0,
         "selectedCount": 0,
-        "cosMoreExists": true,
+        "cosMoreExists": false,
         "firstCardText": "51酱｜修女原创写真 · 33 张",
         "firstCardSecondLine": "原创写真 · 33 张"
       },
@@ -207,7 +210,7 @@
       "viewport": {
         "innerWidth": 1280,
         "innerHeight": 800,
-        "devicePixelRatio": 2
+        "devicePixelRatio": 1
       },
       "sidebar": {
         "width": 216,
@@ -400,7 +403,7 @@
       "viewport": {
         "innerWidth": 1280,
         "innerHeight": 800,
-        "devicePixelRatio": 2
+        "devicePixelRatio": 1
       },
       "sidebar": {
         "width": 216,
@@ -462,74 +465,75 @@
         ]
       },
       "grid": {
-        "containerSelector": ".cos-grid",
-        "className": "cos-grid photos",
-        "computedGridTemplateColumns": "190.797px 190.797px 190.805px 190.797px 190.805px",
-        "columnCount": 5,
+        "containerSelector": ".vg-row",
+        "rowCount": 5,
+        "className": "vg-row",
+        "inlineGridTemplateColumns": "repeat(6, 156.667px)",
+        "computedGridTemplateColumns": "156.664px 156.664px 156.664px 156.664px 156.664px 156.664px",
+        "columnCount": 6,
         "columnGap": "14px",
-        "rowGap": "16px",
+        "rowGap": "normal",
         "padding": {
-          "left": "0px",
-          "right": "0px",
-          "top": "0px",
-          "bottom": "0px"
+          "left": "22px",
+          "right": "22px"
         },
-        "clientWidth": 1010,
+        "clientWidth": 1054,
         "rect": {
           "x": 238,
           "y": 131,
           "top": 131,
           "left": 238,
           "right": 1248,
-          "bottom": 1266,
+          "bottom": 396.3,
           "width": 1010,
-          "height": 1135
+          "height": 265.3
         },
         "scrollContainer": {
-          "className": "cos-scroll",
+          "className": "folder-scroll",
+          "ariaLabel": "文件网格",
           "clientWidth": 1054,
           "clientHeight": 661,
-          "scrollHeight": 1175
+          "scrollHeight": 1737
         }
       },
       "cards": {
-        "selector": ".cos-card",
-        "totalCount": 33,
-        "visibleCount": 15,
-        "firstCardTag": "BUTTON",
-        "firstCardClass": "cos-card",
+        "selector": ".grid-card",
+        "totalCount": 30,
+        "visibleCount": 18,
+        "firstCardTag": "ARTICLE",
+        "firstCardClass": "grid-card",
         "firstCardRect": {
           "x": 238,
           "y": 131,
           "top": 131,
           "left": 238,
-          "right": 428.8,
-          "bottom": 424.8,
-          "width": 190.8,
-          "height": 293.8
+          "right": 394.7,
+          "bottom": 396.3,
+          "width": 156.7,
+          "height": 265.3
         },
-        "firstCardWidth": 190.8,
-        "firstCardHeight": 293.8,
+        "firstCardWidth": 156.7,
+        "firstCardHeight": 265.3,
         "coverRect": {
           "x": 238,
           "y": 131,
           "top": 131,
           "left": 238,
-          "right": 428.8,
-          "bottom": 385.4,
-          "width": 190.8,
-          "height": 254.4
+          "right": 394.7,
+          "bottom": 339.9,
+          "width": 156.7,
+          "height": 208.9
         },
-        "coverWidth": 190.8,
-        "coverHeight": 254.4,
-        "coverAspectRatioCss": "3 / 4",
+        "coverWidth": 156.7,
+        "coverHeight": 208.9,
+        "coverAspectRatioCss": "auto",
         "coverAspectRatioMeasured": 0.75,
         "coverBorderRadius": "7px",
         "heartCount": 0,
         "selectedCount": 0,
         "cosMoreExists": false,
-        "firstCardText": "51酱｜修女（原创写真） 001.jpg",
-        "firstCardSecondLine": null
+        "firstCardText": "51酱｜修女（原创写真） 001.jpg825 KB · 2022年12月7日",
+        "firstCardSecondLine": "825 KB · 2022年12月7日"
       },
       "text": {
         "name": {
@@ -541,12 +545,20 @@
           "color": "rgb(233, 233, 236)",
           "fontWeight": "400"
         },
-        "meta": null
+        "meta": {
+          "text": "825 KB · 2022年12月7日",
+          "fontSize": "11px",
+          "lineHeight": "normal",
+          "marginTop": "2px",
+          "minHeight": "auto",
+          "color": "rgb(152, 152, 159)",
+          "fontWeight": "400"
+        }
       },
       "cardTextSamples": [
-        "51酱｜修女（原创写真） 001.jpg",
-        "51酱｜修女（原创写真） 002.jpg",
-        "51酱｜修女（原创写真） 003.jpg"
+        "51酱｜修女（原创写真） 001.jpg825 KB · 2022年12月7日",
+        "51酱｜修女（原创写真） 002.jpg908 KB · 2022年12月7日",
+        "51酱｜修女（原创写真） 003.jpg1407 KB · 2022年12月7日"
       ],
       "screenshot": {
         "path": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/C-cos-set-photos.png",
@@ -562,7 +574,7 @@
       "viewport": {
         "innerWidth": 1280,
         "innerHeight": 800,
-        "devicePixelRatio": 2
+        "devicePixelRatio": 1
       },
       "sidebar": {
         "width": 216,
@@ -813,13 +825,13 @@
         "button": 0,
         "input": 1
       },
-      "columns": 5,
+      "columns": 6,
       "columnGap": "14px",
-      "rowGap": "16px",
-      "cardWidth": 190.8,
-      "coverWidth": 190.8,
-      "coverHeight": 254.4,
-      "cardTag": "BUTTON",
+      "rowGap": "normal",
+      "cardWidth": 156.7,
+      "coverWidth": 156.7,
+      "coverHeight": 208.9,
+      "cardTag": "ARTICLE",
       "heartCount": 0,
       "selectedCount": 0,
       "nameFontSize": "12px",
@@ -877,22 +889,22 @@
         "button": 3,
         "input": 0
       },
-      "columns": 5,
+      "columns": 6,
       "columnGap": "14px",
-      "rowGap": "16px",
-      "cardWidth": 190.8,
-      "coverWidth": 190.8,
-      "coverHeight": 254.4,
-      "cardTag": "BUTTON",
+      "rowGap": "normal",
+      "cardWidth": 156.7,
+      "coverWidth": 156.7,
+      "coverHeight": 208.9,
+      "cardTag": "ARTICLE",
       "heartCount": 0,
       "selectedCount": 0,
       "nameFontSize": "12px",
       "nameLineHeight": "16.2px",
       "nameColor": "rgb(233, 233, 236)",
-      "metaFontSize": null,
-      "metaLineHeight": null,
-      "firstCard": "51酱｜修女（原创写真） 001.jpg",
-      "secondLine": null
+      "metaFontSize": "11px",
+      "metaLineHeight": "normal",
+      "firstCard": "51酱｜修女（原创写真） 001.jpg825 KB · 2022年12月7日",
+      "secondLine": "825 KB · 2022年12月7日"
     },
     "D": {
       "page": "D",
@@ -931,7 +943,7 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/A-cos-all-1280x800.png",
         "width": 1280,
         "height": 800,
-        "bytes": 959967,
+        "bytes": 1015627,
         "viewport": {
           "width": 1280,
           "height": 800,
@@ -943,11 +955,11 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/B-folder-1280x800.png",
         "width": 1280,
         "height": 800,
-        "bytes": 1035571,
+        "bytes": 1035540,
         "viewport": {
           "width": 1280,
           "height": 800,
-          "dpr": 2
+          "dpr": 1
         },
         "cdpDprEmulationUsed": true
       },
@@ -955,11 +967,11 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/C-cos-set-photos.png",
         "width": 1280,
         "height": 800,
-        "bytes": 868962,
+        "bytes": 867183,
         "viewport": {
           "width": 1280,
           "height": 800,
-          "dpr": 2
+          "dpr": 1
         },
         "cdpDprEmulationUsed": true
       },
@@ -967,11 +979,11 @@
         "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/cos-vs-folder/D-folder-photos.png",
         "width": 1280,
         "height": 800,
-        "bytes": 876619,
+        "bytes": 876439,
         "viewport": {
           "width": 1280,
           "height": 800,
-          "dpr": 2
+          "dpr": 1
         },
         "cdpDprEmulationUsed": true
       }
@@ -999,5 +1011,71 @@
       "error": null
     }
   ],
+  "parity": {
+    "checks": [
+      {
+        "name": "套图列表 vs 文件夹网格 列数一致",
+        "ok": true,
+        "detail": "6 vs 6"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 卡宽一致(±0.5px)",
+        "ok": true,
+        "detail": "156.7 vs 156.7"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 封面高一致(±0.5px)",
+        "ok": true,
+        "detail": "208.9 vs 208.9"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 名字字号/行高一致",
+        "ok": true,
+        "detail": "12px/16.2px vs 12px/16.2px"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 次行字号一致",
+        "ok": true,
+        "detail": "11px vs 11px"
+      },
+      {
+        "name": "套图列表 vs 文件夹网格 卡片元素一致",
+        "ok": true,
+        "detail": "ARTICLE vs ARTICLE"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 列数一致",
+        "ok": true,
+        "detail": "6 vs 6"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 卡宽一致(±0.5px)",
+        "ok": true,
+        "detail": "156.7 vs 156.7"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 封面高一致(±0.5px)",
+        "ok": true,
+        "detail": "208.9 vs 208.9"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 名字字号/行高一致",
+        "ok": true,
+        "detail": "12px/16.2px vs 12px/16.2px"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 次行字号一致",
+        "ok": true,
+        "detail": "11px vs 11px"
+      },
+      {
+        "name": "套图照片页 vs 文件夹照片页 卡片元素一致",
+        "ok": true,
+        "detail": "ARTICLE vs ARTICLE"
+      }
+    ],
+    "ok": true,
+    "note": "心形数量、页头控件、面包屑属于 S2/S3 范围，本轮只断言网格与文字层级；截图仍会一并拍下供对照"
+  },
   "ok": true
 }

@@ -7,7 +7,7 @@ import useOtherFiles from './useOtherFiles';
 import useBreakpoint, { isNarrowBreakpoint } from '../../hooks/useBreakpoint';
 import useSettings from '../../hooks/useSettings';
 import useWindowWidth from '../../hooks/useWindowWidth';
-import VirtualGrid from './VirtualGrid';
+import VirtualGrid from '../../components/VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
 import ImageViewer from '../../components/ImageViewer';
@@ -21,6 +21,7 @@ import { invoke, CHANNELS } from '../../data/ipc';
 import { watchDirectory } from '../../data/directory';
 import { openExternal } from '../../data/files';
 import {
+  DENSITY_LEVELS as DENSITIES,
   getFolderSort, setFolderSort, defaultSortDirection, getFolderDensity, setFolderDensity
 } from '../../data/prefs';
 import './folder.css';
@@ -36,12 +37,6 @@ const SORT_FIELDS_PHOTO = [
   { key: 'name', label: '名称' },
   { key: 'size', label: '大小' },
   { key: 'mtimeMs', label: '修改日期' }
-];
-
-const DENSITIES = [
-  { key: 'compact', minWidth: 148 },
-  { key: 'standard', minWidth: 168 },
-  { key: 'comfortable', minWidth: 196 }
 ];
 
 import { statusHint } from '../../data/shortcuts';

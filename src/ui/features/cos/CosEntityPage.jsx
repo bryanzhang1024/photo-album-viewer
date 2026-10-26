@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../shell/PageHeader';
 import useBreakpoint from '../../hooks/useBreakpoint';
 import { SearchIcon } from '../../icons';
 import StatusBar from '../../shell/StatusBar';
 import CosThumb from '../../components/CosThumb';
+import GridCard from '../../components/GridCard';
+import VirtualGrid from '../../components/VirtualGrid';
+import { DEFAULT_MIN_ITEM_WIDTH } from '../../data/prefs';
 import { listCharacters, listCosers } from '../../data/cos';
+import { entityCardItems } from './cardItems';
 import useCosPagedList from './useCosPagedList';
-import CosLoadMore from './CosLoadMore';
 import './cos.css';
 
 import { statusHint } from '../../data/shortcuts';
@@ -33,6 +36,7 @@ export default function CosEntityPage({ kind, onOpenEntity }) {
   const options = { sortBy: 'name' };
   if (search) options.query = search;
   const { items, total, loading, error, loadMore, hasMore } = useCosPagedList(fetcher, options);
+  const cards = useMemo(() => entityCardItems(items), [items]);
   const title = kind === 'cosers' ? '按署名' : '按角色';
   const countText = loading && items.length === 0
     ? '读取中…'
@@ -58,23 +62,32 @@ export default function CosEntityPage({ kind, onOpenEntity }) {
       />
       <div className="folder-body">
         {error ? <div className="folder-state error">{error}</div> : null}
-        <div className="cos-scroll">
-          <div className={`cos-grid ${kind === 'characters' ? 'chars' : ''}`}>
-            {items.map((entity) => (
-              <button className="cos-card" type="button" key={entity.id}
-                onClick={() => onOpenEntity?.(entity)}>
-                <div className="cos-cover"><CosThumb mediaId={entity.coverMediaId} /></div>
-                <div className="cos-name">{entity.name}</div>
-                <div className="cos-meta">
-                  {entity.id && entity.name === '其他'
-                    ? `${entity.coserCount || 0} 位 · ${entity.setCount} 套`
-                    : `${entity.setCount} 套`}
-                </div>
-              </button>
-            ))}
+        {!error && cards.length === 0 ? (
+          <div className="folder-state">
+            {loading ? '读取中…' : (search ? `没有找到「${search}」` : '还没有内容')}
           </div>
-          <CosLoadMore onLoadMore={loadMore} hasMore={hasMore} loading={loading} />
-        </div>
+        ) : null}
+        {cards.length > 0 ? (
+          <VirtualGrid
+            items={cards}
+            minItemWidth={DEFAULT_MIN_ITEM_WIDTH}
+            hasMore={hasMore && !error}
+            loadingMore={loading}
+            onLoadMore={loadMore}
+            renderItem={(card, width, coverHeight) => (
+              <GridCard
+                key={card.key}
+                dataKey={card.key}
+                width={width}
+                coverHeight={coverHeight}
+                name={card.name}
+                meta={card.meta}
+                cover={<CosThumb mediaId={card.coverMediaId} />}
+                onClick={() => onOpenEntity?.(card.payload)}
+              />
+            )}
+          />
+        ) : null}
       </div>
       <StatusBar left={countText} right={STATUS_HINTS} />
     </>
