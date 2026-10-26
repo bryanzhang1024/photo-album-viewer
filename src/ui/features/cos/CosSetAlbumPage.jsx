@@ -50,7 +50,7 @@ export default function CosSetAlbumPage({
   const [images, setImages] = useState([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewerIndex, setViewerIndex] = useState(null);
   const [setIds, setSetIds] = useState([]);
@@ -80,6 +80,7 @@ export default function CosSetAlbumPage({
   useEffect(() => {
     let alive = true;
     forceNextRef.current = false;
+    setLoading(true);
     setImages([]);
     setTotal(0);
     setHasMore(false);
@@ -97,6 +98,7 @@ export default function CosSetAlbumPage({
       setImages(page?.images || []);
       setTotal(page?.totalCount || 0);
       setHasMore(Boolean(page?.hasMore));
+      setLoading(false);
     });
     return () => {
       alive = false;
