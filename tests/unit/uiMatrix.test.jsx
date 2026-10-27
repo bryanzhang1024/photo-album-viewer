@@ -71,13 +71,13 @@ describe('能力矩阵收尾', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '后退' })).toBeEnabled());
 
     fireEvent.keyDown(window, { key: '[', metaKey: true });
-    await waitFor(() => expect(screen.getByText('照片来源', { selector: '.page-header-title-compact' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('文件夹', { selector: '.page-header-title-compact' })).toBeInTheDocument());
 
     fireEvent.keyDown(window, { key: ']', metaKey: true });
     await waitFor(() => expect(screen.getByRole('button', { name: '后退' })).toBeEnabled());
 
     fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
-    await waitFor(() => expect(screen.getByText('照片来源', { selector: '.page-header-title-compact' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('文件夹', { selector: '.page-header-title-compact' })).toBeInTheDocument());
   });
 
   test('R04 每个标签各自前进后退，互不影响', async () => {
@@ -123,7 +123,7 @@ describe('能力矩阵收尾', () => {
     // 回到第一个标签后退，只影响它自己
     await userEvent.click(screen.getAllByRole('tab')[0]);
     fireEvent.keyDown(window, { key: '[', metaKey: true });
-    await waitFor(() => expect(screen.getByText('照片来源', { selector: '.page-header-title-compact' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('文件夹', { selector: '.page-header-title-compact' })).toBeInTheDocument());
 
     // 第二个标签仍在子目录
     await userEvent.click(screen.getAllByRole('tab')[1]);
@@ -260,7 +260,7 @@ describe('能力矩阵收尾', () => {
     window.localStorage.clear();
   });
 
-  test('R28 来源读失败给出原因与重试，重试会再次请求', async () => {
+  test('R28 来源读失败只在页脚提示，重试会再次请求', async () => {
     let attempts = 0;
     installMock((channel) => {
       if (channel === 'get-directory-level-v1') {
@@ -271,11 +271,12 @@ describe('能力矩阵收尾', () => {
       return baseHandler(channel);
     });
 
-    render(<RootsPage sources={[SOURCE]} onOpen={jest.fn()} onOpenFolder={jest.fn()} />);
-    expect(await screen.findByText('外接盘未挂载')).toBeInTheDocument();
+    render(<RootsPage sources={[SOURCE]} onOpenLocation={jest.fn()} onOpenFolder={jest.fn()} />);
+    expect(await screen.findByText('1 个位置读不到')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: '重试' }));
     await waitFor(() => expect(attempts).toBeGreaterThan(1));
+    await waitFor(() => expect(screen.queryByText('1 个位置读不到')).not.toBeInTheDocument());
   });
 
   test('R23 Cos 总览显示真实统计与三个入口', async () => {

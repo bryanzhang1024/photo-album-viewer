@@ -100,17 +100,23 @@ async function renderApp() {
 }
 
 const breadcrumbText = () => screen.queryByRole('navigation', { name: '面包屑' })?.textContent || '';
-const rootCard = () => document.querySelector('.root-card');
+const rootsPage = () => document.querySelector('.roots-body');
 const firstGridCard = () => document.querySelector('.grid-card');
 const sidebar = () => within(screen.getByLabelText('侧栏'));
 
-async function enterChildFolder() {
-  fireEvent.click(await waitFor(() => {
-    const card = rootCard();
-    expect(card).toBeTruthy();
-    return card;
-  }));
+/** 从侧栏进入来源根：4.6.0 起「文件夹」页不再列来源，入口在侧栏。 */
+async function enterSourceRoot() {
+  const label = await waitFor(() => {
+    const node = sidebar().getByText('A-库');
+    expect(node).toBeTruthy();
+    return node;
+  });
+  await userEvent.click(label.closest('button'));
   await waitFor(() => expect(breadcrumbText()).toContain('A-库'));
+}
+
+async function enterChildFolder() {
+  await enterSourceRoot();
 
   fireEvent.click(await waitFor(() => {
     const card = firstGridCard();
@@ -130,14 +136,14 @@ describe('App · Esc 分层（按页面层级，B 方案）', () => {
 
   test('顶层页 Esc 无动作', async () => {
     await renderApp();
-    await waitFor(() => expect(rootCard()).toBeTruthy());
+    await waitFor(() => expect(rootsPage()).toBeTruthy());
 
     await userEvent.keyboard('{Escape}');
 
-    expect(rootCard()).toBeTruthy();
+    expect(rootsPage()).toBeTruthy();
   });
 
-  test('文件夹页按层级逐层退：子目录 → 来源根 → 照片来源', async () => {
+  test('文件夹页按层级逐层退：子目录 → 来源根 → 文件夹页', async () => {
     await renderApp();
     await enterChildFolder();
 
@@ -146,7 +152,7 @@ describe('App · Esc 分层（按页面层级，B 方案）', () => {
     expect(breadcrumbText()).not.toContain('a-文件夹');
 
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(rootCard()).toBeTruthy());
+    await waitFor(() => expect(rootsPage()).toBeTruthy());
   });
 
   test('选中项不再挡住退层：Esc 直接回上一层（选中随换页消失）', async () => {
@@ -161,16 +167,12 @@ describe('App · Esc 分层（按页面层级，B 方案）', () => {
     await waitFor(() => expect(document.querySelector('.grid-card.selected')).toBeTruthy());
 
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(rootCard()).toBeTruthy());
+    await waitFor(() => expect(rootsPage()).toBeTruthy());
   });
 
   test('搜索框有字时 Esc 只清空并失焦，再按一次才退层', async () => {
     await renderApp();
-    fireEvent.click(await waitFor(() => {
-      const card = rootCard();
-      expect(card).toBeTruthy();
-      return card;
-    }));
+    await enterSourceRoot();
     await waitFor(() => expect(firstGridCard()).toBeTruthy());
 
     const input = screen.getByRole('searchbox', { name: '搜索这个文件夹' });
@@ -184,7 +186,7 @@ describe('App · Esc 分层（按页面层级，B 方案）', () => {
     expect(document.activeElement).not.toBe(input);
 
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(rootCard()).toBeTruthy());
+    await waitFor(() => expect(rootsPage()).toBeTruthy());
   });
 
   test('查看器打开时 Esc 只关查看器，不会同时退一层', async () => {
