@@ -11,6 +11,7 @@ import {
   resolveDroppedFolders
 } from './data/sources';
 import { getFolderView, setFolderView } from './data/prefs';
+import { recordLocation } from './data/recentLocations';
 import RootsPage from './features/roots/RootsPage';
 import FolderPage from './features/folder/FolderPage';
 import CosHomePage from './features/cos/CosHomePage';
@@ -144,6 +145,12 @@ export default function App() {
   useEffect(() => {
     setSearchQuery('');
     setSearchExpanded(false);
+  }, [location]);
+
+  // 「接着看」：记住每个来源最近打开的文件夹。返回/前进/恢复会话都会走到这里。
+  useEffect(() => {
+    if (location.kind !== 'folder') return;
+    recordLocation(location.sourceId, location.relativePath || '');
   }, [location]);
 
   // 标签页自动落盘：数量、顺序、当前标签与各自历史位置。
@@ -828,7 +835,11 @@ export default function App() {
           ) : location.kind === 'roots' ? (
             <RootsPage
               sources={sources}
-              onOpen={(item) => navigate({ kind: 'folder', sourceId: item.sourceId, relativePath: '' })}
+              onOpenLocation={(sourceId, relativePath) => navigate({
+                kind: 'folder',
+                sourceId,
+                relativePath: relativePath || ''
+              })}
               onOpenFolder={requestOpenFolder}
             />
           ) : source ? (
