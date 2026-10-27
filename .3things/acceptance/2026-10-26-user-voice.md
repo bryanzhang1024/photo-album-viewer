@@ -362,3 +362,9 @@ ESC 在不同地方按下去的效果不一样，需要你先统计一下，看�
 批准。开goal。做到s5做完停止goal
 
 （说明：批准 `plan-esc-layers.md` 的 S1–S5，开 goal 连续实施、S5 完成后停 goal。交付见 4.5.3 提交与 `acceptance/evidence/esc-layers/`。）
+
+### 10-27 09:35 · 会话H 文件夹页没用
+
+这个界面也不美观，感觉也没什么用。我在想怎么把这个界面换成实用的，放什么功能比较好呢？
+
+（说明：指的是侧栏「文件夹」打开的 `RootsPage`（页头写「照片来源」）。按准备阶段处理：只做诊断与样张，没动产品代码；产出 `design/folder-page-round1.html`（三屏：现状 / A 接着看+最近有变化 / B 位置体检）与 `design/folder-page-round1-notes.md`，等选方向。）
