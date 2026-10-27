@@ -2,24 +2,24 @@
 
 ## 当前状态（每轮收工覆盖重写，不追加；上限 40 行）
 
-更新：2026-10-27 10:40 · 4.5.3
-版本：`package.json` 4.5.3 · 已装 `/Applications/Photo Album Viewer.app` 4.5.3 · 分支 `codex/folder-page-overview`（计划阶段，未合回 main）
+更新：2026-10-27 11:05 · 4.6.0
+版本：`package.json` 4.6.0 · 已装 `/Applications/Photo Album Viewer.app` 4.6.0 · 分支 `codex/folder-page-overview`（已合回 main）
 
-**已交付**：4.1 恢复旧能力（标签页、打开文件夹、来源删除、面包屑、搜索、收藏、排序、查看器）→ 4.4.1（快捷键收口、来源拖动排序、当前文件夹自动刷新、目录快照按 mtime 缓存）→ 4.4.2（网格统一 S1：COS 四页改用同一套网格卡片）→ 4.5.0（S2 页头与搜索统一；S3 收藏/右键/键盘/自动刷新/套图照片页操作）→ 4.5.1（修缩略图滑杆、套图照片页 ←/→ 切套）→ 4.5.2（S4：收藏页卡片并入共用卡片）→ 4.5.3（Esc 分层统一：按页面层级每次退一层；Cos 四层接上一级；⌘↑ 同目标；套图照片页面包屑补「全部作品」）。逐版细节见 [CHANGELOG](../CHANGELOG.md)。
-**正在做**：计划已出，等你「批准」进实施。方向定为 A（接着看 + 最近有变化），计划见 [plan-folder-page.md](plan-folder-page.md)（S1–S5，版本目标 4.6.0，分支 `codex/folder-page-overview`）；样张与取舍见 [folder-page-round1.html](design/folder-page-round1.html)、[notes](design/folder-page-round1-notes.md)。4.5.3 仍等你验收（522 测试、构建、安装、真机 26/26，证据见 [evidence/esc-layers](acceptance/evidence/esc-layers/README.md)）。
-**未决（等你一句）**：`plan-folder-page.md` 批准（含第二节我替你定的四点）；`协作规矩.md` 与 `AGENTS.md` 是否合并成一处；4.5.2 / 4.5.3 验收。
+**已交付**：4.1 恢复旧能力（标签页、打开文件夹、来源删除、面包屑、搜索、收藏、排序、查看器）→ 4.4.1（快捷键收口、来源拖动排序、当前文件夹自动刷新、目录快照按 mtime 缓存）→ 4.4.2（网格统一 S1：COS 四页改用同一套网格卡片）→ 4.5.0（S2 页头与搜索统一；S3 收藏/右键/键盘/自动刷新/套图照片页操作）→ 4.5.1（修缩略图滑杆、套图照片页 ←/→ 切套）→ 4.5.2（S4：收藏页卡片并入共用卡片）→ 4.5.3（Esc 分层统一：按页面层级每次退一层；Cos 四层接上一级；⌘↑ 同目标；套图照片页面包屑补「全部作品」）→ 4.6.0（「文件夹」页换成「接着看 + 最近有变化」：记住每个来源上次位置、跨来源最近 7 天改动列表、嵌套来源去重、读不到的位置收进页脚）。逐版细节见 [CHANGELOG](../CHANGELOG.md)。
+**正在做**：无。4.6.0 已交付并装到 `/Applications`：550 测试、`check:unwired`、构建通过；真机 9 条断言全过（真实图库 9 个位置，首屏 0.32 s、全部读完 3.2 s、点行/接着看/窄窗/离线来源都验过），证据见 [evidence/folder-page](acceptance/evidence/folder-page/README.md)。等你验收。
+**未决（等你一句）**：4.6.0 验收；`协作规矩.md` 与 `AGENTS.md` 是否合并成一处。
 **下一步（带触发条件）**
-- 按 S1–S5 实施并交付 4.6.0：触发＝你说「批准」。
-- 退回列表保留滚动位置、已加载页数与搜索词：触发＝你验收 4.5.3 后说要做（计划第六节已单列）。
+- 「最近有变化」与 Cos 总览「最近添加」如果看着重复，收掉一处：触发＝你验收 4.6.0 时说重复。
+- 退回列表保留滚动位置、已加载页数与搜索词：触发＝你说要做（计划第六节已单列）。
 - 拆 `src/main.js`：触发＝下次要动主进程加功能时。
 - 多选与批量删除：触发＝浏览时开始想批量删或移动时。
 - 冻结/存档文件的清理（backlog 已触发条目搬迁）：触发＝下一次收工时。
 
 **去哪查**
 - 需求依据与原话：`acceptance/2026-10-26-user-voice.md`
-- 界面规格：`design/shell-spec-final.md`（19 条 + 修订）；`spec.md` 为更早的历史规格
+- 界面规格：`design/shell-spec-final.md`（20 条 + 修订；第 20 条是 4.6.0 的「文件夹」页）；`spec.md` 为更早的历史规格
 - 本轮计划与真机矩阵：`plan-esc-layers.md`；证据：`acceptance/evidence/esc-layers/`
-- 文件夹页方向样张：`design/folder-page-round1.html` + `design/folder-page-round1-notes.md`；实施计划：`plan-folder-page.md`
+- 文件夹页：样张 `design/folder-page-round1.html`、记录 `design/folder-page-round1-notes.md`、计划 `plan-folder-page.md`、证据 `acceptance/evidence/folder-page/`
 - 历史决策与每轮记录：本文件下方档案
 
 
