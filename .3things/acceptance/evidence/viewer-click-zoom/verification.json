@@ -1,0 +1,168 @@
+{
+  "at": "2026-10-28T16:20:10.377Z",
+  "startedAt": "2026-10-28T16:19:56.817Z",
+  "app": "/Users/clover/Develop/photo-album-viewer6/dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+  "fixture": "pav-zoom-8cKBR4",
+  "passed": 14,
+  "total": 14,
+  "ok": true,
+  "error": null,
+  "assertions": [
+    {
+      "name": "安装/运行版本为 4.7.0（UA 含 /4.7.0）",
+      "ok": true,
+      "detail": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) photo-album-viewer/4.7.0 Chrome/118.0.5993.159 Electron/27.3.11 Safari/537.36"
+    },
+    {
+      "name": "临时来源进入后有 2 张图片卡片",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "cards": 2
+      }
+    },
+    {
+      "name": "单击图片卡片打开查看器",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "title": "1.jpg · 1 / 2"
+      }
+    },
+    {
+      "name": "打开时缩放 100%",
+      "ok": true,
+      "detail": {
+        "zoom": "100%",
+        "title": "1.jpg · 1 / 2"
+      }
+    },
+    {
+      "name": "单击一次放大到 120%",
+      "ok": true,
+      "detail": {
+        "zoom": "120%"
+      }
+    },
+    {
+      "name": "连点三下累计到 173%",
+      "ok": true,
+      "detail": {
+        "zoom": "173%"
+      }
+    },
+    {
+      "name": "拖动 40px 只平移、缩放保持 173%",
+      "ok": true,
+      "detail": {
+        "zoom": "173%",
+        "transform": "translate(40px, 0px) scale(1.728) rotate(0deg)"
+      }
+    },
+    {
+      "name": "适应窗口复位到 100% 且位置回中",
+      "ok": true,
+      "detail": {
+        "zoom": "100%",
+        "transform": "translate(0px, 0px) scale(1) rotate(0deg)"
+      }
+    },
+    {
+      "name": "点右翻页箭头：换到下一张，不放大（仍 100%）",
+      "ok": true,
+      "detail": {
+        "before": "1.jpg · 1 / 2",
+        "title": "2.jpg · 2 / 2",
+        "zoom": "100%"
+      }
+    },
+    {
+      "name": "⌘滚轮向上仍能放大（100% → 110%）",
+      "ok": true,
+      "detail": {
+        "zoom": "110%"
+      }
+    },
+    {
+      "name": "普通滚轮翻页后缩放复位到 100%",
+      "ok": true,
+      "detail": {
+        "before": "2.jpg · 2 / 2",
+        "title": "1.jpg · 1 / 2",
+        "zoom": "100%"
+      }
+    },
+    {
+      "name": "长按 320ms 后松开不算单击",
+      "ok": true,
+      "detail": {
+        "zoom": "100%"
+      }
+    },
+    {
+      "name": "连点到上限后保持 800%",
+      "ok": true,
+      "detail": {
+        "zoom": "800%",
+        "title": "1.jpg · 1 / 2"
+      }
+    },
+    {
+      "name": "右键关闭查看器（原有行为不变）",
+      "ok": true,
+      "detail": {
+        "closed": true
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "00-viewer-100.jpg",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "dpr": 2
+      }
+    },
+    {
+      "file": "01-click-once-120.jpg",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "dpr": 1
+      }
+    },
+    {
+      "file": "02-click-three-173.jpg",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "dpr": 1
+      }
+    },
+    {
+      "file": "03-drag-pan-173.jpg",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "dpr": 1
+      }
+    },
+    {
+      "file": "04-next-arrow-100.jpg",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "dpr": 1
+      }
+    },
+    {
+      "file": "05-max-800.jpg",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "dpr": 1
+      }
+    }
+  ]
+}

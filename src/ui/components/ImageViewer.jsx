@@ -22,6 +22,11 @@ function formatDate(value) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// 旧版 3.x 查看器的手势：左键单击放大一档。按下到松开短于 200ms、位移小于 5px
+// 才算单击，位移更大按拖动处理，避免想拖图时误放大。
+const CLICK_MAX_MS = 200;
+const CLICK_MAX_DISTANCE = 5;
+
 /** 大图查看器：单页 / 双页、缩放、旋转、信息面板、收藏、移到废纸篓、Esc 关闭。 */
 export default function ImageViewer({ images, initialIndex = 0, title, albumPath, albumName, onClose, onDeleted }) {
   const [index, setIndex] = useState(initialIndex);
@@ -38,6 +43,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [favorites, setFavorites] = useState(null);
   const dragRef = useRef(null);
+  const clickRef = useRef(null);
   const current = images[index];
   const next = images[index + 1];
 
@@ -106,6 +112,14 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     }
   };
 
+  // 缩放统一口径：设置里的缩放步长（默认 20%）。＋/－、快捷键、⌘滚轮、左键单击共用。
+  const zoomIn = useCallback(() => {
+    setZoom((value) => Math.min(8, value * (1 + settings.zoomStep)));
+  }, [settings.zoomStep]);
+  const zoomOut = useCallback(() => {
+    setZoom((value) => Math.max(0.2, value / (1 + settings.zoomStep)));
+  }, [settings.zoomStep]);
+
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
@@ -138,7 +152,16 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     }
   };
 
+  // 翻页箭头、解码失败提示等按钮在舞台内部：点在按钮上不当作放大。
+  const isControlTarget = (event) => Boolean(event?.target?.closest?.('button, a, input, [role="menu"]'));
+
   const onMouseDown = (event) => {
+    if (event.button !== 0 || isControlTarget(event)) {
+      dragRef.current = null;
+      clickRef.current = null;
+      return;
+    }
+    clickRef.current = { time: performance.now(), x: event.clientX, y: event.clientY };
     dragRef.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
   };
   const onMouseMove = (event) => {
@@ -148,8 +171,15 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       y: dragRef.current.py + (event.clientY - dragRef.current.y)
     });
   };
-  const endDrag = () => {
+  // 松开时才算单击：短按 + 小位移 → 放大一档；否则是拖动，只平移。
+  const endDrag = (event) => {
     dragRef.current = null;
+    const start = clickRef.current;
+    clickRef.current = null;
+    if (!start || !event || event.button !== 0 || isControlTarget(event)) return;
+    const elapsed = performance.now() - start.time;
+    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (elapsed < CLICK_MAX_MS && distance < CLICK_MAX_DISTANCE) zoomIn();
   };
 
   const favorited = current ? isImageFavorited(favorites, current.path) : false;
@@ -189,9 +219,9 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     const onZoomCommand = (event) => {
       const command = event.detail?.command;
       if (command === 'zoom-in') {
-        setZoom((value) => Math.min(8, value * (1 + settings.zoomStep)));
+        zoomIn();
       } else if (command === 'zoom-out') {
-        setZoom((value) => Math.max(0.2, value / (1 + settings.zoomStep)));
+        zoomOut();
       } else if (command === 'zoom-reset') {
         setZoom(1);
         setPan({ x: 0, y: 0 });
@@ -204,7 +234,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       window.removeEventListener('pav:viewer-zoom', onZoomCommand);
       window.removeEventListener('pav:copy-image', onCopyCommand);
     };
-  }, [copyCurrent, settings.zoomStep]);
+  }, [copyCurrent, zoomIn, zoomOut]);
 
   const deleteCurrent = async () => {
     if (!current) return;
@@ -276,11 +306,11 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
         return;
       }
       if (key === '+' || key === '=') {
-        setZoom((value) => Math.min(8, value * (1 + settings.zoomStep)));
+        zoomIn();
         return;
       }
       if (key === '-' || key === '_') {
-        setZoom((value) => Math.max(0.2, value / (1 + settings.zoomStep)));
+        zoomOut();
         return;
       }
       if (!isPlainKey(event)) return;
@@ -317,7 +347,7 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
     };
   }, [
     close, go, infoOpen, copyCurrent, toggleFullscreen, rotateBy,
-    settings.zoomStep, toggleFavorite, revealCurrent, deleteCurrent, images.length
+    zoomIn, zoomOut, toggleFavorite, revealCurrent, deleteCurrent, images.length
   ]);
 
   if (!current) return null;
@@ -406,9 +436,9 @@ export default function ImageViewer({ images, initialIndex = 0, title, albumPath
       ) : null}
 
       <div className={`viewer-bar${barVisible ? '' : ' hidden'}`}>
-        <button className="icon-button" type="button" aria-label="缩小" title="缩小（- 或 ⌘滚轮）" onClick={() => setZoom((v) => Math.max(0.2, v / (1 + settings.zoomStep)))}>−</button>
+        <button className="icon-button" type="button" aria-label="缩小" title="缩小（- 或 ⌘滚轮）" onClick={zoomOut}>−</button>
         <span className="viewer-zoom">{Math.round(zoom * 100)}%</span>
-        <button className="icon-button" type="button" aria-label="放大" title="放大（+ 或 ⌘滚轮）" onClick={() => setZoom((v) => Math.min(8, v * (1 + settings.zoomStep)))}>＋</button>
+        <button className="icon-button" type="button" aria-label="放大" title="放大（+、⌘滚轮或单击图片）" onClick={zoomIn}>＋</button>
         <span className="viewer-sep" />
         <button className="icon-button" type="button" aria-label="旋转" title="旋转 90°（E / R）" onClick={() => rotateBy(1)}><RotateIcon /></button>
         <button className={`icon-button${dual ? ' active' : ''}`} type="button" aria-label="双页" title="双页查看（V）" aria-pressed={dual}
