@@ -296,3 +296,79 @@ describe('查看器 · Esc 分层与输入', () => {
     expect(viewer.querySelector('.viewer-bar').className).toContain('hidden');
   });
 });
+
+describe('查看器 · 左键单击逐级放大（恢复旧版手势）', () => {
+  const viewerOf = () => screen.getByRole('dialog', { name: '大图查看器' });
+  const stageOf = () => viewerOf().querySelector('.viewer-stage');
+  const zoomText = () => viewerOf().querySelector('.viewer-zoom').textContent;
+  const clickStage = () => {
+    fireEvent.mouseDown(stageOf(), { button: 0, clientX: 200, clientY: 200 });
+    fireEvent.mouseUp(stageOf(), { button: 0, clientX: 200, clientY: 200 });
+  };
+  // 等收藏读取这条异步链落定，避免测试结束后的 setState 落在 act 外
+  const renderSettled = async () => {
+    renderViewer();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  };
+
+  test('单击一次放大一档：100% → 120%', async () => {
+    await renderSettled();
+    expect(zoomText()).toBe('100%');
+    clickStage();
+    expect(zoomText()).toBe('120%');
+  });
+
+  test('连续单击继续变大：三下到 173%', async () => {
+    await renderSettled();
+    clickStage();
+    clickStage();
+    clickStage();
+    expect(zoomText()).toBe('173%');
+  });
+
+  test('拖动超过 5px 只平移，不放大', async () => {
+    await renderSettled();
+    const image = () => viewerOf().querySelector('.viewer-image');
+
+    fireEvent.mouseDown(stageOf(), { button: 0, clientX: 200, clientY: 200 });
+    fireEvent.mouseMove(stageOf(), { clientX: 260, clientY: 200 });
+    fireEvent.mouseUp(stageOf(), { button: 0, clientX: 260, clientY: 200 });
+
+    expect(zoomText()).toBe('100%');
+    expect(image().style.transform).toContain('translate(60px, 0px)');
+  });
+
+  test('点在左右翻页箭头上只翻页，不放大', async () => {
+    await renderSettled();
+    const next = screen.getByRole('button', { name: '下一张' });
+
+    fireEvent.mouseDown(next, { button: 0, clientX: 600, clientY: 300 });
+    fireEvent.mouseUp(next, { button: 0, clientX: 600, clientY: 300 });
+    fireEvent.click(next);
+
+    await waitFor(() => expect(screen.getAllByText(/2 \/ 3/).length).toBeGreaterThan(0));
+    expect(zoomText()).toBe('100%');
+  });
+
+  test('放大到上限 800% 后继续单击不再变大', async () => {
+    await renderSettled();
+    for (let i = 0; i < 15; i += 1) clickStage();
+    expect(zoomText()).toBe('800%');
+  });
+
+  test('长按超过 200ms 不算单击，不放大', async () => {
+    await renderSettled();
+    fireEvent.mouseDown(stageOf(), { button: 0, clientX: 200, clientY: 200 });
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    fireEvent.mouseUp(stageOf(), { button: 0, clientX: 200, clientY: 200 });
+    expect(zoomText()).toBe('100%');
+  });
+
+  test('＋/－ 按钮与单击同一档：＋ 到 120%，－ 回 100%', async () => {
+    await renderSettled();
+    fireEvent.click(screen.getByRole('button', { name: '放大' }));
+    expect(zoomText()).toBe('120%');
+    fireEvent.click(screen.getByRole('button', { name: '缩小' }));
+    expect(zoomText()).toBe('100%');
+  });
+});

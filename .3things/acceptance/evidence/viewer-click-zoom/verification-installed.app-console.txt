@@ -1,0 +1,16 @@
+[ThumbnailService] 更新并发度: 6
+
+DevTools listening on ws://127.0.0.1:9479/devtools/browser/ba5cb87d-d8ca-4831-8993-df80e1e86817
+命令行参数: [
+  '/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer',
+  '--remote-debugging-port=9479',
+  '--user-data-dir=/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-zoom-profile-PYz0hw'
+]
+解析到的文件夹路径: null
+启动时的初始路径: null
+DOM已就绪
+窗口ready-to-show事件触发
+窗口已显示并聚焦
+[Security] 注册允许访问目录: /private/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-zoom-9f6F8h
+DOM已就绪
+[Cos] 缓存预热完成，耗时 3ms（首屏后延迟 5000ms 启动）
