@@ -67,6 +67,34 @@ describe('Cos 页头与操作（S2/S3）', () => {
     expect(onNavigate).toHaveBeenCalledWith({ kind: 'cos-home' });
   });
 
+  test('套图卡给最近 7 天动过的套图加「新」角标（4.8.0）', async () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const fresh = {
+      ...SET,
+      id: 's-fresh',
+      displayName: 'G44不会受伤｜紫乃',
+      lastModified: Date.now() - 60 * 60 * 1000
+    };
+    const old = {
+      ...SET,
+      id: 's-old',
+      displayName: 'G44不会受伤｜真夜子',
+      lastModified: Date.now() - 30 * DAY
+    };
+    installMock((channel) => {
+      if (channel === 'cos-list-sets') return { items: [fresh, old], total: 2 };
+      return base(channel);
+    });
+    const { container } = render(<CosSetListPage viewKind="all" onOpenSet={jest.fn()} />);
+
+    await screen.findByText('G44不会受伤｜紫乃');
+
+    const freshCard = container.querySelector('[data-key="s-fresh"]');
+    const oldCard = container.querySelector('[data-key="s-old"]');
+    expect(within(freshCard).getByText('新')).toBeInTheDocument();
+    expect(oldCard.querySelector('.card-badge')).toBeNull();
+  });
+
   test('套图卡收藏心形写入同一份收藏（按套图目录路径）', async () => {
     const { calls } = installMock((channel) => {
       if (channel === 'cos-list-sets') return { items: [SET], total: 1 };

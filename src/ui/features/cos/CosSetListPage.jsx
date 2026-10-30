@@ -164,6 +164,7 @@ export default function CosSetListPage({
                   selected={selectedKey === card.key}
                   name={card.name}
                   meta={card.meta}
+                  badge={card.badge}
                   cover={<CosThumb mediaId={card.coverMediaId} />}
                   favorited={entry ? isAlbumFavorited(entry.path) : false}
                   onToggleFavorite={entry ? () => toggleAlbum(entry) : undefined}

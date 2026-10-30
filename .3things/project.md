@@ -2,22 +2,24 @@
 
 ## 当前状态（每轮收工覆盖重写，不追加；上限 40 行）
 
-更新：2026-10-29 00:25 · 4.7.0
-版本：`package.json` 4.7.0 · 已装 `/Applications/Photo Album Viewer.app` 4.7.0 · 分支 `codex/viewer-click-zoom`（已合回 main）
+更新：2026-10-30 15:00 · 4.8.0
+版本：`package.json` 4.8.0 · 已装 `/Applications/Photo Album Viewer.app` 4.8.0 · 分支 `codex/new-badge`（已合回 main）
 
-**已交付**：4.1 恢复旧能力 → 4.4.1 快捷键收口/来源拖动排序/自动刷新 → 4.4.2–4.5.2 网格统一四片 → 4.5.3 Esc 分层统一 → 4.6.0「文件夹」页换成「接着看 + 最近有变化」→ **4.7.0 查看器恢复「左键单击逐级放大」**（每点一档，步长跟设置默认 ×1.2，上限 800%；拖动 ≥5px 只平移；翻页箭头不放大；滚轮/⌘滚轮/右键关闭不变）。逐版细节见 [CHANGELOG](../CHANGELOG.md)。
-**正在做**：无。4.7.0 已交付并装到 `/Applications`：557 测试、`check:unwired`、构建通过；真机 14 条断言在构建产物与安装版各跑一遍全过（单击 120% → 173%、拖动不放大、箭头只翻页、上限 800%、长按不算单击、⌘滚轮/滚轮/右键回归），证据见 [evidence/viewer-click-zoom](acceptance/evidence/viewer-click-zoom/README.md)。等你验收。
-**未决（等你一句）**：4.7.0 验收；4.6.0 验收；`协作规矩.md` 与 `AGENTS.md` 是否合并成一处。
+**已交付**：4.1 恢复旧能力 → 4.4.1 快捷键收口/来源拖动排序/自动刷新 → 4.4.2–4.5.2 网格统一四片 → 4.5.3 Esc 分层统一 → 4.6.0「文件夹」页换成「接着看 + 最近有变化」→ 4.7.0 查看器恢复「左键单击逐级放大」→ **4.8.0 套图卡「新」角标**（封面左上角，判定＝目录修改时间在最近 7 天内，与「最近有变化」同一口径；全部作品/按署名/按角色三处统一；排序不动，倒序继续用「修改日期」）。逐版细节见 [CHANGELOG](../CHANGELOG.md)。
+**正在做**：无。4.8.0 已交付并装到 `/Applications`：567 测试（新增 10 例）、`check:unwired`、构建通过；真机 6 条断言在构建产物与安装版各跑一遍全过（数据面 23 套在 7 天内、界面面第 1 张带标、前 23 张带标、第 24 张起不带），证据见 [evidence/new-badge](acceptance/evidence/new-badge/README.md)。等你验收。
+**未决（等你一句）**：4.8.0 验收；4.7.0 验收；4.6.0 验收；`协作规矩.md` 与 `AGENTS.md` 是否合并成一处。
 **下一步（带触发条件）**
+- 角标口径不够或误标碍事（改名/补元数据会短期标「新」）：触发＝你用了说不对，改走索引记首次收录时间（`plan-new-badge.md` 第五节）。
+- 想要「只看最近入库」筛选而不只是角标：触发＝你说要做。
 - 单击手感要调（步长、上限 800%、缩放中心）：触发＝你实际用一阵后说不对。
 - 「最近有变化」与 Cos 总览「最近添加」如果看着重复，收掉一处：触发＝你验收 4.6.0 时说重复。
 - 退回列表保留滚动位置、已加载页数与搜索词：触发＝你说要做（计划第六节已单列）。
 - 拆 `src/main.js`：触发＝下次要动主进程加功能时。
-- 多选与批量删除：触发＝浏览时开始想批量删或移动时。
 
 **去哪查**
 - 需求依据与原话：`acceptance/2026-10-26-user-voice.md`
-- 4.7.0 本轮：计划 `plan-viewer-click-zoom.md`；证据 `acceptance/evidence/viewer-click-zoom/`；取证脚本 `scripts/evidence-viewer-click-zoom.mjs`
+- 4.8.0 本轮：计划 `plan-new-badge.md`；证据 `acceptance/evidence/new-badge/`；取证脚本 `scripts/evidence-new-badge.mjs`
+- 4.7.0 上一轮：计划 `plan-viewer-click-zoom.md`；证据 `acceptance/evidence/viewer-click-zoom/`；取证脚本 `scripts/evidence-viewer-click-zoom.mjs`
 - 界面规格：`design/shell-spec-final.md`（20 条 + 修订；第 20 条是 4.6.0 的「文件夹」页）；`spec.md` 为更早的历史规格
 - 文件夹页：样张 `design/folder-page-round1.html`、记录 `design/folder-page-round1-notes.md`、计划 `plan-folder-page.md`、证据 `acceptance/evidence/folder-page/`
 - Esc 分层：计划 `plan-esc-layers.md`、证据 `acceptance/evidence/esc-layers/`

@@ -193,6 +193,7 @@ export default function CosHomePage({ onNavigate }) {
                 dataKey={card.key}
                 name={card.name}
                 meta={card.meta}
+                badge={card.badge}
                 cover={<CosThumb mediaId={card.coverMediaId} />}
                 onClick={() => onNavigate?.({ kind: 'cos-set', setId: card.payload.id })}
               />
