@@ -1,0 +1,26 @@
+[ThumbnailService] 更新并发度: 6
+
+DevTools listening on ws://127.0.0.1:54901/devtools/browser/66cb8756-5b36-47ff-aad6-1a5fd8560668
+[Security] 注册允许访问目录: /Volumes/1TB/Collection
+[Security] 注册允许访问目录: /Volumes/1TB-2/Collection
+[Security] 注册允许访问目录: /Volumes/1TB/Collection/兴趣
+[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/300-Cos套图库
+[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/400-Cos散图与合集
+[Security] 注册允许访问目录: /Volumes/1TB-2/Collection/600-Cos Weibo
+[Security] 注册允许访问目录: /Users/clover/Downloads
+[Security] 注册允许访问目录: /Users/clover/Downloads/twitter_media_harvest
+[Security] 注册允许访问目录: /Users/clover/Downloads/P图用模特
+命令行参数: [
+  '/Users/clover/Develop/photo-album-viewer6/dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer',
+  '--remote-debugging-port=54901',
+  '--user-data-dir=/var/folders/xz/j9l_r_g14pjbqfw2rdrrmvwr0000gn/T/pav-badge-profile-ltw0w1',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-renderer-backgrounding',
+  '--disable-background-timer-throttling'
+]
+解析到的文件夹路径: null
+启动时的初始路径: null
+DOM已就绪
+窗口ready-to-show事件触发
+窗口已显示并聚焦
+[Cos] 缓存预热完成，耗时 103ms（首屏后延迟 5000ms 启动）

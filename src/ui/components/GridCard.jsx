@@ -9,6 +9,7 @@ import './card.css';
  * - name / meta 由调用方按来源给（目录名 + 张数日期，或 Cos 清理名 + 作品张数），
  *   版式在这里固定，文字规则由来源决定。
  * - cover 由调用方给（目录拼贴、Cos 单图、照片缩略图）。
+ * - badge 由调用方给短标记（目前只有 Cos 套图的「新」）：守在封面左上角，不吃点击。
  * - 不传 onToggleFavorite 时不渲染心形：Cos 页的收藏入口要到 S3 才接，先不摆假按钮。
  */
 export default function GridCard({
@@ -18,6 +19,7 @@ export default function GridCard({
   selected = false,
   contain = false,
   favorited = false,
+  badge = null,
   name,
   meta,
   cover,
@@ -43,6 +45,7 @@ export default function GridCard({
         style={coverHeight ? { height: coverHeight } : undefined}
       >
         {cover}
+        {badge ? <span className="card-badge">{badge}</span> : null}
         {onToggleFavorite ? (
           <button
             className={`card-heart${favorited ? ' favorited' : ''}`}

@@ -56,6 +56,20 @@
   box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft);
 }
 
+/* 封面左上角的短标记（Cos 套图「新」）：常显，不吃点击，右上角留给收藏心形 */
+.card-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--font-caption);
+  line-height: 16px;
+  pointer-events: none;
+}
+
 .grid-card-name {
   margin-top: 7px;
   font-size: var(--font-card-title);

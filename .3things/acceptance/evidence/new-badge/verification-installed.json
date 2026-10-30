@@ -1,0 +1,113 @@
+{
+  "at": "2026-10-30T06:53:29.109Z",
+  "startedAt": "2026-10-30T06:53:18.686Z",
+  "app": "/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+  "catalog": "/Users/clover/Library/Application Support/photo-album-viewer/cos-library-catalog-v1.json",
+  "weekWindowMs": 604800000,
+  "passed": 6,
+  "total": 6,
+  "ok": true,
+  "error": null,
+  "assertions": [
+    {
+      "name": "数据面：G44 套图按修改日期降序，最近 7 天的集中在最前",
+      "ok": true,
+      "detail": {
+        "total": 191,
+        "recentCount": 23,
+        "firstOldIndex": 23,
+        "firstSet": {
+          "name": "G44不会受伤｜紫乃",
+          "lastModified": 1793342918556.2502
+        },
+        "boundarySet": {
+          "name": "G44不会受伤｜芙洛伦·春节",
+          "lastModified": 1791431591453.2952
+        },
+        "recentNames": [
+          "G44不会受伤｜紫乃",
+          "G44不会受伤｜酒吞童子·原皮（Fate／Grand Order）",
+          "G44不会受伤｜菜之花星（Rainbow 彩虹战队）"
+        ]
+      }
+    },
+    {
+      "name": "数据面：第一张是今天动过的套图（时间在 7 天内）",
+      "ok": true,
+      "detail": {
+        "name": "G44不会受伤｜紫乃",
+        "lastModified": 1793342918556.2502
+      }
+    },
+    {
+      "name": "界面面：排序控件为「修改日期」且为降序",
+      "ok": true,
+      "detail": {
+        "sortValue": "lastModified",
+        "sortDirection": "降序，点击改为升序"
+      }
+    },
+    {
+      "name": "界面面：第一张套图卡带「新」角标",
+      "ok": true,
+      "detail": {
+        "name": "紫乃",
+        "meta": "角色Cos · 52 张",
+        "badge": "新"
+      }
+    },
+    {
+      "name": "界面面：可见卡里带「新」的数量与数据面一致（虚拟网格只渲染可见行，至少 20 张）",
+      "ok": true,
+      "detail": {
+        "rendered": 30,
+        "badgeCount": 23,
+        "recentCount": 23
+      }
+    },
+    {
+      "name": "界面面：带「新」的卡按顺序就是数据面前 23 套，旧套图从第 24 张起不带标",
+      "ok": true,
+      "detail": {
+        "expectedBadges": [
+          "紫乃",
+          "酒吞童子·原皮",
+          "菜之花星"
+        ],
+        "actualBadges": [
+          "紫乃",
+          "酒吞童子·原皮",
+          "菜之花星",
+          "埃尔德里奇·举高高",
+          "丽贝卡",
+          "伊芙",
+          "朝凪·泳装",
+          "利维坦",
+          "Magia Bose·邪恶",
+          "KAC PDW·泳装",
+          "逢坂大河·虎虎",
+          "琉璃·魅魔",
+          "拉菲·浴衣",
+          "G41·挚诚花语",
+          "莫妮卡",
+          "初音未来·兔子洞",
+          "幽鬼·泳装",
+          "布兰儿·幸运特快车",
+          "桐香",
+          "黑咲芽亚",
+          "鸣濑白羽",
+          "爱丽丝",
+          "乖乖兽·诺亚"
+        ],
+        "firstUnbadgedIndex": 23,
+        "badgeCount": 23
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "/Users/clover/Develop/photo-album-viewer6/.3things/acceptance/evidence/new-badge/installed-A-g44-sets-new-badge-1280x800.png",
+      "bytes": 861212
+    }
+  ]
+}
