@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-01T13:49:32.292787+00:00",
+  "application": "/Applications/Photo Album Viewer.app",
+  "version": "4.9.0",
+  "method": "CUA native mouse Command-click three visible photos, then super+c in the foreground application",
+  "observed_status": "已复制 3 张原图",
+  "selected_count": 3,
+  "success": true,
+  "scope": "native copying in the existing personal gallery; no external paste/send/paid generation"
+}

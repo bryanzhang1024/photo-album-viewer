@@ -1,0 +1,74 @@
+{
+  "at": "2026-11-01T13:41:35.215Z",
+  "app": "/Volumes/1TB/99-管理/临时/tasks/pav-multi-image-copy/worktree/dist/mac-arm64/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+  "ok": true,
+  "passed": 16,
+  "total": 16,
+  "error": null,
+  "checks": [
+    {
+      "name": "运行版本 4.9.0",
+      "ok": true
+    },
+    {
+      "name": "⌘点三张高亮且不误开大图",
+      "ok": true
+    },
+    {
+      "name": "网格复制入口真实调用主进程",
+      "ok": true
+    },
+    {
+      "name": "空白点击取消选择",
+      "ok": true
+    },
+    {
+      "name": "拖框选择三张并显示选择框",
+      "ok": true
+    },
+    {
+      "name": "拖框松手不误开图片且保留选择",
+      "ok": true
+    },
+    {
+      "name": "⌘点取消一张",
+      "ok": true
+    },
+    {
+      "name": "Shift 按当前锚点连续选择",
+      "ok": true
+    },
+    {
+      "name": "滚动后仍保留三个选择，DOM 保持虚拟化",
+      "ok": true
+    },
+    {
+      "name": "方向键回到原有单项导航",
+      "ok": true
+    },
+    {
+      "name": "普通单击仍开大图",
+      "ok": true
+    },
+    {
+      "name": "Cos 照片页同样支持不相邻多选",
+      "ok": true
+    },
+    {
+      "name": "相同套图换标签也清空多选",
+      "ok": true
+    },
+    {
+      "name": "Cos 分页加载不丢选择",
+      "ok": true
+    },
+    {
+      "name": "720×480 状态与高亮仍可见",
+      "ok": true
+    },
+    {
+      "name": "改变排序清空多选",
+      "ok": true
+    }
+  ]
+}

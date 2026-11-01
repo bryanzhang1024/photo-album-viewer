@@ -2,31 +2,23 @@
 
 ## 当前状态（每轮收工覆盖重写，不追加；上限 40 行）
 
-更新：2026-11-01 21:09 · 4.8.0
-版本：`package.json` 4.8.0 · 已装 `/Applications/Photo Album Viewer.app` 4.8.0（上次交付记录；本轮未改软件）· 分支 `main`
+更新：2026-11-01 · 多选复制 4.9.0
+版本：本工作树 `package.json` 4.9.0 · 已装 `/Applications/Photo Album Viewer.app` 4.9.0 · 分支 `codex/multi-image-copy`；主目录 main 源码仍是 4.8.0。
 
-**已交付**：4.1 恢复旧能力 → 4.4.1 快捷键收口/来源拖动排序/自动刷新 → 4.4.2–4.5.2 网格统一四片 → 4.5.3 Esc 分层统一 → 4.6.0「文件夹」页换成「接着看 + 最近有变化」→ 4.7.0 查看器恢复「左键单击逐级放大」→ **4.8.0 套图卡「新」角标**（封面左上角，判定＝目录修改时间在最近 7 天内，与「最近有变化」同一口径；全部作品/按署名/按角色三处统一；排序不动，倒序继续用「修改日期」）。逐版细节见 [CHANGELOG](../CHANGELOG.md)。
-**正在做**：多选复制已确认需求并进入计划，见 [plan-multi-image-copy.md](plan-multi-image-copy.md)。照片网格框选/⌘点选/Shift 连选后 ⌘C，主目标为 Banana Gallery 参考图区，兼容目标 Gemini/微信/Finder；用户说「到时候我去测试」。只写计划，尚未改代码、构建或安装。
-**未决（等你一句）**：多选复制实施批准；交付后的跨应用实际验收由用户执行。旧项：4.8.0/4.7.0/4.6.0 验收；两份协作规则是否合并；“最近添加太少”计划仍待批准（工作区原有文档未动）。
+**已交付**：4.1–4.8 的既有功能保留；4.9.0 两种照片网格支持空白框选、⌘点选增减、Shift 连选、⌘C 有序复制原图。593 测试、假入口扫描、完整构建通过；构建/安装版各 16 项真实窗口检查通过，Chromium 真粘贴三文件原字节一致，安装版日用图库 CUA 原生 ⌘C 确认复制三张。证据：[multi-image-copy](acceptance/evidence/multi-image-copy/README.md)。
+**正在做**：Agent 的实现、构建、安装与运行验证完成；日用软件已启动，并留有三张原图的剪贴板供用户直接粘贴测试。
+**未决**：用户在 Banana Gallery（主要）、Gemini、微信、Finder 的实际粘贴验收；未将这些目标写成已通过。主目录仍有上一项未提交原话与 `plan-recent-more.md`，按 AGENTS 的主线合并清洁条件暂不合入代码，不覆盖或暂存它们。旧版 4.8.0 单一恢复副本保留至用户验收。
 **下一步（带触发条件）**
-- 多选复制：触发＝用户批准本计划；一个版本内完成批量复制底层→网格选择→工程/运行验证→安装交付；目标应用不兼容时先核对证据，有规格外变更回准备，不扩张 Banana Gallery。
-- 用户试用：触发＝新版安装后；先用三张 JPG/PNG 在 Banana Gallery 留足模型名额后粘贴，再逐个记录 Gemini/微信/Finder 的通过、失败或未测。
-- 角标口径不够或误标碍事（改名/补元数据会短期标「新」）：触发＝你用了说不对，改走索引记首次收录时间（`plan-new-badge.md` 第五节）。
-- 想要「只看最近入库」筛选而不只是角标：触发＝你说要做。
-- 单击手感要调（步长、上限 800%、缩放中心）：触发＝你实际用一阵后说不对。
-- 「最近有变化」与 Cos 总览「最近添加」如果看着重复，收掉一处：触发＝你验收 4.6.0 时说重复。
-- 退回列表保留滚动位置、已加载页数与搜索词：触发＝你说要做（计划第六节已单列）。
-- 拆 `src/main.js`：触发＝下次要动主进程加功能时。
-
+- 用户测试：触发＝现在试用；先选三张 JPG/PNG，Gallery 模型留三个位置、焦点移出提示词框后 ⌘V。反馈目标、张数、实际表现即可定位；微信只到待发送，不发送。
+- 合回主线：触发＝主目录在途文档收口或用户明确批准保留原脏改动的合并例外；重新核对 main 后，合并 `codex/multi-image-copy` 并保留那些文档。本轮不 push。
+- 新版可用：触发＝用户验收；清理 `/Volumes/1TB/99-管理/临时/backups/pav-multi-image-copy` 的 4.8.0 恢复副本和已不需要的隔离工作树/依赖；Git 与验收证据保留。
+- 原“最近添加太少”：触发＝用户批准其独立计划，不能混进本功能。
+- 旧待办：4.8/4.7/4.6 用户验收、两份协作规则是否合并、返回列表保留浏览位置；均不借本轮扩张。
 **去哪查**
-- 本轮原话/批准边界/验收：[acceptance/2026-11-01-multi-image-copy.md](acceptance/2026-11-01-multi-image-copy.md)；计划：[plan-multi-image-copy.md](plan-multi-image-copy.md)。
-- 需求依据与原话：`acceptance/2026-10-26-user-voice.md`
-- 4.8.0 本轮：计划 `plan-new-badge.md`；证据 `acceptance/evidence/new-badge/`；取证脚本 `scripts/evidence-new-badge.mjs`
-- 4.7.0 上一轮：计划 `plan-viewer-click-zoom.md`；证据 `acceptance/evidence/viewer-click-zoom/`；取证脚本 `scripts/evidence-viewer-click-zoom.mjs`
-- 界面规格：`design/shell-spec-final.md`（20 条 + 修订；第 20 条是 4.6.0 的「文件夹」页）；`spec.md` 为更早的历史规格
-- 文件夹页：样张 `design/folder-page-round1.html`、记录 `design/folder-page-round1-notes.md`、计划 `plan-folder-page.md`、证据 `acceptance/evidence/folder-page/`
-- Esc 分层：计划 `plan-esc-layers.md`、证据 `acceptance/evidence/esc-layers/`
-- 历史决策与每轮记录：本文件下方档案
+- 本轮原话：[acceptance/2026-11-01-multi-image-copy.md](acceptance/2026-11-01-multi-image-copy.md)；计划：[plan-multi-image-copy.md](plan-multi-image-copy.md)。
+- 证据：[acceptance/evidence/multi-image-copy/README.md](acceptance/evidence/multi-image-copy/README.md)；新增取证脚本 `scripts/evidence-multi-image-copy.mjs`、`scripts/evidence-multi-image-clipboard.cjs`。
+- 旧原话：`acceptance/2026-10-26-user-voice.md`；界面规格：`design/shell-spec-final.md`；历史细节：`CHANGELOG.md`。实现日志 `build-log.md` 已标档案，不追加。
+- 代码工作树：`/Volumes/1TB/99-管理/临时/tasks/pav-multi-image-copy/worktree`（用 `git worktree list` 核实）；不要从旧 main 构建覆盖新版。
 
 
 ---

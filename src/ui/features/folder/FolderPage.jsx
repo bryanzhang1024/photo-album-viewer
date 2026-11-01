@@ -7,6 +7,7 @@ import useOtherFiles from './useOtherFiles';
 import useBreakpoint, { isNarrowBreakpoint } from '../../hooks/useBreakpoint';
 import useSettings from '../../hooks/useSettings';
 import useWindowWidth from '../../hooks/useWindowWidth';
+import useImageMultiSelection from '../../hooks/useImageMultiSelection';
 import VirtualGrid from '../../components/VirtualGrid';
 import FolderList from './FolderList';
 import GridCard from './GridCard';
@@ -58,7 +59,8 @@ export default function FolderPage({
   searchQuery = '',
   onSearchChange,
   onOpenInNewTab,
-  onOpenInNewWindow
+  onOpenInNewWindow,
+  selectionScope = ''
 }) {
   const { status, snapshot, items, error, reload } = useFolderSnapshot(source, relativePath);
   const breakpoint = useBreakpoint();
@@ -131,6 +133,15 @@ export default function FolderPage({
       })),
     [sorted, deletedKeys, source.rootPath]
   );
+  const selectableImages = useMemo(() => filtered
+    .filter(item => item.kind === 'image' && !deletedKeys.has(item.key))
+    .map(item => ({ key: item.key, path: albumImageAbsolutePath(source.rootPath, item.relativePath) })),
+  [filtered, deletedKeys, source.rootPath]);
+  const multi = useImageMultiSelection({
+    items: selectableImages,
+    scopeKey: JSON.stringify([selectionScope, source.sourceId, relativePath, searchQuery, sortState.field, sortState.direction, viewMode]),
+    enabled: viewMode === 'grid' && viewerIndex === null
+  });
 
   const segments = relativePath.split('/').filter(Boolean);
   const title = segments.length > 0 ? segments[segments.length - 1] : (source?.label || '文件夹');
@@ -203,7 +214,11 @@ export default function FolderPage({
     openImageByKey(item.key);
   };
 
-  const handleGridClick = (item) => {
+  const handleGridClick = (item, event) => {
+    if (multi.handleClick(item.key, event)) {
+      setSelectedKey('');
+      return;
+    }
     if (item.kind === 'folder') {
       openFolder(item.relativePath);
       return;
@@ -348,6 +363,8 @@ export default function FolderPage({
 
       const plain = !event.metaKey && !event.ctrlKey && !event.altKey;
       if (!plain) return;
+      // 与原导航在同一个监听器中交接，避免原生事件中途刷新监听器而漏掉导航。
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) multi.clear();
 
       // 套图界面：←/→ 切上一套/下一套（与顶部的上一套/下一套按钮一致）
       if (isAlbum && Array.isArray(siblings) && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
@@ -428,7 +445,7 @@ export default function FolderPage({
   }, [
     selectedKey, viewerIndex, sorted, filtered, filteredOtherFiles, viewMode, images,
     isAlbum, siblings, siblingIndex,
-    onOpenFolder, source.rootPath, toggleItemFavorite
+    onOpenFolder, source.rootPath, toggleItemFavorite, multi.clear
   ]);
 
   // 选中项滚动到可视区
@@ -592,6 +609,7 @@ export default function FolderPage({
         {ready && filtered.length > 0 && viewMode === 'grid' ? (
           <VirtualGrid
             items={filtered}
+            selection={{ ...multi, clear: () => { multi.clear(); setSelectedKey(''); } }}
             minItemWidth={windowWidth < 760
               ? Math.max(200, DENSITIES[density].minWidth)
               : DENSITIES[density].minWidth}
@@ -602,7 +620,7 @@ export default function FolderPage({
                 rootPath={source.rootPath}
                 width={width}
                 coverHeight={coverHeight}
-                selected={selectedKey === item.key}
+                selected={multi.selectedKeys.size ? multi.selectedKeys.has(item.key) : selectedKey === item.key}
                 contain={fitMode}
                 showFilename={settings.showFilename}
                 coverMode={settings.folderCoverMode}
@@ -642,7 +660,7 @@ export default function FolderPage({
           />
         ) : null}
       </div>
-      <StatusBar left={countText} right={STATUS_HINTS} />
+      <StatusBar left={<span role="status">{multi.message || (multi.selectedPaths.length ? `已选 ${multi.selectedPaths.length} 张 · ⌘C 复制原图` : countText)}</span>} right={STATUS_HINTS} />
       <Menu
         open={Boolean(menu)}
         point={menu?.point}

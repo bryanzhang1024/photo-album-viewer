@@ -590,9 +590,11 @@ export default function App() {
           window.dispatchEvent(new CustomEvent('pav:viewer-zoom', { detail: { command } }));
           break;
         case 'copy':
-          if (document.querySelector('[role="dialog"]')) {
+          if (document.activeElement?.isContentEditable || document.activeElement?.closest?.('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) {
+            document.execCommand?.('copy');
+          } else if (document.querySelector('[role="dialog"]')) {
             window.dispatchEvent(new CustomEvent('pav:copy-image'));
-          } else if (typeof document.execCommand === 'function') {
+          } else if (window.dispatchEvent(new CustomEvent('pav:copy-selection', { cancelable: true })) && typeof document.execCommand === 'function') {
             document.execCommand('copy');
           }
           break;
@@ -817,6 +819,7 @@ export default function App() {
             />
           ) : location.kind === 'cos-set' ? (
             <CosSetAlbumPage
+              selectionScope={activeTabId}
               setId={location.setId}
               setName={location.name}
               options={location.options || null}
@@ -844,6 +847,7 @@ export default function App() {
             />
           ) : source ? (
             <FolderPage
+              selectionScope={activeTabId}
               key={`${source.sourceId}:${location.relativePath}`}
               source={source}
               relativePath={location.relativePath}

@@ -1256,8 +1256,42 @@ ipcMain.handle(CHANNELS.TRASH_IMAGE, async (event, filePath) => {
   }
 });
 
+// 一次写入原始文件列表，逐项授权和核验完成前不触碰系统剪贴板。
+let clipboardWriteRequest = 0;
+ipcMain.handle(CHANNELS.COPY_IMAGES_TO_CLIPBOARD, async (event, inputPaths) => {
+  const request = ++clipboardWriteRequest;
+  try {
+    if (process.platform !== 'darwin') throw new Error('批量复制原始图片文件目前仅支持 macOS');
+    if (!Array.isArray(inputPaths) || inputPaths.length === 0) throw new Error('请先选择图片');
+    const filePaths = [];
+    const seen = new Set();
+    for (const input of inputPaths) {
+      const filePath = normalizeAbsolutePath(input);
+      if (!filePath) throw new Error('图片路径必须是绝对路径');
+      if (seen.has(filePath)) continue;
+      if (!(await assertApprovedPath(filePath))) throw new Error('访问路径不在已授权照片目录范围内');
+      if (!LOCAL_IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) throw new Error('不支持此图片文件类型');
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile()) throw new Error('目标不是图片文件');
+      await fs.promises.access(filePath, fs.constants.R_OK);
+      seen.add(filePath);
+      filePaths.push(filePath);
+    }
+    const { clipboard } = require('electron');
+    const buffer = Buffer.from(createPlistArray(filePaths), 'utf8');
+    if (request !== clipboardWriteRequest) throw new Error('复制已被较新的操作替代');
+    clipboard.clear();
+    clipboard.writeBuffer('NSFilenamesPboardType', buffer);
+    return { success: true, count: filePaths.length, filePaths };
+  } catch (error) {
+    console.error('批量复制图片失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // 复制图片到剪贴板
 ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 'image') => {
+  const request = ++clipboardWriteRequest;
   try {
     const { clipboard, nativeImage } = require('electron');
 
@@ -1280,6 +1314,7 @@ ipcMain.handle(CHANNELS.COPY_IMAGE_TO_CLIPBOARD, async (event, filePath, mode = 
     }
 
     const normalizedMode = mode === 'file' ? 'file' : 'image';
+    if (request !== clipboardWriteRequest) throw new Error('复制已被较新的操作替代');
 
     if (normalizedMode === 'file') {
       // 写入文件引用，便于聊天工具保留原始文件名和后缀

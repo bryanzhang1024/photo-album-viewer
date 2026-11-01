@@ -37,7 +37,7 @@ export default function GridCard({
       cover={isFolder
         ? <FolderCover item={item} rootPath={rootPath} coverMode={coverMode} />
         : <Thumb rootPath={rootPath} relativePath={item.relativePath} />}
-      onClick={() => onClick?.(item)}
+      onClick={(event) => onClick?.(item, event)}
       onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(item) : undefined}
       onContextMenu={onContextMenu ? (event) => onContextMenu(event, item) : undefined}
     />

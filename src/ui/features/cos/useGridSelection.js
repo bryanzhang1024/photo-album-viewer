@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
  * 网格点击仍然直接打开；选中态只服务键盘，不改变鼠标习惯。
  * Esc 不在本 hook 处理：由 App 的层级入口统一退层（选中随换页消失）。
  */
-export default function useGridSelection({ items = [], onOpen, horizontalAction, enabled = true }) {
+export default function useGridSelection({ items = [], onOpen, horizontalAction, onNavigate, enabled = true }) {
   const [selectedKey, setSelectedKey] = useState('');
 
   // 数据刷新/翻页后，选中项还在就保留，不在了就清掉
@@ -37,6 +37,7 @@ export default function useGridSelection({ items = [], onOpen, horizontalAction,
       if (document.querySelector('[role="dialog"]')) return;
       if (isEditableTarget(event.target)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) onNavigate?.();
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         if (horizontalAction?.(1)) return;
@@ -79,7 +80,7 @@ export default function useGridSelection({ items = [], onOpen, horizontalAction,
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [items, selectedKey, onOpen, horizontalAction, enabled]);
+  }, [items, selectedKey, onOpen, horizontalAction, onNavigate, enabled]);
 
   // 键盘移动后把选中卡滚进可视区
   useEffect(() => {

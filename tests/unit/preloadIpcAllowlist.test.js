@@ -52,6 +52,7 @@ describe('preload IPC allowlist', () => {
   });
 
   test.each([
+    ['COPY_IMAGES_TO_CLIPBOARD', 'copy-images-to-clipboard'],
     ['LOAD_SOURCE_ROOTS_V1', 'load-source-roots-v1'],
     ['SAVE_SOURCE_ROOT_V1', 'save-source-root-v1'],
     ['VALIDATE_NAVIGATION_TARGET_V1', 'validate-navigation-target-v1']
