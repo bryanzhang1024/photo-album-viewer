@@ -2,13 +2,15 @@
 
 ## 当前状态（每轮收工覆盖重写，不追加；上限 40 行）
 
-更新：2026-10-30 15:00 · 4.8.0
-版本：`package.json` 4.8.0 · 已装 `/Applications/Photo Album Viewer.app` 4.8.0 · 分支 `codex/new-badge`（已合回 main）
+更新：2026-11-01 21:09 · 4.8.0
+版本：`package.json` 4.8.0 · 已装 `/Applications/Photo Album Viewer.app` 4.8.0（上次交付记录；本轮未改软件）· 分支 `main`
 
 **已交付**：4.1 恢复旧能力 → 4.4.1 快捷键收口/来源拖动排序/自动刷新 → 4.4.2–4.5.2 网格统一四片 → 4.5.3 Esc 分层统一 → 4.6.0「文件夹」页换成「接着看 + 最近有变化」→ 4.7.0 查看器恢复「左键单击逐级放大」→ **4.8.0 套图卡「新」角标**（封面左上角，判定＝目录修改时间在最近 7 天内，与「最近有变化」同一口径；全部作品/按署名/按角色三处统一；排序不动，倒序继续用「修改日期」）。逐版细节见 [CHANGELOG](../CHANGELOG.md)。
-**正在做**：无。4.8.0 已交付并装到 `/Applications`：567 测试（新增 10 例）、`check:unwired`、构建通过；真机 6 条断言在构建产物与安装版各跑一遍全过（数据面 23 套在 7 天内、界面面第 1 张带标、前 23 张带标、第 24 张起不带），证据见 [evidence/new-badge](acceptance/evidence/new-badge/README.md)。等你验收。
-**未决（等你一句）**：4.8.0 验收；4.7.0 验收；4.6.0 验收；`协作规矩.md` 与 `AGENTS.md` 是否合并成一处。
+**正在做**：多选复制已确认需求并进入计划，见 [plan-multi-image-copy.md](plan-multi-image-copy.md)。照片网格框选/⌘点选/Shift 连选后 ⌘C，主目标为 Banana Gallery 参考图区，兼容目标 Gemini/微信/Finder；用户说「到时候我去测试」。只写计划，尚未改代码、构建或安装。
+**未决（等你一句）**：多选复制实施批准；交付后的跨应用实际验收由用户执行。旧项：4.8.0/4.7.0/4.6.0 验收；两份协作规则是否合并；“最近添加太少”计划仍待批准（工作区原有文档未动）。
 **下一步（带触发条件）**
+- 多选复制：触发＝用户批准本计划；一个版本内完成批量复制底层→网格选择→工程/运行验证→安装交付；目标应用不兼容时先核对证据，有规格外变更回准备，不扩张 Banana Gallery。
+- 用户试用：触发＝新版安装后；先用三张 JPG/PNG 在 Banana Gallery 留足模型名额后粘贴，再逐个记录 Gemini/微信/Finder 的通过、失败或未测。
 - 角标口径不够或误标碍事（改名/补元数据会短期标「新」）：触发＝你用了说不对，改走索引记首次收录时间（`plan-new-badge.md` 第五节）。
 - 想要「只看最近入库」筛选而不只是角标：触发＝你说要做。
 - 单击手感要调（步长、上限 800%、缩放中心）：触发＝你实际用一阵后说不对。
@@ -17,6 +19,7 @@
 - 拆 `src/main.js`：触发＝下次要动主进程加功能时。
 
 **去哪查**
+- 本轮原话/批准边界/验收：[acceptance/2026-11-01-multi-image-copy.md](acceptance/2026-11-01-multi-image-copy.md)；计划：[plan-multi-image-copy.md](plan-multi-image-copy.md)。
 - 需求依据与原话：`acceptance/2026-10-26-user-voice.md`
 - 4.8.0 本轮：计划 `plan-new-badge.md`；证据 `acceptance/evidence/new-badge/`；取证脚本 `scripts/evidence-new-badge.mjs`
 - 4.7.0 上一轮：计划 `plan-viewer-click-zoom.md`；证据 `acceptance/evidence/viewer-click-zoom/`；取证脚本 `scripts/evidence-viewer-click-zoom.mjs`
