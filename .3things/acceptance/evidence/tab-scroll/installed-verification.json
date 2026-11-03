@@ -1,0 +1,89 @@
+{
+  "at": "2026-11-03T16:20:35.342Z",
+  "app": "/Applications/Photo Album Viewer.app/Contents/MacOS/Photo Album Viewer",
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "ok": true,
+  "passed": 9,
+  "total": 9,
+  "error": null,
+  "checks": [
+    {
+      "name": "同目录新标签不继承另一标签的位置",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "鼠标切回 A 保持原滚动位置",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "expected": 1600,
+        "actual": 1600,
+        "height": 10631
+      }
+    },
+    {
+      "name": "⇧⌘] 切回 B 保持独立位置",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "expected": 2800,
+        "actual": 2800,
+        "height": 10631
+      }
+    },
+    {
+      "name": "不同目录的列表 A 位置恢复",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "expected": 1800,
+        "actual": 1800,
+        "height": 7582
+      }
+    },
+    {
+      "name": "不同目录的列表 B 位置恢复",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "expected": 3400,
+        "actual": 3400,
+        "height": 7548
+      }
+    },
+    {
+      "name": "真实 COS 列表滚过五页仍恢复原位置",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "expected": 10232.5,
+        "actual": 10232.5,
+        "height": 14360
+      }
+    },
+    {
+      "name": "恢复后的锚点卡片已渲染",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "name": "真实套内照片超过 120 张后仍恢复位置",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "expected": 4595,
+        "actual": 4595,
+        "height": 11492
+      }
+    },
+    {
+      "name": "照片页恢复后仍有可见照片",
+      "ok": true,
+      "detail": true
+    }
+  ]
+}

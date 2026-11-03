@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollMemoryContext } from '../../hooks/useScrollMemory';
 import PageHeader from '../../shell/PageHeader';
 import useBreakpoint from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
@@ -45,6 +46,7 @@ export default function CosSetAlbumPage({
   setId, setName, options = null, origin = null, onNavigateSet, onNavigate,
   searchQuery = '', onSearchChange, selectionScope = ''
 }) {
+  const scrollMemory = useContext(ScrollMemoryContext);
   const breakpoint = useBreakpoint();
   const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [set, setSet] = useState(null);
@@ -67,12 +69,12 @@ export default function CosSetAlbumPage({
   const { isAlbumFavorited, isPhotoFavorited, toggleAlbum, togglePhoto } = useCosFavorites();
   const forceNextRef = useRef(false);
 
-  const fetchPage = useCallback((offset) => {
+  const fetchPage = useCallback((offset, limit = PAGE_SIZE) => {
     const force = forceNextRef.current;
     forceNextRef.current = false;
     return getSetImages(setId, {
       offset,
-      limit: PAGE_SIZE,
+      limit,
       sortBy: sort.field,
       sortDirection: sort.direction,
       ...(searchQuery ? { searchQuery } : {}),
@@ -91,7 +93,7 @@ export default function CosSetAlbumPage({
     setError('');
     Promise.all([
       getSet(setId).catch(() => null),
-      fetchPage(0).catch((reason) => {
+      fetchPage(0, Math.max(PAGE_SIZE, scrollMemory?.grid?.count || 0)).catch((reason) => {
         if (alive) setError(reason?.message || '读取失败');
         return null;
       })
@@ -106,7 +108,7 @@ export default function CosSetAlbumPage({
     return () => {
       alive = false;
     };
-  }, [setId, fetchPage, tick]);
+  }, [setId, fetchPage, tick, scrollMemory]);
 
   const reload = useCallback((force = false) => {
     forceNextRef.current = force;

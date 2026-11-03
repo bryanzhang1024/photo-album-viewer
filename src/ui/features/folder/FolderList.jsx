@@ -5,6 +5,7 @@ import {
 import Thumb from '../../components/Thumb';
 import { formatDate } from '../../components/cardModel';
 import { fileKindLabel, formatFileSize } from '../../data/files';
+import useScrollMemory from '../../hooks/useScrollMemory';
 
 const ROW_HEIGHT = 34;
 const PAD_TOP = 34;
@@ -47,6 +48,18 @@ export default function FolderList({
 
   const filesTop = PAD_TOP + items.length * ROW_HEIGHT + (otherFiles.length > 0 ? SECTION_HEAD : 0);
   const total = filesTop + otherFiles.length * ROW_HEIGHT + 8;
+  const scrollItems = [...items, ...otherFiles.map((file) => ({ ...file, key: `file:${file.name}` }))];
+  const rememberScroll = useScrollMemory(ref, {
+    slot: 'list', items: scrollItems,
+    indexAtOffset: (top) => top >= filesTop
+      ? items.length + Math.floor((top - filesTop) / ROW_HEIGHT)
+      : Math.floor(Math.max(0, top - PAD_TOP) / ROW_HEIGHT),
+    offsetForIndex: (index) => index < items.length
+      ? PAD_TOP + index * ROW_HEIGHT
+      : filesTop + (index - items.length) * ROW_HEIGHT,
+    ready: size.h > 0,
+    onRestore: setScrollTop
+  });
   const first = Math.max(0, Math.floor((scrollTop - PAD_TOP) / ROW_HEIGHT) - 5);
   const last = Math.min(items.length + otherFiles.length, Math.ceil((scrollTop + size.h) / ROW_HEIGHT) + 5);
 
@@ -117,7 +130,10 @@ export default function FolderList({
       className={`folder-scroll${isPhotoLayer ? ' photo-layer' : ''}`}
       tabIndex={0}
       aria-label="文件列表"
-      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      onScroll={(event) => {
+        setScrollTop(event.currentTarget.scrollTop);
+        rememberScroll(event.currentTarget);
+      }}
     >
       <div className="list-head folder-list-head" role="row">
         {(isPhotoLayer ? [

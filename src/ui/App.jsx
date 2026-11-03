@@ -6,6 +6,7 @@ import Sidebar from './shell/Sidebar';
 import Menu from './components/Menu';
 import useBreakpoint, { isNarrowBreakpoint } from './hooks/useBreakpoint';
 import useSettings from './hooks/useSettings';
+import { ScrollMemoryContext } from './hooks/useScrollMemory';
 import {
   listSourceRoots, selectDirectory, saveSourceRoot, removeSourceRoot, reorderSourceRoots, openInNewWindow,
   resolveDroppedFolders
@@ -90,7 +91,8 @@ export default function App() {
   const [tabs, setTabs] = useState(() => bootSession?.tabs ?? [createTab({ kind: 'roots' })]);
   const [activeTabId, setActiveTabId] = useState(() => bootSession?.activeTabId ?? tabs[0].id);
   const [menu, setMenu] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [pageQueries, setPageQueries] = useState({});
+  const scrollMemories = useRef(new Map());
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef(null);
   const breakpoint = useBreakpoint();
@@ -98,9 +100,27 @@ export default function App() {
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
   const location = activeTab.history[activeTab.historyIndex];
+  const pageKey = JSON.stringify([activeTabId, location]);
+  const searchQuery = pageQueries[pageKey] || '';
+  const setSearchQuery = (query) => setPageQueries((prev) => ({ ...prev, [pageKey]: query }));
+  const memoryKey = JSON.stringify([pageKey, searchQuery]);
+  if (!scrollMemories.current.has(memoryKey)) scrollMemories.current.set(memoryKey, {});
+  const scrollMemory = scrollMemories.current.get(memoryKey);
+  scrollMemory.tabId = activeTabId;
   const source = location.kind === 'folder'
     ? sources.find((item) => item.sourceId === location.sourceId)
     : null;
+
+  useEffect(() => {
+    const openTabs = new Set(tabs.map((tab) => tab.id));
+    for (const [key, memory] of scrollMemories.current) {
+      if (!openTabs.has(memory.tabId)) scrollMemories.current.delete(key);
+    }
+    setPageQueries((prev) => {
+      const entries = Object.entries(prev).filter(([key]) => openTabs.has(JSON.parse(key)[0]));
+      return entries.length === Object.keys(prev).length ? prev : Object.fromEntries(entries);
+    });
+  }, [tabs]);
 
   useEffect(() => {
     if (isNarrowBreakpoint(breakpoint)) {
@@ -143,7 +163,6 @@ export default function App() {
   }, [location, source, settings.defaultViewMode]);
 
   useEffect(() => {
-    setSearchQuery('');
     setSearchExpanded(false);
   }, [location]);
 
@@ -764,6 +783,7 @@ export default function App() {
           onReorderSource={moveSource}
         />
         <main className="main">
+          <ScrollMemoryContext.Provider key={memoryKey} value={scrollMemory}>
           {location.kind === 'favorites' ? (
             <FavoritesPage
               onOpenFolder={(item) => navigate({
@@ -878,6 +898,7 @@ export default function App() {
               照片来源已不存在，请从侧栏重新选择。
             </div>
           )}
+          </ScrollMemoryContext.Provider>
         </main>
       </div>
       <Menu

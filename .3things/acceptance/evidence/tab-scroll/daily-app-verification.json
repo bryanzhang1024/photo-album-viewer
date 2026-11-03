@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-04",
+  "installedVersion": "4.9.1",
+  "installedPath": "/Applications/Photo Album Viewer.app",
+  "method": "CUA native UI, normal daily profile",
+  "checks": {
+    "existingTabsRetained": 12,
+    "scrolledFolder": "P图用模特",
+    "switchedTo": "P图用照片",
+    "sameVirtualizedFileListAfterSwitchingBack": true,
+    "beforeFileCount": 28,
+    "afterFileCount": 28,
+    "originalActiveTabRestored": "我的收藏"
+  }
+}

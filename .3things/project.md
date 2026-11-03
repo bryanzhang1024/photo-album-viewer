@@ -2,24 +2,23 @@
 
 ## 当前状态（每轮收工覆盖重写，不追加；上限 40 行）
 
-更新：2026-11-01 · 多选复制 4.9.0
-版本：本工作树 `package.json` 4.9.0 · 已装 `/Applications/Photo Album Viewer.app` 4.9.0 · 分支 `codex/multi-image-copy`；主目录 main 源码仍是 4.8.0。
+更新：2026-11-04 · 标签页位置恢复 4.9.1
+版本：本工作树 `package.json` 4.9.1 / 分支 `codex/tab-scroll-position`；`/Applications/Photo Album Viewer.app` 已安装 4.9.1；主目录 main 源码仍为 4.8.0，不要从旧 main 构建覆盖新版。
 
-**已交付**：4.1–4.8 的既有功能保留；4.9.0 两种照片网格支持空白框选、⌘点选增减、Shift 连选、⌘C 有序复制原图。593 测试、假入口扫描、完整构建通过；构建/安装版各 16 项真实窗口检查通过，Chromium 真粘贴三文件原字节一致，安装版日用图库 CUA 原生 ⌘C 确认复制三张。证据：[multi-image-copy](acceptance/evidence/multi-image-copy/README.md)。
-**正在做**：Agent 的实现、构建、安装与运行验证完成；日用软件已启动，并留有三张原图的剪贴板供用户直接粘贴测试。
-**未决**：用户在 Banana Gallery（主要）、Gemini、微信、Finder 的实际粘贴验收；未将这些目标写成已通过。主目录仍有上一项未提交原话与 `plan-recent-more.md`，按 AGENTS 的主线合并清洁条件暂不合入代码，不覆盖或暂存它们。旧版 4.8.0 单一恢复副本保留至用户验收。
+**已交付**：文件夹网格/列表、COS 署名/角色/套图/照片网格分别按标签记住锚点与滚动位置；同目录标签互不串用。COS 多页先恢复数据范围，照片超过 1000 张时继续补页；搜索词随页面保留，锚点删除时回到附近。继承 4.9.0 多选与原图复制。
+**正在做**：实现、601 测试、假入口扫描、完整构建、构建版与安装版各 9 项真实窗口检查、日用图库 CUA 原生切换检查已完成，原 12 个标签完整保留；待用户日用验收。本轮记忆限当前运行，重启恢复不包含在内。
+**未决**：主目录原话清单与 `plan-recent-more.md` 仍是另一任务的未提交内容，未覆盖、未暂存；按主线清洁门禁不合 main、不 push。4.9.0 跨应用粘贴仍待原目标验收，不能因本轮继承而标已通过。
+**批准记录**：2026-11-04 本会话，准备范围交付后用户「继续」进入计划；计划交付后再次「继续」，批准执行修复、验证与安装，详见 `plan-tab-scroll.md`。
 **下一步（带触发条件）**
-- 用户测试：触发＝现在试用；先选三张 JPG/PNG，Gallery 模型留三个位置、焦点移出提示词框后 ⌘V。反馈目标、张数、实际表现即可定位；微信只到待发送，不发送。
-- 合回主线：触发＝主目录在途文档收口或用户明确批准保留原脏改动的合并例外；重新核对 main 后，合并 `codex/multi-image-copy` 并保留那些文档。本轮不 push。
-- 新版可用：触发＝用户验收；清理 `/Volumes/1TB/99-管理/临时/backups/pav-multi-image-copy` 的 4.8.0 恢复副本和已不需要的隔离工作树/依赖；Git 与验收证据保留。
-- 原“最近添加太少”：触发＝用户批准其独立计划，不能混进本功能。
-- 旧待办：4.8/4.7/4.6 用户验收、两份协作规则是否合并、返回列表保留浏览位置；均不借本轮扩张。
+- 用户试用：触发＝现在；两个标签各滚到不同位置，鼠标或 ⇧⌘[ / ⇧⌘] 反复切换；文件夹、COS 深处列表及套内照片均应保持。
+- 合回主线：触发＝主目录在途文档收口或用户批准保留它们的合并例外；先核对 main 与两条功能分支，再合并包含 4.9.0 的 `codex/tab-scroll-position`，保留原话文档；默认不 push。
+- 清理：触发＝用户确认 4.9.1 可用；清理本轮隔离工作树/依赖与单一 4.9.0 应用恢复副本，Git 与验收证据保留。旧 4.8.0 恢复副本仍按原多选复制任务条件处理。
+- 最近添加数量、重启后滚动恢复、旧版用户验收与协作规则整理：按各自批准条件另做，不混入本轮。
 **去哪查**
-- 本轮原话：[acceptance/2026-11-01-multi-image-copy.md](acceptance/2026-11-01-multi-image-copy.md)；计划：[plan-multi-image-copy.md](plan-multi-image-copy.md)。
-- 证据：[acceptance/evidence/multi-image-copy/README.md](acceptance/evidence/multi-image-copy/README.md)；新增取证脚本 `scripts/evidence-multi-image-copy.mjs`、`scripts/evidence-multi-image-clipboard.cjs`。
-- 旧原话：`acceptance/2026-10-26-user-voice.md`；界面规格：`design/shell-spec-final.md`；历史细节：`CHANGELOG.md`。实现日志 `build-log.md` 已标档案，不追加。
-- 代码工作树：`/Volumes/1TB/99-管理/临时/tasks/pav-multi-image-copy/worktree`（用 `git worktree list` 核实）；不要从旧 main 构建覆盖新版。
-
+- 本轮原话：`acceptance/2026-10-26-user-voice.md` 的 2026-11-04 追加；计划：`plan-tab-scroll.md`；证据：`acceptance/evidence/tab-scroll/README.md`；界面规格：`design/shell-spec-final.md` 第 21 条。
+- 本轮代码工作树：`/Volumes/1TB/99-管理/临时/tasks/pav-tab-scroll-position/worktree`；构建产物 `dist/mac-arm64/Photo Album Viewer.app`。
+- 恢复副本：`/Volumes/1TB/99-管理/临时/backups/pav-tab-scroll-position/Photo Album Viewer 4.9.0.app`，用途与保留条件见同目录 `manifest.json`。
+- 4.9.0 原多选复制计划/证据仍在 `plan-multi-image-copy.md` 与 `acceptance/evidence/multi-image-copy/`；旧实现日志为档案，不追加。
 
 ---
 

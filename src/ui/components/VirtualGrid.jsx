@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import useScrollMemory from '../hooks/useScrollMemory';
 import './card.css';
 
 const PAD_X = 22;
@@ -49,6 +50,15 @@ export default function VirtualGrid({
   const rowHeight = coverHeight + textHeight + gapY;
   const rows = Math.ceil(items.length / columns);
   const totalHeight = rows * rowHeight + PAD_TOP;
+
+  const rememberScroll = useScrollMemory(ref, {
+    slot: 'grid', items,
+    indexAtOffset: (top) => Math.floor(Math.max(0, top - PAD_TOP) / rowHeight) * columns,
+    offsetForIndex: (index) => PAD_TOP + Math.floor(index / columns) * rowHeight,
+    ready: size.w > 0 && size.h > 0 && !loadingMore,
+    hasMore, onLoadMore,
+    onRestore: setScrollTop
+  });
 
   const endDrag = () => {
     drag.current = null;
@@ -163,6 +173,7 @@ export default function VirtualGrid({
       onScroll={(event) => {
         if (drag.current) endDrag();
         setScrollTop(event.currentTarget.scrollTop);
+        rememberScroll(event.currentTarget);
         maybeLoadMore();
       }}
     >
