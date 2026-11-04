@@ -56,6 +56,27 @@
   box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft);
 }
 
+.image-selection-grid {
+  user-select: none;
+}
+
+.image-selection-grid .thumb {
+  -webkit-user-drag: none;
+}
+
+.image-selection-grid .grid-card.selected .grid-card-name {
+  background: var(--accent-soft);
+  border-radius: 3px;
+}
+
+.grid-selection-box {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+
 /* 封面左上角的短标记（Cos 套图「新」）：常显，不吃点击，右上角留给收藏心形 */
 .card-badge {
   position: absolute;

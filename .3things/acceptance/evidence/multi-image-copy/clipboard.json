@@ -1,0 +1,31 @@
+{
+  "at": "2026-11-01T13:42:21.945Z",
+  "electron": "27.3.11",
+  "success": true,
+  "checks": [
+    "real IPC/preload",
+    "system pasteboard three paths",
+    "Chromium real paste three ordered files",
+    "original bytes unchanged"
+  ],
+  "files": [
+    {
+      "name": "中文 3.png",
+      "type": "image/png",
+      "size": 169,
+      "sha256": "83585a1cec7cb9b83f7361f8d13d6e89d4e36e084ef07b7529e05130b4c54ab7"
+    },
+    {
+      "name": "a&b<2>.png",
+      "type": "image/png",
+      "size": 168,
+      "sha256": "f391ca2303c190678e7a82ac1409360594e5e9315cf49d0d4c7147f0e4709be8"
+    },
+    {
+      "name": "1.png",
+      "type": "image/png",
+      "size": 168,
+      "sha256": "163cc6d795394a2312fd2741a80275df202064ddae713b20e89ca1f2c4387867"
+    }
+  ]
+}

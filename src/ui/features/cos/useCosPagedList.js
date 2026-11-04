@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { ScrollMemoryContext } from '../../hooks/useScrollMemory';
 
 const PAGE_SIZE = 60;
 
 /** Cos 列表分页：换条件重载，滚到底继续加载；reload 用于 ⌘R 与索引更新后重取。 */
 export default function useCosPagedList(fetcher, options) {
+  const scrollMemory = useContext(ScrollMemoryContext);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -19,7 +21,9 @@ export default function useCosPagedList(fetcher, options) {
     setTotal(0);
     setLoading(true);
     setError('');
-    fetcher({ ...optionsRef.current, offset: 0, limit: PAGE_SIZE })
+    // 切回已滚过多页的标签时，首个请求覆盖之前已加载的范围。
+    const limit = Math.max(PAGE_SIZE, scrollMemory?.grid?.count || 0);
+    fetcher({ ...optionsRef.current, offset: 0, limit })
       .then((result) => {
         if (!alive) return;
         setItems(result.items || []);
@@ -35,7 +39,7 @@ export default function useCosPagedList(fetcher, options) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetcher, key, tick]);
+  }, [fetcher, key, tick, scrollMemory]);
 
   const loadMore = useCallback(() => {
     setLoading((current) => {

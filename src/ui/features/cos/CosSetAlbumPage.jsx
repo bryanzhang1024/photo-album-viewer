@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollMemoryContext } from '../../hooks/useScrollMemory';
 import PageHeader from '../../shell/PageHeader';
 import useBreakpoint from '../../hooks/useBreakpoint';
 import StatusBar from '../../shell/StatusBar';
@@ -19,6 +20,7 @@ import useGridSelection from './useGridSelection';
 import useCosFavorites from './useCosFavorites';
 import useCosAutoRefresh from './useCosAutoRefresh';
 import useWindowWidth from '../../hooks/useWindowWidth';
+import useImageMultiSelection from '../../hooks/useImageMultiSelection';
 import { minWidthForDensity, useCosDensity, useCosFit, useCosSort } from './useCosPrefs';
 import CosHeaderControls from './CosHeaderControls';
 import './cos.css';
@@ -42,8 +44,9 @@ const ENTRANCE = {
 /** 套内照片：网格 + 查看器；页头与文件夹照片层一致（上一套/下一套、收藏、完整显示、排序、密度）。 */
 export default function CosSetAlbumPage({
   setId, setName, options = null, origin = null, onNavigateSet, onNavigate,
-  searchQuery = '', onSearchChange
+  searchQuery = '', onSearchChange, selectionScope = ''
 }) {
+  const scrollMemory = useContext(ScrollMemoryContext);
   const breakpoint = useBreakpoint();
   const compactHeader = breakpoint === 'medium' || breakpoint === 'small';
   const [set, setSet] = useState(null);
@@ -66,12 +69,12 @@ export default function CosSetAlbumPage({
   const { isAlbumFavorited, isPhotoFavorited, toggleAlbum, togglePhoto } = useCosFavorites();
   const forceNextRef = useRef(false);
 
-  const fetchPage = useCallback((offset) => {
+  const fetchPage = useCallback((offset, limit = PAGE_SIZE) => {
     const force = forceNextRef.current;
     forceNextRef.current = false;
     return getSetImages(setId, {
       offset,
-      limit: PAGE_SIZE,
+      limit,
       sortBy: sort.field,
       sortDirection: sort.direction,
       ...(searchQuery ? { searchQuery } : {}),
@@ -90,7 +93,7 @@ export default function CosSetAlbumPage({
     setError('');
     Promise.all([
       getSet(setId).catch(() => null),
-      fetchPage(0).catch((reason) => {
+      fetchPage(0, Math.max(PAGE_SIZE, scrollMemory?.grid?.count || 0)).catch((reason) => {
         if (alive) setError(reason?.message || '读取失败');
         return null;
       })
@@ -105,7 +108,7 @@ export default function CosSetAlbumPage({
     return () => {
       alive = false;
     };
-  }, [setId, fetchPage, tick]);
+  }, [setId, fetchPage, tick, scrollMemory]);
 
   const reload = useCallback((force = false) => {
     forceNextRef.current = force;
@@ -178,6 +181,12 @@ export default function CosSetAlbumPage({
     ? '读取中…'
     : `${Number(total).toLocaleString('zh-CN')} 张照片`;
   const cards = useMemo(() => photoCardItems(images), [images]);
+  const selectableImages = useMemo(() => cards.map(card => ({ key: card.key, path: card.payload.image.path })), [cards]);
+  const multi = useImageMultiSelection({
+    items: selectableImages,
+    scopeKey: JSON.stringify([selectionScope, setId, searchQuery, sort.field, sort.direction]),
+    enabled: viewerIndex === null
+  });
   const viewerImages = images.map((image) => ({
     path: image.path,
     name: image.name,
@@ -199,9 +208,10 @@ export default function CosSetAlbumPage({
     navigateTo(target);
     return true;
   }, [position, setIds, navigateTo]);
-  const [selectedKey] = useGridSelection({
+  const [selectedKey, setSelectedKey] = useGridSelection({
     items: cards,
     onOpen: openPhoto,
+    onNavigate: multi.clear,
     horizontalAction: switchSet
   });
 
@@ -322,6 +332,7 @@ export default function CosSetAlbumPage({
         {cards.length > 0 ? (
           <VirtualGrid
             items={cards}
+            selection={{ ...multi, clear: () => { multi.clear(); setSelectedKey(''); } }}
             minItemWidth={minItemWidth}
             hasMore={hasMore && !error}
             loadingMore={loading}
@@ -340,14 +351,17 @@ export default function CosSetAlbumPage({
                   dataKey={card.key}
                   width={width}
                   coverHeight={coverHeight}
-                  selected={selectedKey === card.key}
+                  selected={multi.selectedKeys.size ? multi.selectedKeys.has(card.key) : selectedKey === card.key}
                   contain={fit}
                   name={card.name}
                   meta={card.meta}
                   cover={<Thumb absolutePath={image.path} />}
                   favorited={isPhotoFavorited(image.path)}
                   onToggleFavorite={() => togglePhoto(imageEntry, albumPath, title)}
-                  onClick={() => openPhoto(card)}
+                  onClick={event => {
+                    if (multi.handleClick(card.key, event)) setSelectedKey('');
+                    else openPhoto(card);
+                  }}
                   onContextMenu={(event) => setMenu({
                     point: { x: event.clientX, y: event.clientY },
                     card
@@ -358,7 +372,7 @@ export default function CosSetAlbumPage({
           />
         ) : null}
       </div>
-      <StatusBar left={countText} right={STATUS_HINTS} />
+      <StatusBar left={<span role="status">{multi.message || (multi.selectedPaths.length ? `已选 ${multi.selectedPaths.length} 张 · ⌘C 复制原图` : countText)}</span>} right={STATUS_HINTS} />
       <Menu
         open={Boolean(menu)}
         point={menu?.point}
