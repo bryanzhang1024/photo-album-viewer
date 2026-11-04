@@ -26,6 +26,7 @@ module.exports = {
     CLEAR_THUMBNAIL_CACHE: 'clear-thumbnail-cache',
     SHOW_IN_FOLDER: 'show-in-folder',
     COPY_IMAGE_TO_CLIPBOARD: 'copy-image-to-clipboard',
+    COPY_IMAGES_TO_CLIPBOARD: 'copy-images-to-clipboard',
     TRASH_IMAGE: 'trash-image',
     CREATE_NEW_WINDOW: 'create-new-window',
     CREATE_NEW_INSTANCE: 'create-new-instance',
